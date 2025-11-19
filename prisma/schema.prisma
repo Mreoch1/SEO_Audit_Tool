@@ -1,0 +1,72 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Audit {
+  id                String   @id @default(cuid())
+  url               String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  overallScore      Int
+  technicalScore    Int
+  onPageScore       Int
+  contentScore      Int
+  accessibilityScore Int
+  shortSummary      String
+  detailedSummary   String
+  rawJson           String   // JSON string of full AuditResult
+  issues            AuditIssue[]
+}
+
+model AuditIssue {
+  id              String   @id @default(cuid())
+  auditId         String
+  audit           Audit     @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  category        String   // "Technical" | "On-page" | "Content" | "Accessibility" | "Performance"
+  severity        String   // "High" | "Medium" | "Low"
+  message         String
+  details         String?  @default("")
+  affectedPagesJson String // JSON array of URLs
+}
+
+model ScheduledAudit {
+  id            String    @id @default(cuid())
+  url           String
+  cronExpression String
+  lastRunAt     DateTime?
+  emailTo       String?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model AppSettings {
+  id            String   @id @default("singleton")
+  brandName     String   @default("SEO Audit Pro")
+  brandSubtitle String?
+  primaryColor  String   @default("#3b82f6")
+  logoUrl       String?
+  smtpHost      String?
+  smtpPort      Int?
+  smtpUser      String?
+  smtpPassword  String?
+  smtpFrom      String?
+  updatedAt     DateTime @updatedAt
+}
+
