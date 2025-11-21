@@ -73,9 +73,13 @@ export async function runAudit(
   
   console.log(`[Audit] Starting audit for ${url} (max pages: ${finalMaxPages}, max depth: ${opts.maxDepth})`)
   
-  // Normalize URL
+  // Normalize URL and handle redirects
   const rootUrl = normalizeUrl(url)
-  const baseDomain = new URL(rootUrl).hostname
+  let baseDomain = new URL(rootUrl).hostname
+  
+  // Check if URL redirects to a subdomain (e.g., wikipedia.com -> en.wikipedia.org)
+  // We'll update baseDomain after the first page is fetched if it redirects
+  let actualDomain: string | null = null
   
   // Track crawled pages
   const crawledUrls = new Set<string>()
@@ -410,6 +414,34 @@ async function checkSitemap(rootUrl: string, siteWide: SiteWideData): Promise<vo
 }
 
 /**
+ * Check if two domains match (handles subdomains)
+ */
+function isSameDomain(domain1: string, domain2: string): boolean {
+  // Remove www. prefix for comparison
+  const normalizeDomain = (d: string) => d.replace(/^www\./, '').toLowerCase()
+  const d1 = normalizeDomain(domain1)
+  const d2 = normalizeDomain(domain2)
+  
+  // Exact match
+  if (d1 === d2) return true
+  
+  // Extract root domain (e.g., wikipedia.org from en.wikipedia.org)
+  const getRootDomain = (domain: string): string => {
+    const parts = domain.split('.')
+    if (parts.length >= 2) {
+      return parts.slice(-2).join('.')
+    }
+    return domain
+  }
+  
+  const root1 = getRootDomain(d1)
+  const root2 = getRootDomain(d2)
+  
+  // Same root domain (handles subdomains)
+  return root1 === root2
+}
+
+/**
  * Extract internal links from HTML
  */
 function extractInternalLinks(html: string, baseUrl: string, baseDomain: string): string[] {
@@ -428,8 +460,8 @@ function extractInternalLinks(html: string, baseUrl: string, baseDomain: string)
           }
           
           const linkUrl = new URL(href, baseUrl)
-          // Only include internal links on the same domain
-          if (linkUrl.hostname === baseDomain) {
+          // Use isSameDomain to handle subdomains (e.g., en.wikipedia.org matches wikipedia.org)
+          if (isSameDomain(linkUrl.hostname, baseDomain)) {
             // Normalize the URL (remove hash, trailing slash if not root)
             const normalizedUrl = normalizeUrl(linkUrl.toString())
             if (normalizedUrl) {
@@ -440,7 +472,7 @@ function extractInternalLinks(html: string, baseUrl: string, baseDomain: string)
           // Relative URL - try to resolve it
           try {
             const relativeUrl = new URL(hrefMatch[1], baseUrl)
-            if (relativeUrl.hostname === baseDomain) {
+            if (isSameDomain(relativeUrl.hostname, baseDomain)) {
               const normalizedUrl = normalizeUrl(relativeUrl.toString())
               if (normalizedUrl) {
                 links.add(normalizedUrl)
@@ -474,6 +506,9 @@ async function crawlPages(
   const queue: Array<{ url: string; depth: number }> = [{ url: startUrl, depth: 0 }]
   const issueMap = new Map<string, Issue>()
   const startTime = Date.now()
+  
+  // Track actual domain (may differ from baseDomain if redirects occur)
+  let actualDomain = baseDomain
   
   while (queue.length > 0 && pages.length < options.maxPages) {
     const { url, depth } = queue.shift()!
@@ -529,10 +564,29 @@ async function crawlPages(
           }
           
           const html = await response.text()
-          internalLinks = extractInternalLinks(html, url, baseDomain)
+          
+          // Update actualDomain from response URL if it redirected
+          try {
+            const responseUrl = new URL(response.url)
+            if (!isSameDomain(responseUrl.hostname, actualDomain)) {
+              const urlRoot = responseUrl.hostname.split('.').slice(-2).join('.')
+              const baseRoot = actualDomain.split('.').slice(-2).join('.')
+              if (urlRoot === baseRoot) {
+                actualDomain = responseUrl.hostname
+                console.log(`[Audit Progress] Updated domain to ${actualDomain} after redirect`)
+              }
+            }
+          } catch {
+            // Ignore URL parsing errors
+          }
+          
+          // Extract links using actualDomain (which may be a subdomain)
+          internalLinks = extractInternalLinks(html, url, actualDomain)
           
           if (internalLinks.length > 0) {
-            console.log(`[Audit Progress] Extracted ${internalLinks.length} internal links from ${url}`)
+            console.log(`[Audit Progress] Extracted ${internalLinks.length} internal links from ${url} (domain: ${actualDomain})`)
+          } else {
+            console.log(`[Audit Progress] No internal links found on ${url} (checking domain: ${actualDomain})`)
           }
           
           // If we didn't find many links, try a more aggressive extraction
@@ -552,7 +606,7 @@ async function crawlPages(
                   }
                   
                   const linkUrl = new URL(href, url)
-                  if (linkUrl.hostname === baseDomain) {
+                  if (isSameDomain(linkUrl.hostname, actualDomain)) {
                     const normalizedUrl = normalizeUrl(linkUrl.toString())
                     if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
                       additionalLinks.add(normalizedUrl)
@@ -563,7 +617,7 @@ async function crawlPages(
                   try {
                     if (!href.startsWith('http') && !href.startsWith('//')) {
                       const relativeUrl = new URL(href, url)
-                      if (relativeUrl.hostname === baseDomain) {
+                      if (isSameDomain(relativeUrl.hostname, actualDomain)) {
                         const normalizedUrl = normalizeUrl(relativeUrl.toString())
                         if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
                           additionalLinks.add(normalizedUrl)
@@ -602,7 +656,8 @@ async function crawlPages(
               try {
                 const linkUrl = new URL(path, url).toString()
                 const normalizedLinkUrl = normalizeUrl(linkUrl)
-                if (new URL(linkUrl).hostname === baseDomain && !crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
+                const linkUrlObj = new URL(linkUrl)
+                if (isSameDomain(linkUrlObj.hostname, actualDomain) && !crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
                   queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
                 }
               } catch {
