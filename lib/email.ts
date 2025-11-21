@@ -30,6 +30,9 @@ async function getTransporter() {
     throw new Error('SMTP settings not configured. Please configure in Settings page.')
   }
 
+  // Zoho-specific configuration
+  const isZoho = settings.smtpHost?.includes('zoho.com')
+  
   return nodemailer.createTransport({
     host: settings.smtpHost,
     port: settings.smtpPort || 587,
@@ -37,7 +40,17 @@ async function getTransporter() {
     auth: {
       user: settings.smtpUser,
       pass: settings.smtpPassword
-    }
+    },
+    // Zoho-specific settings for better deliverability
+    ...(isZoho && {
+      tls: {
+        rejectUnauthorized: false // Zoho sometimes has certificate issues
+      },
+      // Ensure proper connection pooling
+      pool: true,
+      maxConnections: 1,
+      maxMessages: 10
+    })
   })
 }
 

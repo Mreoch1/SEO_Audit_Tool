@@ -84,6 +84,78 @@ The code now includes:
 - ✅ Reply-To address
 - ✅ Auto-Submitted header
 
+## Zoho Mail Configuration
+
+If you're using **Zoho Mail**, here's the proper setup:
+
+### SMTP Settings for Zoho:
+- **Host:** `smtp.zoho.com`
+- **Port:** `587` (TLS) or `465` (SSL)
+- **Security:** TLS/STARTTLS
+- **Username:** Your full Zoho email address (e.g., `contact@seoauditpro.net`)
+- **Password:** Your Zoho account password (or App Password if 2FA enabled)
+- **From Address:** Should match your Zoho email address
+
+### Important Zoho Requirements:
+
+1. **Domain Verification:**
+   - Your domain must be verified in Zoho
+   - Go to Zoho Mail Admin Console → Domains → Verify your domain
+
+2. **SPF Record:**
+   Add to your DNS:
+   ```
+   TXT record: v=spf1 include:zoho.com ~all
+   ```
+
+3. **DKIM:**
+   - Zoho provides DKIM keys in Admin Console
+   - Add the provided TXT record to your DNS
+
+4. **DMARC (Recommended):**
+   ```
+   TXT record: v=DMARC1; p=none; rua=mailto:dmarc@yourdomain.com
+   ```
+
+5. **App Password (if 2FA enabled):**
+   - If you have 2FA, generate an App Password
+   - Settings → Security → App Passwords → Generate
+   - Use this instead of your regular password
+
+### Common Zoho Issues:
+
+**Problem:** Emails going to spam even with correct settings
+**Solution:**
+- Ensure "From" address matches your Zoho email exactly
+- Don't use `noreply@` if that address doesn't exist in Zoho
+- Use a real, verified email address (e.g., `contact@seoauditpro.net`)
+
+**Problem:** Authentication errors
+**Solution:**
+- Use App Password if 2FA is enabled
+- Ensure you're using `smtp.zoho.com` (not `smtp.zoho.eu` or other regions)
+- Check that port 587 is not blocked by firewall
+
+**Problem:** Rate limiting
+**Solution:**
+- Zoho free tier: 100 emails/day
+- Zoho paid tier: 500-1000 emails/day
+- Spread sends over time if hitting limits
+
+### Testing Zoho Setup:
+
+1. **Test SMTP connection:**
+   - Use the "Test Email" feature in Settings
+   - Check for authentication errors
+
+2. **Verify DNS records:**
+   - Use [MXToolbox](https://mxtoolbox.com/) to check SPF/DKIM
+   - Should show Zoho records
+
+3. **Check Zoho logs:**
+   - Zoho Admin Console → Reports → Email Logs
+   - Look for delivery failures or bounces
+
 ## Quick Fixes for Your Setup
 
 ### Option 1: Use a Professional Email Service (Recommended)
