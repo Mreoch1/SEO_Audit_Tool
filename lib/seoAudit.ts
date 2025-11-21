@@ -554,9 +554,11 @@ async function crawlPages(
         try {
           // Re-fetch the HTML to extract links (we need the full HTML for link extraction)
           // Increased timeout and better error handling
+          // Note: fetch() automatically follows redirects, so response.url will be the final URL
           const response = await fetch(url, {
             signal: AbortSignal.timeout(15000), // Increased timeout to 15s
-            headers: { 'User-Agent': options.userAgent }
+            headers: { 'User-Agent': options.userAgent },
+            redirect: 'follow' // Explicitly follow redirects
           })
           
           if (!response.ok) {
@@ -566,27 +568,70 @@ async function crawlPages(
           const html = await response.text()
           
           // Update actualDomain from response URL if it redirected
+          // response.url is the final URL after redirects
           try {
             const responseUrl = new URL(response.url)
-            if (!isSameDomain(responseUrl.hostname, actualDomain)) {
-              const urlRoot = responseUrl.hostname.split('.').slice(-2).join('.')
-              const baseRoot = actualDomain.split('.').slice(-2).join('.')
-              if (urlRoot === baseRoot) {
+            const currentUrlObj = new URL(url)
+            
+            // If the response URL is different from the request URL, we were redirected
+            if (responseUrl.hostname !== currentUrlObj.hostname) {
+              // Check if it's a subdomain of the same root domain
+              if (isSameDomain(responseUrl.hostname, actualDomain)) {
                 actualDomain = responseUrl.hostname
-                console.log(`[Audit Progress] Updated domain to ${actualDomain} after redirect`)
+                console.log(`[Audit Progress] Detected redirect: ${url} -> ${response.url}`)
+                console.log(`[Audit Progress] Updated domain to ${actualDomain}`)
               }
             }
-          } catch {
-            // Ignore URL parsing errors
+          } catch (err) {
+            console.warn(`[Audit Progress] Could not parse response URL: ${err}`)
           }
           
           // Extract links using actualDomain (which may be a subdomain)
-          internalLinks = extractInternalLinks(html, url, actualDomain)
+          // Use response.url (final URL after redirects) as the base URL
+          internalLinks = extractInternalLinks(html, response.url, actualDomain)
+          
+          // If we still didn't find links, try with a more permissive approach
+          if (internalLinks.length === 0) {
+            console.log(`[Audit Progress] No links found with domain ${actualDomain}, trying broader extraction...`)
+            // Try extracting all links and see what domains we find
+            const allLinkMatches = html.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
+            const foundDomains = new Set<string>()
+            allLinkMatches.slice(0, 20).forEach(link => {
+              const hrefMatch = link.match(/href=["']([^"']+)["']/i)
+              if (hrefMatch) {
+                try {
+                  const href = hrefMatch[1].trim()
+                  if (!href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
+                    const linkUrl = new URL(href, response.url)
+                    foundDomains.add(linkUrl.hostname)
+                  }
+                } catch {}
+              }
+            })
+            
+            if (foundDomains.size > 0) {
+              console.log(`[Audit Progress] Found links with domains: ${Array.from(foundDomains).slice(0, 5).join(', ')}${foundDomains.size > 5 ? '...' : ''}`)
+              
+              // Try each domain to see if it matches our base domain
+              for (const foundDomain of foundDomains) {
+                if (isSameDomain(foundDomain, actualDomain)) {
+                  console.log(`[Audit Progress] Retrying link extraction with domain ${foundDomain}`)
+                  internalLinks = extractInternalLinks(html, response.url, foundDomain)
+                  if (internalLinks.length > 0) {
+                    actualDomain = foundDomain
+                    break
+                  }
+                }
+              }
+            } else {
+              console.log(`[Audit Progress] No link hrefs found in HTML at all`)
+            }
+          }
           
           if (internalLinks.length > 0) {
-            console.log(`[Audit Progress] Extracted ${internalLinks.length} internal links from ${url} (domain: ${actualDomain})`)
+            console.log(`[Audit Progress] Extracted ${internalLinks.length} internal links from ${url} (using domain: ${actualDomain})`)
           } else {
-            console.log(`[Audit Progress] No internal links found on ${url} (checking domain: ${actualDomain})`)
+            console.log(`[Audit Progress] No internal links found on ${url} (checked domain: ${actualDomain}, response URL: ${response.url})`)
           }
           
           // If we didn't find many links, try a more aggressive extraction
