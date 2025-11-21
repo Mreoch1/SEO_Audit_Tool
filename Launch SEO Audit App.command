@@ -3,8 +3,16 @@
 # SEO Audit App - Server Launcher
 # Double-click this file to start the development server
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Change to the app directory
-cd /Users/michaelreoch/seo-audit-app
+cd "$SCRIPT_DIR" || {
+    echo "❌ Error: Could not change to directory: $SCRIPT_DIR"
+    echo "Press Enter to exit..."
+    read -r
+    exit 1
+}
 
 # Keep terminal window open and visible
 clear
@@ -21,15 +29,20 @@ if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
     echo "🌐 Opening http://localhost:3000"
     open http://localhost:3000
     echo ""
-    echo "Press any key to exit..."
-    read -n 1
+    echo "Press Enter to exit..."
+    read -r
     exit 0
 fi
 
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
     echo "📦 Installing dependencies..."
-    npm install
+    if ! npm install; then
+        echo "❌ Error: Failed to install dependencies"
+        echo "Press Enter to exit..."
+        read -r
+        exit 1
+    fi
     echo ""
 fi
 
@@ -46,8 +59,18 @@ fi
 # Check if database exists
 if [ ! -f "prisma/dev.db" ]; then
     echo "📊 Setting up database..."
-    npm run db:generate
-    npm run db:migrate
+    if ! npm run db:generate; then
+        echo "❌ Error: Failed to generate database"
+        echo "Press Enter to exit..."
+        read -r
+        exit 1
+    fi
+    if ! npm run db:migrate; then
+        echo "❌ Error: Failed to migrate database"
+        echo "Press Enter to exit..."
+        read -r
+        exit 1
+    fi
     echo ""
 fi
 
@@ -70,4 +93,4 @@ echo "════════════════════════�
 echo "  Server stopped"
 echo "═══════════════════════════════════════════════════════"
 echo ""
-read -p "Press Enter to close this window..."
+read -r -p "Press Enter to close this window..."
