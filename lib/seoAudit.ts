@@ -1042,12 +1042,26 @@ function parseHtml(
   ])
   
   keywordSources.forEach(text => {
-    const words = text.toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
+    // Normalize text first - preserve word boundaries better
+    const normalizedText = text.toLowerCase()
+      .replace(/[^\w\s-]/g, ' ') // Keep hyphens for compound words
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim()
+    
+    const words = normalizedText
       .split(/\s+/)
-      .filter(w => w.length > 2 && !stopWords.has(w))
+      .filter(w => {
+        // Remove punctuation-only "words" and very short words
+        const cleanWord = w.replace(/[^\w]/g, '')
+        return cleanWord.length > 2 && !stopWords.has(cleanWord)
+      })
       // Filter out consecutive duplicate words
-      .filter((w, i, arr) => i === 0 || w !== arr[i - 1])
+      .filter((w, i, arr) => {
+        const cleanW = w.replace(/[^\w]/g, '')
+        const cleanPrev = i > 0 ? arr[i - 1].replace(/[^\w]/g, '') : ''
+        return i === 0 || cleanW !== cleanPrev
+      })
+      .map(w => w.replace(/[^\w]/g, '')) // Clean words for consistency
 
     // Create 2-word phrases
     for (let i = 0; i < words.length - 1; i++) {
@@ -1102,11 +1116,17 @@ function parseHtml(
       // Filter out phrases that look like broken words (e.g., "encyclope dia")
       // Check if any word is suspiciously short (1-2 chars) and not a common word
       const commonShortWords = new Set(['a', 'an', 'as', 'at', 'be', 'by', 'do', 'go', 'he', 'if', 'in', 'is', 'it', 'me', 'my', 'no', 'of', 'on', 'or', 'so', 'to', 'up', 'us', 'we'])
-      const hasSuspiciousShortWord = words.some(w => w.length <= 2 && !commonShortWords.has(w.toLowerCase()))
-      if (hasSuspiciousShortWord && words.length > 2) {
+      const hasSuspiciousShortWord = words.some(w => {
+        const cleanW = w.replace(/[^\w]/g, '')
+        return cleanW.length > 0 && cleanW.length <= 2 && !commonShortWords.has(cleanW.toLowerCase())
+      })
+      if (hasSuspiciousShortWord) {
         // Might be a broken word, filter it out
         return false
       }
+      
+      // Filter out single words - we only want 2-3 word phrases
+      if (words.length < 2) return false
       
       return true
     })
@@ -2143,15 +2163,18 @@ async function generateCompetitorAnalysis(
         if (pattern.includes(' ')) {
           // Multi-word patterns: "how to [topic]", "complete guide to [topic]"
           // Only add if it creates a meaningful phrase (3-5 words total)
-          const combined = `${pattern} ${shortTopic}`
-          if (combined.split(/\s+/).length <= 5 && combined.length < 50) {
+          const combined = `${pattern} ${shortTopic}`.trim()
+          const wordCount = combined.split(/\s+/).length
+          // Ensure it's a reasonable length and doesn't duplicate the pattern
+          if (wordCount >= 3 && wordCount <= 5 && combined.length < 50 && !combined.includes(`${pattern} ${pattern}`)) {
             nicheCompetitorKeywords.push(combined)
           }
         } else {
           // Single word patterns: "[topic] tutorial", "[topic] review"
           if (['tutorial', 'review', 'tips', 'guide', 'examples'].includes(pattern)) {
-            const combined = `${shortTopic} ${pattern}`
-            if (combined.split(/\s+/).length <= 4 && combined.length < 40) {
+            const combined = `${shortTopic} ${pattern}`.trim()
+            const wordCount = combined.split(/\s+/).length
+            if (wordCount >= 2 && wordCount <= 4 && combined.length < 40) {
               nicheCompetitorKeywords.push(combined)
             }
           }
@@ -2182,14 +2205,40 @@ async function generateCompetitorAnalysis(
   // Remove duplicates, filter out nonsensical combinations, and limit
   const uniqueCompetitorKeywords = Array.from(new Set(allCompetitorKeywords))
     .filter(kw => {
-      const kwLower = kw.toLowerCase()
+      const kwLower = kw.toLowerCase().trim()
       // Filter out keywords that are too short or too long
       if (kwLower.length < 8 || kwLower.length > 50) return false
       
+      const words = kwLower.split(/\s+/).filter(w => w.length > 0)
+      
+      // Filter out single words
+      if (words.length < 2) return false
+      
+      // Filter out keywords with duplicate patterns (e.g., "how to X how to for X")
+      const patternWords = ['how', 'to', 'for', 'best', 'practices', 'complete', 'guide', 'ultimate', 'getting', 'started']
+      const patternCount = words.filter(w => patternWords.includes(w)).length
+      if (patternCount > words.length / 2) {
+        // Too many pattern words, likely nonsensical
+        return false
+      }
+      
+      // Filter out keywords that repeat the same pattern twice
+      const hasDuplicatePattern = commonPatterns.some(pattern => {
+        const patternWords = pattern.toLowerCase().split(/\s+/)
+        const kwWords = kwLower.split(/\s+/)
+        let patternCount = 0
+        for (let i = 0; i <= kwWords.length - patternWords.length; i++) {
+          const slice = kwWords.slice(i, i + patternWords.length).join(' ')
+          if (slice === pattern.toLowerCase()) {
+            patternCount++
+          }
+        }
+        return patternCount > 1
+      })
+      if (hasDuplicatePattern) return false
+      
       // Filter out nonsensical patterns like "how to next" or "best docs"
-      const words = kwLower.split(/\s+/)
       const genericSingleWords = ['next', 'docs', 'page', 'site', 'web', 'www', 'com', 'org', 'net']
-      // If a keyword starts with a pattern but the topic is a generic single word, skip it
       if (words.length === 2 && genericSingleWords.includes(words[words.length - 1])) {
         return false
       }
@@ -2197,6 +2246,13 @@ async function generateCompetitorAnalysis(
       // Filter out repetitive word patterns
       const uniqueWords = new Set(words)
       if (uniqueWords.size < 2) return false
+      
+      // Filter out keywords where the same word appears more than twice
+      const wordCounts = new Map<string, number>()
+      words.forEach(w => wordCounts.set(w, (wordCounts.get(w) || 0) + 1))
+      for (const count of wordCounts.values()) {
+        if (count > 2) return false
+      }
       
       return true
     })
