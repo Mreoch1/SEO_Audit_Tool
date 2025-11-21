@@ -55,10 +55,12 @@ export default function AuditDetailPage() {
       
       setAudit(data)
       
-      // Stop loading once audit is complete or failed
+      // Always stop loading once we have data
+      setLoading(false)
+      
+      // Log status for debugging
       if (data.status === 'completed' || data.status === 'failed') {
-        console.log(`[Fetch Audit] Audit ${data.status}, stopping loading`)
-        setLoading(false)
+        console.log(`[Fetch Audit] Audit ${data.status}, data loaded`)
       } else if (data.status === 'running') {
         console.log(`[Fetch Audit] Audit still running, will continue polling`)
       }
@@ -80,9 +82,6 @@ export default function AuditDetailPage() {
   // Poll for audit completion if status is "running"
   useEffect(() => {
     if (!audit || audit.status !== 'running') {
-      if (audit && (audit.status === 'completed' || audit.status === 'failed')) {
-        setLoading(false)
-      }
       return
     }
 
@@ -196,7 +195,11 @@ export default function AuditDetailPage() {
   }
 
   if (loading && !audit) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading audit details...</div>
+      </div>
+    )
   }
 
   if (!audit) {

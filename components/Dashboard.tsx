@@ -128,8 +128,10 @@ export default function Dashboard() {
       if (!res.ok) throw new Error('Failed to fetch audit')
       const data = await res.json()
       setLatestAudit(data)
+      setLoading(false) // Ensure loading stops after fetching latest audit
     } catch (error) {
       console.error('Failed to fetch audit details:', error)
+      setLoading(false) // Stop loading even on error
     }
   }
 
