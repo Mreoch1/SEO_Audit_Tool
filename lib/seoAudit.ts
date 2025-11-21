@@ -1824,10 +1824,12 @@ async function generateCompetitorAnalysis(
     })
   }
   
+  // Define generic words at function scope so it can be used later
+  const genericWords = new Set(['free', 'online', 'best', 'new', 'top', 'get', 'use', 'make', 'find', 'see', 'more', 'here', 'page', 'site', 'web', 'www', 'com', 'org', 'net', 'gov', 'edu', 'html', 'http', 'https'])
+  
   // If we don't have enough good keywords from extractedKeywords, extract from titles/H1s more intelligently
   if (coreTopics.size < 3) {
     const stopWords = new Set(['this', 'that', 'with', 'from', 'your', 'their', 'have', 'been', 'will', 'would', 'could', 'should', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'as', 'is', 'was', 'are', 'were'])
-    const genericWords = new Set(['free', 'online', 'best', 'new', 'top', 'get', 'use', 'make', 'find', 'see', 'more', 'here', 'page', 'site', 'web', 'www', 'com', 'org', 'net', 'gov', 'edu', 'html', 'http', 'https'])
     
     pages.forEach(page => {
       // Extract meaningful 2-3 word phrases from titles
