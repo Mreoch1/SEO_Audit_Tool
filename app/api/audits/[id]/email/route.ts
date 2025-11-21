@@ -53,15 +53,161 @@ export async function POST(
   try {
     const pdfBuffer = await generatePDF(auditResult, branding, audit.url)
 
+    // Format the audit summary for better readability
+    const formattedSummary = audit.shortSummary
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => `<p style="margin: 0 0 12px 0; color: #374151; line-height: 1.6;">${line.trim()}</p>`)
+      .join('')
+
+    // Get audit scores for display
+    const overallScore = audit.overallScore || 0
+    const technicalScore = audit.technicalScore || 0
+    const onPageScore = audit.onPageScore || 0
+    const contentScore = audit.contentScore || 0
+    const accessibilityScore = audit.accessibilityScore || 0
+
+    // Get score color based on value
+    const getScoreColor = (score: number) => {
+      if (score >= 80) return '#10b981' // green
+      if (score >= 60) return '#f59e0b' // yellow
+      return '#ef4444' // red
+    }
+
+    const primaryColor = branding.primaryColor || '#3b82f6'
+    const brandName = branding.brandName || 'SEOAuditPro'
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEO Audit Report - ${audit.url}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6; padding: 40px 20px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%); padding: 40px 40px 30px 40px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: -0.5px;">
+                                ${brandName}
+                            </h1>
+                            ${branding.brandSubtitle ? `<p style="margin: 8px 0 0 0; color: #ffffff; font-size: 16px; opacity: 0.9;">${branding.brandSubtitle}</p>` : ''}
+                        </td>
+                    </tr>
+                    
+                    <!-- Main Content -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            <h2 style="margin: 0 0 24px 0; color: #111827; font-size: 24px; font-weight: 600;">
+                                SEO Audit Report
+                            </h2>
+                            
+                            <p style="margin: 0 0 24px 0; color: #374151; font-size: 16px; line-height: 1.6;">
+                                Your comprehensive SEO audit for <strong style="color: #111827;"><a href="${audit.url}" style="color: ${primaryColor}; text-decoration: none;">${audit.url}</a></strong> has been completed.
+                            </p>
+                            
+                            <!-- Score Cards -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 32px 0;">
+                                <tr>
+                                    <td style="padding: 0 8px 16px 0;">
+                                        <div style="background-color: #f9fafb; border-left: 4px solid ${getScoreColor(overallScore)}; padding: 16px; border-radius: 4px;">
+                                            <div style="color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Overall Score</div>
+                                            <div style="color: ${getScoreColor(overallScore)}; font-size: 32px; font-weight: 700;">${overallScore}</div>
+                                        </div>
+                                    </td>
+                                    <td style="padding: 0 8px 16px 8px;">
+                                        <div style="background-color: #f9fafb; border-left: 4px solid ${getScoreColor(technicalScore)}; padding: 16px; border-radius: 4px;">
+                                            <div style="color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Technical</div>
+                                            <div style="color: ${getScoreColor(technicalScore)}; font-size: 32px; font-weight: 700;">${technicalScore}</div>
+                                        </div>
+                                    </td>
+                                    <td style="padding: 0 8px 16px 8px;">
+                                        <div style="background-color: #f9fafb; border-left: 4px solid ${getScoreColor(onPageScore)}; padding: 16px; border-radius: 4px;">
+                                            <div style="color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">On-Page</div>
+                                            <div style="color: ${getScoreColor(onPageScore)}; font-size: 32px; font-weight: 700;">${onPageScore}</div>
+                                        </div>
+                                    </td>
+                                    <td style="padding: 0 0 16px 8px;">
+                                        <div style="background-color: #f9fafb; border-left: 4px solid ${getScoreColor(contentScore)}; padding: 16px; border-radius: 4px;">
+                                            <div style="color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Content</div>
+                                            <div style="color: ${getScoreColor(contentScore)}; font-size: 32px; font-weight: 700;">${contentScore}</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Summary Section -->
+                            <div style="background-color: #f9fafb; border-radius: 6px; padding: 24px; margin: 0 0 32px 0;">
+                                <h3 style="margin: 0 0 16px 0; color: #111827; font-size: 18px; font-weight: 600;">Audit Summary</h3>
+                                ${formattedSummary}
+                            </div>
+                            
+                            <!-- CTA Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 0 0 24px 0;">
+                                        <a href="${audit.url}" style="display: inline-block; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                            View Full Report (PDF Attached)
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
+                                A detailed PDF report is attached to this email with comprehensive analysis, actionable recommendations, and page-level findings.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 32px 40px; border-top: 1px solid #e5e7eb; text-align: center;">
+                            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">
+                                <strong style="color: #111827;">${brandName}</strong> - Professional SEO Auditing
+                            </p>
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                                This is an automated email from your SEO audit system.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `
+
+    const emailText = `
+SEO Audit Report - ${audit.url}
+
+Your comprehensive SEO audit for ${audit.url} has been completed.
+
+Overall Score: ${overallScore}/100
+Technical SEO: ${technicalScore}/100
+On-Page SEO: ${onPageScore}/100
+Content Quality: ${contentScore}/100
+Accessibility: ${accessibilityScore}/100
+
+${audit.shortSummary}
+
+A detailed PDF report is attached to this email with comprehensive analysis, actionable recommendations, and page-level findings.
+
+---
+${brandName} - Professional SEO Auditing
+This is an automated email from your SEO audit system.
+    `.trim()
+
     await sendEmail({
       to: emailTo,
-      subject: `SEO Audit Report - ${audit.url}`,
-      text: `Please find attached the SEO audit report for ${audit.url}.\n\n${audit.shortSummary}`,
-      html: `
-        <h2>SEO Audit Report</h2>
-        <p>Please find attached the SEO audit report for <strong>${audit.url}</strong>.</p>
-        <p>${audit.shortSummary.replace(/\n/g, '<br>')}</p>
-      `,
+      subject: `${brandName} - SEO Audit Report for ${audit.url}`,
+      text: emailText,
+      html: emailHtml,
       attachments: [{
         filename: `seo-audit-${audit.id}.pdf`,
         content: pdfBuffer
