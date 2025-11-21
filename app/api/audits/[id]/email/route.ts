@@ -77,13 +77,17 @@ export async function POST(
     const primaryColor = branding.primaryColor || '#3b82f6'
     const brandName = branding.brandName || 'SEOAuditPro'
 
+    // Escape HTML in URL for safety
+    const escapedUrl = audit.url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    
     const emailHtml = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SEO Audit Report - ${audit.url}</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>SEO Audit Report - ${escapedUrl}</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6; padding: 40px 20px;">
@@ -108,7 +112,7 @@ export async function POST(
                             </h2>
                             
                             <p style="margin: 0 0 24px 0; color: #374151; font-size: 16px; line-height: 1.6;">
-                                Your comprehensive SEO audit for <strong style="color: #111827;"><a href="${audit.url}" style="color: ${primaryColor}; text-decoration: none;">${audit.url}</a></strong> has been completed.
+                                Your comprehensive SEO audit for <strong style="color: #111827;"><a href="${escapedUrl}" style="color: ${primaryColor}; text-decoration: none; font-weight: 600;">${escapedUrl}</a></strong> has been completed.
                             </p>
                             
                             <!-- Score Cards -->
@@ -151,7 +155,7 @@ export async function POST(
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                 <tr>
                                     <td align="center" style="padding: 0 0 24px 0;">
-                                        <a href="${audit.url}" style="display: inline-block; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+                                        <a href="${escapedUrl}" style="display: inline-block; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
                                             View Full Report (PDF Attached)
                                         </a>
                                     </td>
@@ -170,8 +174,13 @@ export async function POST(
                             <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">
                                 <strong style="color: #111827;">${brandName}</strong> - Professional SEO Auditing
                             </p>
-                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                                This is an automated email from your SEO audit system.
+                            <p style="margin: 0 0 12px 0; color: #9ca3af; font-size: 12px; line-height: 1.6;">
+                                This is an automated email from your SEO audit system.<br>
+                                If you have questions, please reply to this email.
+                            </p>
+                            <p style="margin: 0; color: #9ca3af; font-size: 11px;">
+                                <a href="mailto:${settings?.smtpFrom || settings?.smtpUser || 'noreply@example.com'}?subject=Unsubscribe%20Request" style="color: #6b7280; text-decoration: underline;">Unsubscribe</a> | 
+                                <a href="mailto:${settings?.smtpFrom || settings?.smtpUser || 'noreply@example.com'}" style="color: #6b7280; text-decoration: underline;">Contact Support</a>
                             </p>
                         </td>
                     </tr>
@@ -183,33 +192,42 @@ export async function POST(
 </html>
     `
 
+    // Create a better plain text version (important for spam filters)
     const emailText = `
-SEO Audit Report - ${audit.url}
+${brandName} - SEO Audit Report
 
 Your comprehensive SEO audit for ${audit.url} has been completed.
 
-Overall Score: ${overallScore}/100
-Technical SEO: ${technicalScore}/100
-On-Page SEO: ${onPageScore}/100
-Content Quality: ${contentScore}/100
-Accessibility: ${accessibilityScore}/100
+SCORES:
+- Overall Score: ${overallScore}/100
+- Technical SEO: ${technicalScore}/100
+- On-Page SEO: ${onPageScore}/100
+- Content Quality: ${contentScore}/100
+- Accessibility: ${accessibilityScore}/100
 
-${audit.shortSummary}
+SUMMARY:
+${audit.shortSummary.replace(/\n/g, '\n\n')}
 
 A detailed PDF report is attached to this email with comprehensive analysis, actionable recommendations, and page-level findings.
 
 ---
-${brandName} - Professional SEO Auditing
-This is an automated email from your SEO audit system.
+${brandName}
+Professional SEO Auditing Services
+
+This is an automated email from your SEO audit system. If you have questions, please reply to this email.
     `.trim()
+
+    // Clean subject line to avoid spam triggers
+    const cleanUrl = audit.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+    const subject = `${brandName} - SEO Audit Report for ${cleanUrl}`
 
     await sendEmail({
       to: emailTo,
-      subject: `${brandName} - SEO Audit Report for ${audit.url}`,
+      subject: subject,
       text: emailText,
       html: emailHtml,
       attachments: [{
-        filename: `seo-audit-${audit.id}.pdf`,
+        filename: `seo-audit-report-${cleanUrl.replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().split('T')[0]}.pdf`,
         content: pdfBuffer
       }]
     })

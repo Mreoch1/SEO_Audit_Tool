@@ -50,16 +50,39 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
   })
 
   const from = settings?.smtpFrom || settings?.smtpUser || 'noreply@example.com'
+  const fromName = settings?.brandName || 'SEO Audit Pro'
+  
+  // Format from address with name for better deliverability
+  const fromFormatted = fromName ? `${fromName} <${from}>` : from
 
   const transporter = await getTransporter()
 
+  // Generate unique Message-ID for better deliverability
+  const messageId = `<${Date.now()}-${Math.random().toString(36).substr(2, 9)}@${from.split('@')[1] || 'seoauditpro.net'}>`
+
   await transporter.sendMail({
-    from,
+    from: fromFormatted,
     to: options.to,
+    replyTo: from, // Add reply-to for better deliverability
     subject: options.subject,
     text: options.text,
     html: options.html,
-    attachments: options.attachments
+    attachments: options.attachments,
+    // Add headers to improve deliverability
+    headers: {
+      'Message-ID': messageId,
+      'X-Mailer': 'SEO Audit Pro',
+      'X-Priority': '1', // Normal priority
+      'Importance': 'normal',
+      'List-Unsubscribe': `<mailto:${from}?subject=unsubscribe>`, // Unsubscribe header
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click', // One-click unsubscribe
+      'Precedence': 'bulk', // Mark as transactional/bulk
+      'Auto-Submitted': 'auto-generated', // Mark as automated
+      'Content-Type': 'text/html; charset=UTF-8',
+      'MIME-Version': '1.0'
+    },
+    // Add priority for better inbox placement
+    priority: 'normal'
   })
 }
 
