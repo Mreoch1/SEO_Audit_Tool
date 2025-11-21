@@ -283,6 +283,56 @@ async function checkSitemap(rootUrl: string, siteWide: SiteWideData): Promise<vo
 }
 
 /**
+ * Extract internal links from HTML
+ */
+function extractInternalLinks(html: string, baseUrl: string, baseDomain: string): string[] {
+  const links = new Set<string>()
+  const linkMatches = html.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
+  
+  try {
+    linkMatches.forEach(link => {
+      const hrefMatch = link.match(/href=["']([^"']+)["']/i)
+      if (hrefMatch) {
+        try {
+          // Skip anchor links, javascript:, mailto:, tel:, etc.
+          const href = hrefMatch[1].trim()
+          if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href === '' || href === '/') {
+            return
+          }
+          
+          const linkUrl = new URL(href, baseUrl)
+          // Only include internal links on the same domain
+          if (linkUrl.hostname === baseDomain) {
+            // Normalize the URL (remove hash, trailing slash if not root)
+            const normalizedUrl = normalizeUrl(linkUrl.toString())
+            if (normalizedUrl) {
+              links.add(normalizedUrl)
+            }
+          }
+        } catch {
+          // Relative URL - try to resolve it
+          try {
+            const relativeUrl = new URL(hrefMatch[1], baseUrl)
+            if (relativeUrl.hostname === baseDomain) {
+              const normalizedUrl = normalizeUrl(relativeUrl.toString())
+              if (normalizedUrl) {
+                links.add(normalizedUrl)
+              }
+            }
+          } catch {
+            // Invalid URL, skip
+          }
+        }
+      }
+    })
+  } catch {
+    // Can't parse base URL, return empty array
+  }
+  
+  return Array.from(links)
+}
+
+/**
  * Crawl pages recursively
  */
 async function crawlPages(
@@ -328,19 +378,37 @@ async function crawlPages(
       
       // Extract internal links for further crawling
       if (depth < options.maxDepth && pageData.internalLinkCount > 0) {
-        // In a real implementation, we'd parse HTML and extract links
-        // For now, we'll limit to the start URL and a few common paths
-        if (depth === 0) {
-          // Add common paths to queue
-          const commonPaths = ['/about', '/contact', '/services', '/products', '/blog']
-          for (const path of commonPaths) {
-            try {
-              const linkUrl = new URL(path, url).toString()
-              if (new URL(linkUrl).hostname === baseDomain && !crawledUrls.has(linkUrl)) {
-                queue.push({ url: linkUrl, depth: depth + 1 })
+        // Extract actual internal links from the rendered HTML
+        try {
+          // Re-fetch the rendered HTML to extract links (or use a cached version if available)
+          const response = await fetch(url, {
+            signal: AbortSignal.timeout(5000),
+            headers: { 'User-Agent': options.userAgent }
+          })
+          const html = await response.text()
+          const internalLinks = extractInternalLinks(html, url, baseDomain)
+          
+          // Add discovered internal links to queue
+          for (const linkUrl of internalLinks) {
+            const normalizedLinkUrl = normalizeUrl(linkUrl)
+            if (!crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
+              queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
+            }
+          }
+        } catch (error) {
+          // If extraction fails, fall back to common paths only at depth 0
+          if (depth === 0) {
+            const commonPaths = ['/about', '/contact', '/services', '/products', '/blog', '/pricing', '/features']
+            for (const path of commonPaths) {
+              try {
+                const linkUrl = new URL(path, url).toString()
+                const normalizedLinkUrl = normalizeUrl(linkUrl)
+                if (new URL(linkUrl).hostname === baseDomain && !crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
+                  queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
+                }
+              } catch {
+                // Invalid URL, skip
               }
-            } catch {
-              // Invalid URL, skip
             }
           }
         }

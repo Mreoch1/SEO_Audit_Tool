@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
-import { Download, Mail, Copy, AlertCircle, CheckCircle, Info } from 'lucide-react'
+import { Download, Mail, Copy, AlertCircle, CheckCircle, Info, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
 
 interface AuditData {
   id: string
   url: string
   createdAt: string
+  archived: boolean
   overallScore: number
   technicalScore: number
   onPageScore: number
@@ -102,6 +103,58 @@ export default function AuditDetailPage() {
     })
   }
 
+  const handleArchive = async () => {
+    if (!audit) return
+    try {
+      const res = await fetch(`/api/audits/${audit.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: !audit.archived })
+      })
+
+      if (!res.ok) throw new Error('Failed to update audit')
+
+      toast({
+        title: 'Success',
+        description: audit.archived ? 'Audit unarchived' : 'Audit archived'
+      })
+      fetchAudit()
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update audit',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!audit) return
+    if (!confirm(`Are you sure you want to delete the audit for "${audit.url}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/audits/${audit.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!res.ok) throw new Error('Failed to delete audit')
+
+      toast({
+        title: 'Success',
+        description: 'Audit deleted'
+      })
+      router.push('/')
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete audit',
+        variant: 'destructive'
+      })
+    }
+  }
+
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   }
@@ -129,9 +182,14 @@ export default function AuditDetailPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="border-b bg-white">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
+          <div className="flex-1">
             <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
-            <h1 className="text-2xl font-bold mt-2">{audit.url}</h1>
+            <div className="flex items-center gap-2 mt-2">
+              <h1 className="text-2xl font-bold">{audit.url}</h1>
+              {audit.archived && (
+                <span className="px-2 py-1 bg-gray-600 text-white rounded text-sm">Archived</span>
+              )}
+            </div>
             {(audit.rawJson?.raw?.options?.tier || (audit.rawJson?.raw?.options?.addOns && Object.keys(audit.rawJson.raw.options.addOns).length > 0)) && (
               <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm">
                 {audit.rawJson?.raw?.options?.tier && (
@@ -189,6 +247,23 @@ export default function AuditDetailPage() {
             <Button onClick={handleEmailReport} variant="outline" size="sm" disabled={emailLoading}>
               <Mail className="mr-2 h-4 w-4" />
               Email Report
+            </Button>
+            <Button onClick={handleArchive} variant="outline" size="sm">
+              {audit.archived ? (
+                <>
+                  <ArchiveRestore className="mr-2 h-4 w-4" />
+                  Unarchive
+                </>
+              ) : (
+                <>
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archive
+                </>
+              )}
+            </Button>
+            <Button onClick={handleDelete} variant="outline" size="sm" className="hover:bg-red-50 hover:border-red-300">
+              <Trash2 className="mr-2 h-4 w-4 text-red-600" />
+              Delete
             </Button>
           </div>
         </div>

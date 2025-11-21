@@ -4,13 +4,15 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, FileText, AlertCircle, LayoutDashboard, List, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { useToast } from '@/components/ui/use-toast'
+import { Plus, FileText, AlertCircle, LayoutDashboard, List, TrendingUp, TrendingDown, Minus, Archive, ArchiveRestore, Trash2, Folder, FolderOpen, ArrowLeft } from 'lucide-react'
 
 interface Audit {
   id: string
   url: string
   overallScore: number
   createdAt: string
+  archived: boolean
   highSeverityIssues: number
 }
 
@@ -35,28 +37,56 @@ interface AuditDetail {
 }
 
 export default function Dashboard() {
+  const { toast } = useToast()
   const [audits, setAudits] = useState<Audit[]>([])
+  const [groupedAudits, setGroupedAudits] = useState<Array<{
+    url: string
+    latestAudit: Audit | null
+    allAudits: Audit[]
+  }>>([])
   const [latestAudit, setLatestAudit] = useState<AuditDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'dashboard'>('list')
+  const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('active')
+  const [groupBy, setGroupBy] = useState(false)
 
   useEffect(() => {
     fetchAudits()
-  }, [])
+  }, [filter, groupBy])
 
   useEffect(() => {
-    if (viewMode === 'dashboard' && audits.length > 0) {
+    if (viewMode === 'dashboard' && audits.length > 0 && !audits[0].archived) {
       fetchLatestAudit(audits[0].id)
     }
   }, [viewMode, audits])
 
   const fetchAudits = async () => {
     try {
-      const res = await fetch('/api/audits?limit=10')
+      setLoading(true)
+      const params = new URLSearchParams({
+        limit: '100',
+        filter: filter
+      })
+      if (groupBy) {
+        params.append('groupBy', 'website')
+      }
+      const res = await fetch(`/api/audits?${params}`)
       const data = await res.json()
-      setAudits(data.audits || [])
+      
+      if (groupBy && data.groupedAudits) {
+        setGroupedAudits(data.groupedAudits || [])
+        setAudits([])
+      } else {
+        setAudits(data.audits || [])
+        setGroupedAudits([])
+      }
     } catch (error) {
       console.error('Failed to fetch audits:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to load audits',
+        variant: 'destructive'
+      })
     } finally {
       setLoading(false)
     }
@@ -69,6 +99,56 @@ export default function Dashboard() {
       setLatestAudit(data)
     } catch (error) {
       console.error('Failed to fetch audit details:', error)
+    }
+  }
+
+  const handleArchive = async (id: string, archived: boolean) => {
+    try {
+      const res = await fetch(`/api/audits/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: !archived })
+      })
+
+      if (!res.ok) throw new Error('Failed to update audit')
+
+      toast({
+        title: 'Success',
+        description: archived ? 'Audit unarchived' : 'Audit archived'
+      })
+      fetchAudits()
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update audit',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleDelete = async (id: string, url: string) => {
+    if (!confirm(`Are you sure you want to delete the audit for "${url}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/audits/${id}`, {
+        method: 'DELETE'
+      })
+
+      if (!res.ok) throw new Error('Failed to delete audit')
+
+      toast({
+        title: 'Success',
+        description: 'Audit deleted'
+      })
+      fetchAudits()
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete audit',
+        variant: 'destructive'
+      })
     }
   }
 
@@ -120,13 +200,89 @@ export default function Dashboard() {
   const schemaHealth = getSchemaHealth()
   const onPageIssues = getOnPageIssues()
 
+  const renderAuditCard = (audit: Audit) => (
+    <Card key={audit.id} className={viewMode === 'dashboard' ? 'bg-gray-800 border-gray-700' : audit.archived ? 'opacity-60' : ''}>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <CardTitle className={`text-lg ${viewMode === 'dashboard' ? 'text-white' : ''}`}>
+              <Link href={`/audits/${audit.id}`} className="hover:underline">
+                {audit.url}
+              </Link>
+              {audit.archived && (
+                <span className="ml-2 text-xs px-2 py-1 bg-gray-600 text-gray-200 rounded">Archived</span>
+              )}
+            </CardTitle>
+            <CardDescription className={viewMode === 'dashboard' ? 'text-gray-400' : ''}>
+              {new Date(audit.createdAt).toLocaleString()}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className={`text-2xl font-bold ${viewMode === 'dashboard' ? 'text-white' : ''}`}>{audit.overallScore}</div>
+              <div className={`text-xs ${viewMode === 'dashboard' ? 'text-gray-400' : 'text-gray-500'}`}>Score</div>
+            </div>
+            {audit.highSeverityIssues > 0 && (
+              <div className="flex items-center gap-1 text-red-600">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm font-semibold">
+                  {audit.highSeverityIssues}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-2">
+          <Link href={`/audits/${audit.id}`}>
+            <Button variant="outline" size="sm" className={viewMode === 'dashboard' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : ''}>
+              View Details
+            </Button>
+          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleArchive(audit.id, audit.archived)}
+            className={viewMode === 'dashboard' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : ''}
+            title={audit.archived ? 'Unarchive' : 'Archive'}
+          >
+            {audit.archived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleDelete(audit.id, audit.url)}
+            className={`${viewMode === 'dashboard' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : ''} hover:bg-red-50 hover:border-red-300`}
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4 text-red-600" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+
   return (
     <div className={`min-h-screen ${viewMode === 'dashboard' ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <div className={`border-b ${viewMode === 'dashboard' ? 'bg-gray-800 border-gray-700' : 'bg-white'}`}>
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className={`text-2xl font-bold ${viewMode === 'dashboard' ? 'text-white' : ''}`}>
-            SEO Audit Dashboard
-          </h1>
+          <div className="flex items-center gap-4">
+            {filter === 'archived' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilter('active')}
+                className={viewMode === 'dashboard' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : ''}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Dashboard
+              </Button>
+            )}
+            <h1 className={`text-2xl font-bold ${viewMode === 'dashboard' ? 'text-white' : ''}`}>
+              {filter === 'archived' ? 'Archived Audits' : 'SEO Audit Dashboard'}
+            </h1>
+          </div>
           <div className="flex gap-2">
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
               <Button
@@ -167,7 +323,7 @@ export default function Dashboard() {
       <div className="container mx-auto px-4 py-8">
         {loading ? (
           <div className={`text-center py-12 ${viewMode === 'dashboard' ? 'text-white' : ''}`}>Loading...</div>
-        ) : audits.length === 0 ? (
+        ) : (audits.length === 0 && groupedAudits.length === 0) ? (
           <Card className={viewMode === 'dashboard' ? 'bg-gray-800 border-gray-700' : ''}>
             <CardContent className="py-12 text-center">
               <FileText className={`mx-auto h-12 w-12 ${viewMode === 'dashboard' ? 'text-gray-400' : 'text-gray-400'} mb-4`} />
@@ -199,7 +355,7 @@ export default function Dashboard() {
               </Link>
             </div>
 
-            {/* Overview Cards */}
+            {/* Overview Cards - Same as before */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Indexing Card */}
               <Card className="bg-gray-800 border-gray-700">
@@ -434,52 +590,72 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="space-y-4">
-            <h2 className={`text-xl font-semibold ${viewMode === 'dashboard' ? 'text-white' : ''}`}>Recent Audits</h2>
-            <div className="grid gap-4">
-              {audits.map((audit) => (
-                <Card key={audit.id} className={viewMode === 'dashboard' ? 'bg-gray-800 border-gray-700' : ''}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className={`text-lg ${viewMode === 'dashboard' ? 'text-white' : ''}`}>
-                          <Link href={`/audits/${audit.id}`} className="hover:underline">
-                            {audit.url}
-                          </Link>
-                        </CardTitle>
-                        <CardDescription className={viewMode === 'dashboard' ? 'text-gray-400' : ''}>
-                          {new Date(audit.createdAt).toLocaleString()}
-                        </CardDescription>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className={`text-2xl font-bold ${viewMode === 'dashboard' ? 'text-white' : ''}`}>{audit.overallScore}</div>
-                          <div className={`text-xs ${viewMode === 'dashboard' ? 'text-gray-400' : 'text-gray-500'}`}>Score</div>
-                        </div>
-                        {audit.highSeverityIssues > 0 && (
-                          <div className="flex items-center gap-1 text-red-600">
-                            <AlertCircle className="h-4 w-4" />
-                            <span className="text-sm font-semibold">
-                              {audit.highSeverityIssues}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <Link href={`/audits/${audit.id}`}>
-                      <Button variant="outline" size="sm" className={viewMode === 'dashboard' ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : ''}>
-                        View Details
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              ))}
+            {/* Filter and Group Controls */}
+            <div className="flex items-center justify-between">
+              <h2 className={`text-xl font-semibold ${viewMode === 'dashboard' ? 'text-white' : ''}`}>
+                {groupBy ? 'Audits by Website' : 'Recent Audits'}
+              </h2>
+              <div className="flex items-center gap-2">
+                {/* Filter Buttons */}
+                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                  <Button
+                    variant={filter === 'all' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilter('all')}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={filter === 'active' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilter('active')}
+                  >
+                    Active
+                  </Button>
+                  <Button
+                    variant={filter === 'archived' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilter('archived')}
+                  >
+                    Archived
+                  </Button>
+                </div>
+                {/* Group By Website Toggle */}
+                <Button
+                  variant={groupBy ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setGroupBy(!groupBy)}
+                >
+                  {groupBy ? <FolderOpen className="h-4 w-4 mr-2" /> : <Folder className="h-4 w-4 mr-2" />}
+                  {groupBy ? 'List View' : 'Group by Website'}
+                </Button>
+              </div>
             </div>
+
+            {/* Grouped View */}
+            {groupBy && groupedAudits.length > 0 ? (
+              <div className="space-y-6">
+                {groupedAudits.map((group) => (
+                  <div key={group.url}>
+                    <h3 className={`text-lg font-semibold mb-3 ${viewMode === 'dashboard' ? 'text-white' : ''}`}>
+                      {group.url}
+                      <span className="ml-2 text-sm text-gray-500">({group.allAudits.length} {group.allAudits.length === 1 ? 'audit' : 'audits'})</span>
+                    </h3>
+                    <div className="grid gap-4">
+                      {group.allAudits.map(renderAuditCard)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* Regular List View */
+              <div className="grid gap-4">
+                {audits.map(renderAuditCard)}
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
   )
 }
-

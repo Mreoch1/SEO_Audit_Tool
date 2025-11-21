@@ -497,24 +497,53 @@ function generateReportHTML(
           <div style="margin-bottom: 15px;">
             ${pageSpeed ? '<div style="color: #059669; font-weight: bold; margin-bottom: 10px;">📊 Data from Google PageSpeed Insights</div>' : '<div style="color: #666; margin-bottom: 10px;">📊 Data from page rendering</div>'}
           </div>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px;">
-            ${lcp ? `<div><strong>LCP:</strong> ${Math.round(lcp)}ms ${lcp > 4000 ? '❌ Poor' : lcp > 2500 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${cls !== undefined ? `<div><strong>CLS:</strong> ${cls.toFixed(3)} ${cls > 0.25 ? '❌ Poor' : cls > 0.1 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${inp ? `<div><strong>${pageSpeed ? 'INP' : 'FID'}:</strong> ${Math.round(inp)}ms ${inp > 500 ? '❌ Poor' : inp > 200 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${tbt ? `<div><strong>TBT:</strong> ${tbt}ms ${tbt > 600 ? '❌ Poor' : tbt > 200 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${fcp ? `<div><strong>FCP:</strong> ${Math.round(fcp)}ms ${fcp > 3000 ? '❌ Poor' : fcp > 1800 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${ttfb ? `<div><strong>TTFB:</strong> ${Math.round(ttfb)}ms ${ttfb > 1800 ? '❌ Poor' : ttfb > 800 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-          </div>
-          ${mobile && mobile.opportunities.length > 0 ? `
+          <table style="margin-top: 15px; width: 100%; max-width: 600px;">
+            <tbody>
+              ${lcp && (cls !== undefined || inp || fcp || ttfb) ? `
+              <tr>
+                <td style="padding: 8px; font-weight: bold;">LCP: ${Math.round(lcp)} ms</td>
+                <td style="padding: 8px; ${lcp > 4000 ? 'color: #dc2626;' : lcp > 2500 ? 'color: #f59e0b;' : 'color: #10b981;'}">${lcp > 4000 ? 'Poor' : lcp > 2500 ? 'Needs Improvement' : 'Good'}</td>
+              </tr>
+              ` : lcp ? `<tr><td style="padding: 8px; font-weight: bold;">LCP: ${Math.round(lcp)} ms</td><td style="padding: 8px; ${lcp > 4000 ? 'color: #dc2626;' : lcp > 2500 ? 'color: #f59e0b;' : 'color: #10b981;'}">${lcp > 4000 ? 'Poor' : lcp > 2500 ? 'Needs Improvement' : 'Good'}</td></tr>` : ''}
+              ${cls !== undefined ? `
+              <tr>
+                <td style="padding: 8px; font-weight: bold;">CLS: ${cls.toFixed(3)}</td>
+                <td style="padding: 8px; ${cls > 0.25 ? 'color: #dc2626;' : cls > 0.1 ? 'color: #f59e0b;' : 'color: #10b981;'}">${cls > 0.25 ? 'Poor' : cls > 0.1 ? 'Needs Improvement' : 'Good'}</td>
+              </tr>
+              ` : ''}
+              ${inp ? `
+              <tr>
+                <td style="padding: 8px; font-weight: bold;">${pageSpeed ? 'INP' : 'FID'}: ${Math.round(inp)} ms</td>
+                <td style="padding: 8px; ${inp > 500 ? 'color: #dc2626;' : inp > 200 ? 'color: #f59e0b;' : 'color: #10b981;'}">${inp > 500 ? 'Poor' : inp > 200 ? 'Needs Improvement' : 'Good'}</td>
+              </tr>
+              ` : ''}
+              ${fcp ? `
+              <tr>
+                <td style="padding: 8px; font-weight: bold;">FCP: ${Math.round(fcp)} ms</td>
+                <td style="padding: 8px; ${fcp > 3000 ? 'color: #dc2626;' : fcp > 1800 ? 'color: #f59e0b;' : 'color: #10b981;'}">${fcp > 3000 ? 'Poor' : fcp > 1800 ? 'Needs Improvement' : 'Good'}</td>
+              </tr>
+              ` : ''}
+              ${ttfb ? `
+              <tr>
+                <td style="padding: 8px; font-weight: bold;">TTFB: ${Math.round(ttfb)} ms</td>
+                <td style="padding: 8px; ${ttfb > 1800 ? 'color: #dc2626;' : ttfb > 800 ? 'color: #f59e0b;' : 'color: #10b981;'}">${ttfb > 1800 ? 'Poor' : ttfb > 800 ? 'Needs Improvement' : 'Good'}</td>
+              </tr>
+              ` : ''}
+            </tbody>
+          </table>
+          ${mobile && mobile.opportunities && mobile.opportunities.length > 0 ? `
           <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb;">
             <div style="font-weight: bold; margin-bottom: 10px; color: #dc2626;">⚡ Performance Opportunities:</div>
             <ul style="margin-left: 20px; color: #666;">
-              ${mobile.opportunities.slice(0, 5).map(opp => `
+              ${mobile.opportunities.slice(0, 5).map(opp => {
+                // Use savings field directly (in milliseconds)
+                const savingsText = opp.savings ? `Potential savings: ${Math.round(opp.savings)}ms` : ''
+                return `
                 <li style="margin-bottom: 8px;">
-                  <strong>${escapeHtml(opp.title)}</strong> - Potential savings: ${Math.round(opp.savings)}ms
-                  ${opp.description ? `<br><small style="color: #888;">${escapeHtml(opp.description.substring(0, 150))}${opp.description.length > 150 ? '...' : ''}</small>` : ''}
+                  <strong>${escapeHtml(opp.title)}</strong>${savingsText ? ` - ${savingsText}` : ''}
+                  ${opp.description ? `<br><small style="color: #888;">${escapeHtml(opp.description.substring(0, 120))}${opp.description.length > 120 ? '...' : ''}</small>` : ''}
                 </li>
-              `).join('')}
+              `}).join('')}
             </ul>
           </div>
           ` : ''}
@@ -537,15 +566,15 @@ function generateReportHTML(
         const actualPercent = ((llm.renderedHtmlLength - llm.initialHtmlLength) / Math.max(llm.initialHtmlLength, 1)) * 100
         const displayPercent = actualPercent >= 10000 ? '10,000%+' : `${llm.renderingPercentage}%`
         return `
-        <div class="issue-item ${llm.hasHighRendering ? 'high' : 'low'}">
-          <div class="issue-title">${page.url}</div>
-          <div class="issue-details">
+        <div class="issue-item ${llm.hasHighRendering ? 'high' : 'low'}" style="margin-bottom: 20px;">
+          <div class="issue-title" style="font-size: 14px; margin-bottom: 10px;">${page.url}</div>
+          <div class="issue-details" style="font-size: 13px; line-height: 1.8;">
             <strong>Rendering Percentage:</strong> ${displayPercent}<br>
             <strong>Initial HTML:</strong> ${llm.initialHtmlLength.toLocaleString()} characters<br>
             <strong>Rendered HTML:</strong> ${llm.renderedHtmlLength.toLocaleString()} characters
           </div>
           ${llm.hasHighRendering ? `
-          <div class="fix-instructions">
+          <div class="fix-instructions" style="margin-top: 10px;">
             <div class="fix-instructions-title">⚠️ High Rendering Detected</div>
             <div class="fix-instructions-content">Your page has a high level of rendering (changes to the HTML). Dynamically rendering a lot of page content risks some important information being missed by LLMs that generally do not read this content. Consider server-side rendering for critical content.</div>
           </div>
@@ -744,15 +773,15 @@ function generateReportHTML(
       <tbody>
         ${result.pages.slice(0, 50).map(page => `
           <tr>
-            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${page.url}</td>
-            <td>${page.statusCode || 'Error'}</td>
-            <td>${page.title ? (page.title.length > 40 ? page.title.substring(0, 40) + '...' : page.title) : 'Missing'}</td>
-            <td>${page.wordCount}</td>
-            <td>${page.h1Count}</td>
-            <td>${page.imageCount}</td>
-            <td>${page.missingAltCount}</td>
-            <td>${page.internalLinkCount + page.externalLinkCount} (${page.internalLinkCount} int, ${page.externalLinkCount} ext)</td>
-            <td>${page.loadTime}ms${page.performanceMetrics?.lcp ? `<br><small>LCP: ${page.performanceMetrics.lcp}ms</small>` : ''}</td>
+            <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; word-break: break-all; font-size: 11px;">${page.url}</td>
+            <td style="text-align: center;">${page.statusCode || 'Error'}</td>
+            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 11px;">${page.title ? escapeHtml(page.title.length > 30 ? page.title.substring(0, 30) + '...' : page.title) : 'Missing'}</td>
+            <td style="text-align: center;">${page.wordCount}</td>
+            <td style="text-align: center;">${page.h1Count}</td>
+            <td style="text-align: center;">${page.imageCount}</td>
+            <td style="text-align: center;">${page.missingAltCount}</td>
+            <td style="text-align: center; font-size: 11px;">${page.internalLinkCount + page.externalLinkCount}<br><small>(${page.internalLinkCount} int, ${page.externalLinkCount}<br>ext)</small></td>
+            <td style="text-align: center; font-size: 11px;">${page.loadTime} ms${(page.performanceMetrics?.lcp || page.pageSpeedMobile?.lcp || page.pageSpeedDesktop?.lcp) ? `<br><small>LCP: ${Math.round(page.performanceMetrics?.lcp || page.pageSpeedMobile?.lcp || page.pageSpeedDesktop?.lcp || 0)} ms</small>` : ''}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -1042,9 +1071,13 @@ function generatePriorityActionPlan(result: AuditResult): string {
       <p style="margin-bottom: 10px; color: #666;">These issues have the most significant impact on SEO performance. Fix these first.</p>
       <ol style="padding-left: 20px;">`
     highPriority.slice(0, 10).forEach((issue, idx) => {
+      // Extract counts from details (e.g., "21 of 21 images", "Found on 2 pages")
+      const countMatch = issue.details?.match(/(\d+)\s+of\s+(\d+)|Found on\s+(\d+)|(\d+)\s+page/i)
+      const countText = countMatch ? ` (${countMatch[1] ? `${countMatch[1]} of ${countMatch[2]}` : countMatch[3] ? `Found on ${countMatch[3]} pages` : countMatch[4] ? `${countMatch[4]} pages` : ''})` : issue.affectedPages && issue.affectedPages.length > 0 ? ` (${issue.affectedPages.length} ${issue.affectedPages.length === 1 ? 'page' : 'pages'})` : ''
+      
       html += `<li style="margin-bottom: 10px;">
-        <strong>${escapeHtml(issue.message)}</strong>
-        ${issue.details ? `<div style="color: #666; font-size: 12px; margin-top: 3px;">${escapeHtml(issue.details)}</div>` : ''}
+        <strong>${escapeHtml(issue.message)}</strong>${countText ? `<span style="color: #666;">${countText}</span>` : ''}
+        ${issue.details && !issue.details.match(/\d+\s+of\s+\d+|Found on\s+\d+/i) ? `<div style="color: #666; font-size: 12px; margin-top: 3px;">${escapeHtml(issue.details)}</div>` : ''}
       </li>`
     })
     html += `</ol></div>`
@@ -1056,9 +1089,13 @@ function generatePriorityActionPlan(result: AuditResult): string {
       <p style="margin-bottom: 10px; color: #666;">Address these after high-priority fixes are complete.</p>
       <ol style="padding-left: 20px;">`
     mediumPriority.slice(0, 10).forEach((issue, idx) => {
+      // Extract counts from details (e.g., "21 of 21 images", "Found on 2 pages")
+      const countMatch = issue.details?.match(/(\d+)\s+of\s+(\d+)|Found on\s+(\d+)|(\d+)\s+page/i)
+      const countText = countMatch ? ` (${countMatch[1] ? `${countMatch[1]} of ${countMatch[2]}` : countMatch[3] ? `Found on ${countMatch[3]} pages` : countMatch[4] ? `${countMatch[4]} pages` : ''})` : issue.affectedPages && issue.affectedPages.length > 0 ? ` (${issue.affectedPages.length} ${issue.affectedPages.length === 1 ? 'page' : 'pages'})` : ''
+      
       html += `<li style="margin-bottom: 10px;">
-        <strong>${escapeHtml(issue.message)}</strong>
-        ${issue.details ? `<div style="color: #666; font-size: 12px; margin-top: 3px;">${escapeHtml(issue.details)}</div>` : ''}
+        <strong>${escapeHtml(issue.message)}</strong>${countText ? `<span style="color: #666;">${countText}</span>` : ''}
+        ${issue.details && !issue.details.match(/\d+\s+of\s+\d+|Found on\s+\d+/i) ? `<div style="color: #666; font-size: 12px; margin-top: 3px;">${escapeHtml(issue.details)}</div>` : ''}
       </li>`
     })
     html += `</ol></div>`
@@ -1070,15 +1107,27 @@ function generatePriorityActionPlan(result: AuditResult): string {
   
   // Add keywords section if available
   if (result.summary.extractedKeywords && result.summary.extractedKeywords.length > 0) {
-    html += `<div style="margin-top: 30px; padding: 15px; background: #f0f9ff; border-radius: 8px;">
+      // Format keywords as table (max 8 columns, wrap as needed)
+      const keywords = result.summary.extractedKeywords
+      const columns = 8
+      html += `<div style="margin-top: 30px;">
       <h3 style="color: #3b82f6; margin-bottom: 10px;">Extracted Keywords</h3>
       <p style="color: #666; font-size: 14px; margin-bottom: 10px;">Keywords found in titles, headings, and meta descriptions:</p>
-      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-        ${result.summary.extractedKeywords.map(kw => 
-          `<span style="background: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; color: #333;">${escapeHtml(kw)}</span>`
-        ).join('')}
-      </div>
-    </div>`
+      <table style="width: 100%; margin-top: 10px; border-collapse: collapse;">
+        <tbody>`
+      for (let i = 0; i < keywords.length; i += columns) {
+        const row = keywords.slice(i, i + columns)
+        html += `<tr>`
+        for (let j = 0; j < columns; j++) {
+          if (j < row.length) {
+            html += `<td style="padding: 6px; border: 1px solid #e5e7eb; font-size: 12px; text-align: center;">${escapeHtml(row[j])}</td>`
+          } else {
+            html += `<td style="padding: 6px; border: 1px solid #e5e7eb;"></td>`
+          }
+        }
+        html += `</tr>`
+      }
+      html += `</tbody></table></div>`
   }
   
   return html

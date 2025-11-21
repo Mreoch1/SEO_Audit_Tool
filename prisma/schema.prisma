@@ -23,6 +23,7 @@ model Audit {
   url               String
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  archived          Boolean  @default(false)
   overallScore      Int
   technicalScore    Int
   onPageScore       Int
