@@ -212,14 +212,19 @@ export function generateDetailedSummary(result: AuditResult): string {
   
   // On-page findings
   if (onPageIssues.length > 0) {
-    const missingTitle = onPageIssues.filter(i => i.message.includes('Missing page title')).length
-    const missingMeta = onPageIssues.filter(i => i.message.includes('Missing meta description')).length
-    const missingH1 = onPageIssues.filter(i => i.message.includes('Missing H1')).length
+    // Count pages, not issues (issues may be consolidated with multiple affectedPages)
+    const missingTitleIssues = onPageIssues.filter(i => i.message.includes('Missing page title'))
+    const missingMetaIssues = onPageIssues.filter(i => i.message.includes('Missing meta description'))
+    const missingH1Issues = onPageIssues.filter(i => i.message.includes('Missing H1'))
+    
+    const missingTitleCount = missingTitleIssues.reduce((sum, issue) => sum + (issue.affectedPages?.length || 1), 0)
+    const missingMetaCount = missingMetaIssues.reduce((sum, issue) => sum + (issue.affectedPages?.length || 1), 0)
+    const missingH1Count = missingH1Issues.reduce((sum, issue) => sum + (issue.affectedPages?.length || 1), 0)
     
     text += `On-Page SEO: ${onPageIssues.length} issue${onPageIssues.length !== 1 ? 's' : ''} identified. `
-    if (missingTitle > 0) text += `${missingTitle} page${missingTitle !== 1 ? 's' : ''} missing titles, `
-    if (missingMeta > 0) text += `${missingMeta} page${missingMeta !== 1 ? 's' : ''} missing meta descriptions, `
-    if (missingH1 > 0) text += `${missingH1} page${missingH1 !== 1 ? 's' : ''} missing H1 tags. `
+    if (missingTitleCount > 0) text += `${missingTitleCount} page${missingTitleCount !== 1 ? 's' : ''} missing titles, `
+    if (missingMetaCount > 0) text += `${missingMetaCount} page${missingMetaCount !== 1 ? 's' : ''} missing meta descriptions, `
+    if (missingH1Count > 0) text += `${missingH1Count} page${missingH1Count !== 1 ? 's' : ''} missing H1 tags. `
     if (siteWide.duplicateTitles.length > 0) {
       text += `Additionally, ${siteWide.duplicateTitles.length / 2} duplicate title${siteWide.duplicateTitles.length / 2 !== 1 ? 's' : ''} were found across pages. `
     }

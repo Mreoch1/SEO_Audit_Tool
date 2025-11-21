@@ -51,20 +51,35 @@ export interface EnhancedContentData {
  * 60-69 (standard), 50-59 (fairly difficult), 30-49 (difficult), 0-29 (very difficult)
  */
 function calculateFleschReadingEase(text: string): number {
-  const sentences = text.match(/[.!?]+/g) || []
+  // Split text into sentences by sentence-ending punctuation followed by whitespace or end of string
+  // This is more accurate than matching punctuation marks
+  const sentenceEndings = text.split(/[.!?]+(?:\s+|$)/).filter(s => s.trim().length > 0)
   const words = text.split(/\s+/).filter(w => w.length > 0)
   const syllables = words.reduce((count, word) => {
     return count + countSyllables(word)
   }, 0)
 
-  if (sentences.length === 0 || words.length === 0) {
+  // Need at least 1 sentence and 1 word for valid calculation
+  if (sentenceEndings.length === 0 || words.length === 0) {
+    // If no sentences detected but we have words, assume 1 sentence
+    if (words.length > 0) {
+      const avgSyllablesPerWord = syllables / words.length
+      // Use a conservative estimate: assume reasonable sentence length
+      const estimatedSentenceLength = Math.min(words.length, 20)
+      const score = 206.835 - (1.015 * estimatedSentenceLength) - (84.6 * avgSyllablesPerWord)
+      return Math.max(0, Math.min(100, score))
+    }
     return 0
   }
 
-  const avgSentenceLength = words.length / sentences.length
+  const avgSentenceLength = words.length / sentenceEndings.length
   const avgSyllablesPerWord = syllables / words.length
 
-  const score = 206.835 - (1.015 * avgSentenceLength) - (84.6 * avgSyllablesPerWord)
+  // Cap sentence length at reasonable maximum to avoid extreme scores
+  const cappedSentenceLength = Math.min(avgSentenceLength, 50)
+  const cappedSyllablesPerWord = Math.min(avgSyllablesPerWord, 3)
+
+  const score = 206.835 - (1.015 * cappedSentenceLength) - (84.6 * cappedSyllablesPerWord)
   return Math.max(0, Math.min(100, score))
 }
 

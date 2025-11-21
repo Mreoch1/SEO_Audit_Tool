@@ -132,6 +132,9 @@ export async function runAudit(
     }
   }
   
+  // Create a shared issueMap for consolidation (used by both basic and enhanced analysis)
+  const enhancedIssueMap = new Map<string, Issue>()
+  
   // Perform enhanced on-page and content analysis (limit to first 10 pages for performance)
   console.log('[Audit] Performing enhanced on-page and content analysis...')
   const pagesToAnalyze = pages.slice(0, Math.min(10, pages.length))
@@ -150,45 +153,53 @@ export async function runAudit(
       // Enhanced on-page analysis
       const { data: onPageData, issues: onPageIssues } = analyzeEnhancedOnPage(page, html, primaryKeyword)
       onPageIssues.forEach(issue => {
-        if (!issue.id) {
-          issue.id = `onpage-${issue.severity}-${issue.message}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        }
         issue.fixInstructions = getOnPageFixInstructions(issue)
         issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
-        // Only add if not already in allIssues (avoid duplicates)
-        const existingIssue = allIssues.find(i => 
-          i.message === issue.message && 
-          i.category === issue.category &&
-          i.affectedPages?.[0] === issue.affectedPages?.[0]
-        )
-        if (!existingIssue) {
-          allIssues.push(issue)
-        }
+        // Use consolidateIssue to merge with existing issues and avoid duplicates
+        consolidateIssue(enhancedIssueMap, issue)
       })
       
       // Enhanced content analysis
       const { data: contentData, issues: contentIssues } = analyzeEnhancedContent(page, html)
       contentIssues.forEach(issue => {
-        if (!issue.id) {
-          issue.id = `content-${issue.severity}-${issue.message}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        }
         issue.fixInstructions = getContentFixInstructions(issue)
         issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
-        // Only add if not already in allIssues
-        const existingIssue = allIssues.find(i => 
-          i.message === issue.message && 
-          i.category === issue.category &&
-          i.affectedPages?.[0] === issue.affectedPages?.[0]
-        )
-        if (!existingIssue) {
-          allIssues.push(issue)
-        }
+        // Use consolidateIssue to merge with existing issues and avoid duplicates
+        consolidateIssue(enhancedIssueMap, issue)
       })
     } catch (error) {
       // Skip enhanced analysis if fetch fails
       console.warn(`Enhanced analysis failed for ${page.url}:`, error)
     }
   }))
+  
+  // Merge consolidated enhanced issues into main issues array
+  enhancedIssueMap.forEach(issue => {
+    // Check if a similar issue already exists in allIssues (from analyzeSiteWideIssues)
+    const existingIssue = allIssues.find(i => 
+      i.message === issue.message && 
+      i.category === issue.category &&
+      i.severity === issue.severity
+    )
+    if (existingIssue) {
+      // Merge affected pages
+      if (issue.affectedPages) {
+        issue.affectedPages.forEach(url => {
+          if (!existingIssue.affectedPages?.includes(url)) {
+            existingIssue.affectedPages = existingIssue.affectedPages || []
+            existingIssue.affectedPages.push(url)
+          }
+        })
+      }
+      // Use better fix instructions if available
+      if (issue.fixInstructions && !existingIssue.fixInstructions) {
+        existingIssue.fixInstructions = issue.fixInstructions
+      }
+    } else {
+      // New issue, add it
+      allIssues.push(issue)
+    }
+  })
   
   // Check social media presence (on main page) - re-fetch to get full HTML
   if (pages.length > 0) {
@@ -884,12 +895,31 @@ function parseHtml(
     }
   })
   
-  // Remove duplicates and filter out phrases that are just repeated words
+  // Remove duplicates and filter out phrases with repeated words or nonsense
   const uniqueKeywords = Array.from(new Set(extractedKeywords))
     .filter(kw => {
       const words = kw.split(' ')
       // Filter out phrases where all words are the same
-      return new Set(words).size > 1
+      if (new Set(words).size === 1) return false
+      
+      // Filter out phrases with excessive repetition (e.g., "nasa gov gov")
+      const wordCounts = new Map<string, number>()
+      words.forEach(w => wordCounts.set(w, (wordCounts.get(w) || 0) + 1))
+      // If any word appears more than once in a 2-3 word phrase, it's likely nonsense
+      for (const count of wordCounts.values()) {
+        if (count > 1) return false
+      }
+      
+      // Filter out phrases that are too generic or contain common domain words
+      const genericWords = new Set(['www', 'com', 'org', 'net', 'gov', 'edu', 'html', 'http', 'https', 'www', 'page', 'site', 'web'])
+      if (words.some(w => genericWords.has(w))) {
+        // Allow if it's part of a meaningful phrase (e.g., "gov brings" is probably not meaningful)
+        // But "nasa gov" might be okay if it's a real phrase
+        // For now, be conservative and filter out phrases with generic words unless they're clearly meaningful
+        if (words.length === 2 && genericWords.has(words[1])) return false
+      }
+      
+      return true
     })
     .slice(0, 20)
   
@@ -967,10 +997,14 @@ function analyzeSiteWideIssues(
   })
   
   // Find duplicate titles
+  // Use more precise normalization - only normalize whitespace and case
+  // Don't remove separators or suffixes as they may be meaningful
   const titleMap = new Map<string, string[]>()
   pages.forEach(page => {
     if (page.title) {
-      const normalized = page.title.toLowerCase().trim()
+      // Normalize: lowercase, trim, collapse multiple spaces to single space
+      // But preserve all characters including separators (|, -, etc.)
+      const normalized = page.title.toLowerCase().trim().replace(/\s+/g, ' ')
       if (!titleMap.has(normalized)) {
         titleMap.set(normalized, [])
       }
@@ -1793,7 +1827,7 @@ async function generateCompetitorAnalysis(
   // If we don't have enough good keywords from extractedKeywords, extract from titles/H1s more intelligently
   if (coreTopics.size < 3) {
     const stopWords = new Set(['this', 'that', 'with', 'from', 'your', 'their', 'have', 'been', 'will', 'would', 'could', 'should', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'as', 'is', 'was', 'are', 'were'])
-    const genericWords = new Set(['free', 'online', 'best', 'new', 'top', 'get', 'use', 'make', 'find', 'see', 'more', 'here', 'page', 'site', 'web', 'www', 'com', 'org', 'net'])
+    const genericWords = new Set(['free', 'online', 'best', 'new', 'top', 'get', 'use', 'make', 'find', 'see', 'more', 'here', 'page', 'site', 'web', 'www', 'com', 'org', 'net', 'gov', 'edu', 'html', 'http', 'https'])
     
     pages.forEach(page => {
       // Extract meaningful 2-3 word phrases from titles
@@ -1802,14 +1836,20 @@ async function generateCompetitorAnalysis(
           .replace(/[^\w\s]/g, ' ')
           .split(/\s+/)
           .filter(w => w.length > 2 && !stopWords.has(w) && !genericWords.has(w))
+          // Remove consecutive duplicates
+          .filter((w, i, arr) => i === 0 || w !== arr[i - 1])
         
-        // Create 2-3 word phrases from title
+        // Create 2-3 word phrases from title, ensuring no repeated words
         for (let i = 0; i < titleWords.length - 1 && i < 4; i++) {
+          // Skip if words are the same
+          if (titleWords[i] === titleWords[i + 1]) continue
           const phrase = `${titleWords[i]} ${titleWords[i + 1]}`
           if (phrase.length >= 5 && phrase.length < 30) {
             coreTopics.add(phrase)
           }
           if (i < titleWords.length - 2) {
+            // Skip if any words are the same
+            if (titleWords[i] === titleWords[i + 1] || titleWords[i + 1] === titleWords[i + 2] || titleWords[i] === titleWords[i + 2]) continue
             const phrase3 = `${titleWords[i]} ${titleWords[i + 1]} ${titleWords[i + 2]}`
             if (phrase3.length >= 8 && phrase3.length < 40) {
               coreTopics.add(phrase3)
@@ -1875,8 +1915,21 @@ async function generateCompetitorAnalysis(
   
   // Only generate competitor keywords if we have meaningful core topics
   if (coreTopicsArray.length > 0) {
+    // Filter out topics that are domain names, generic words, or nonsense
+    const filteredTopics = coreTopicsArray.filter(topic => {
+      const words = topic.split(' ')
+      // Filter out topics that contain generic domain words
+      if (words.some(w => genericWords.has(w))) return false
+      // Filter out topics that are just domain patterns (e.g., "nasa gov", "site com")
+      if (words.length === 2 && (genericWords.has(words[0]) || genericWords.has(words[1]))) return false
+      // Filter out topics with repeated words
+      if (new Set(words).size < words.length) return false
+      // Must be at least 2 words and meaningful
+      return words.length >= 2 && topic.length >= 5 && topic.length < 40
+    })
+    
     // Combine meaningful topics with patterns
-    coreTopicsArray.forEach(topic => {
+    filteredTopics.forEach(topic => {
       // Skip single-word topics that don't make sense
       if (topic.split(/\s+/).length < 2) return
       

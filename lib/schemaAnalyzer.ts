@@ -37,13 +37,19 @@ export function analyzeSchema(html: string, url: string): SchemaAnalysis {
   const allSchemaTypes = new Set<string>()
   let identitySchema: any = null
   
-  // Parse JSON-LD schema
-  const jsonLdMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || []
+  // Parse JSON-LD schema - be more flexible with whitespace and attributes
+  // Match script tags with type="application/ld+json" or type='application/ld+json'
+  const jsonLdMatches = html.match(/<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || []
   
   jsonLdMatches.forEach(script => {
     try {
+      // Extract JSON content more carefully
       const jsonContent = script.replace(/<script[^>]*>([\s\S]*?)<\/script>/i, '$1').trim()
-      const parsed = JSON.parse(jsonContent)
+      // Remove any leading/trailing whitespace and comments
+      const cleanedJson = jsonContent.replace(/\/\*[\s\S]*?\*\//g, '').trim()
+      if (!cleanedJson) return // Skip empty scripts
+      
+      const parsed = JSON.parse(cleanedJson)
       const schemas = Array.isArray(parsed) ? parsed : [parsed]
       
       schemas.forEach((schema: any) => {
