@@ -512,28 +512,92 @@ async function crawlPages(
       }
       
       // Extract internal links for further crawling
-      if (depth < options.maxDepth && pageData.internalLinkCount > 0) {
-        // Extract actual internal links from the rendered HTML
+      // Always try to extract links, even if internalLinkCount is 0 (count might be wrong)
+      if (depth < options.maxDepth) {
+        let internalLinks: string[] = []
+        
         try {
-          // Re-fetch the rendered HTML to extract links (or use a cached version if available)
+          // Re-fetch the HTML to extract links (we need the full HTML for link extraction)
+          // Increased timeout and better error handling
           const response = await fetch(url, {
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(15000), // Increased timeout to 15s
             headers: { 'User-Agent': options.userAgent }
           })
-          const html = await response.text()
-          const internalLinks = extractInternalLinks(html, url, baseDomain)
           
-          // Add discovered internal links to queue
-          for (const linkUrl of internalLinks) {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+          }
+          
+          const html = await response.text()
+          internalLinks = extractInternalLinks(html, url, baseDomain)
+          
+          if (internalLinks.length > 0) {
+            console.log(`[Audit Progress] Extracted ${internalLinks.length} internal links from ${url}`)
+          }
+          
+          // If we didn't find many links, try a more aggressive extraction
+          if (internalLinks.length < 5 && depth === 0) {
+            // For the homepage, try to find more links with a broader pattern
+            const allLinks = html.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
+            const additionalLinks = new Set<string>()
+            
+            allLinks.forEach(link => {
+              const hrefMatch = link.match(/href=["']([^"']+)["']/i)
+              if (hrefMatch) {
+                try {
+                  const href = hrefMatch[1].trim()
+                  // Skip anchors, javascript, mailto, etc.
+                  if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href === '' || href === '/') {
+                    return
+                  }
+                  
+                  const linkUrl = new URL(href, url)
+                  if (linkUrl.hostname === baseDomain) {
+                    const normalizedUrl = normalizeUrl(linkUrl.toString())
+                    if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
+                      additionalLinks.add(normalizedUrl)
+                    }
+                  }
+                } catch {
+                  // Try as relative URL
+                  try {
+                    if (!href.startsWith('http') && !href.startsWith('//')) {
+                      const relativeUrl = new URL(href, url)
+                      if (relativeUrl.hostname === baseDomain) {
+                        const normalizedUrl = normalizeUrl(relativeUrl.toString())
+                        if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
+                          additionalLinks.add(normalizedUrl)
+                        }
+                      }
+                    }
+                  } catch {
+                    // Invalid URL, skip
+                  }
+                }
+              }
+            })
+            
+            internalLinks.push(...Array.from(additionalLinks))
+          }
+          
+          // Add discovered internal links to queue (limit to prevent queue explosion)
+          const linksToAdd = internalLinks.slice(0, 20) // Limit to first 20 links per page
+          for (const linkUrl of linksToAdd) {
             const normalizedLinkUrl = normalizeUrl(linkUrl)
             if (!crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
               queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
             }
           }
+          
+          // Log if we found links
+          if (internalLinks.length > 0) {
+            console.log(`[Audit Progress] Found ${internalLinks.length} internal links on ${url}, added ${Math.min(linksToAdd.length, internalLinks.length)} to queue`)
+          }
         } catch (error) {
-          // If extraction fails, fall back to common paths only at depth 0
+          // If extraction fails, try fallback strategies
           if (depth === 0) {
-            const commonPaths = ['/about', '/contact', '/services', '/products', '/blog', '/pricing', '/features']
+            // For homepage, try common paths and also try to discover paths from sitemap or robots.txt
+            const commonPaths = ['/about', '/contact', '/services', '/products', '/blog', '/pricing', '/features', '/help', '/support', '/faq']
             for (const path of commonPaths) {
               try {
                 const linkUrl = new URL(path, url).toString()
