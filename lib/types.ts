@@ -14,11 +14,14 @@ export type IssueCategory =
 export type IssueSeverity = "High" | "Medium" | "Low"
 
 export interface Issue {
+  id?: string // Unique identifier for the issue
   category: IssueCategory
   severity: IssueSeverity
   message: string
   details?: string
   affectedPages?: string[]
+  fixInstructions?: string // Step-by-step fix instructions
+  priority?: number // 1-10 priority score for sorting
 }
 
 export interface PageData {

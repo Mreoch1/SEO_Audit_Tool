@@ -13,6 +13,9 @@ import { analyzeSchema } from './schemaAnalyzer'
 import { fetchPageSpeedInsights } from './pagespeed'
 import { checkHttpVersion, checkCompression } from './technical'
 import { checkSocialMediaPresence } from './social'
+import { performEnhancedTechnicalCheck, getTechnicalFixInstructions } from './enhancedTechnical'
+import { analyzeEnhancedOnPage, getOnPageFixInstructions } from './enhancedOnPage'
+import { analyzeEnhancedContent, getContentFixInstructions } from './enhancedContent'
 
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
@@ -107,6 +110,86 @@ export async function runAudit(
   console.log('[Audit] Analyzing site-wide issues...')
   analyzeSiteWideIssues(pages, siteWide, allIssues)
   
+  // Perform enhanced technical check on main page
+  if (pages.length > 0) {
+    console.log('[Audit] Performing enhanced technical analysis...')
+    try {
+      const mainPage = pages[0]
+      const { data: technicalData, issues: technicalIssues } = await performEnhancedTechnicalCheck(
+        mainPage.url,
+        opts.userAgent
+      )
+      technicalIssues.forEach(issue => {
+        if (!issue.id) {
+          issue.id = `technical-${issue.severity}-${issue.message}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        }
+        issue.fixInstructions = getTechnicalFixInstructions(issue)
+        issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
+        allIssues.push(issue)
+      })
+    } catch (error) {
+      console.warn('Enhanced technical check failed:', error)
+    }
+  }
+  
+  // Perform enhanced on-page and content analysis (limit to first 10 pages for performance)
+  console.log('[Audit] Performing enhanced on-page and content analysis...')
+  const pagesToAnalyze = pages.slice(0, Math.min(10, pages.length))
+  await Promise.all(pagesToAnalyze.map(async (page) => {
+    try {
+      // Fetch HTML for enhanced analysis
+      const response = await fetch(page.url, {
+        signal: AbortSignal.timeout(5000),
+        headers: { 'User-Agent': opts.userAgent }
+      })
+      const html = await response.text()
+      
+      // Extract primary keyword from page title or H1
+      const primaryKeyword = page.title?.split(/\s+/)[0] || page.h1Text?.[0]?.split(/\s+/)[0]
+      
+      // Enhanced on-page analysis
+      const { data: onPageData, issues: onPageIssues } = analyzeEnhancedOnPage(page, html, primaryKeyword)
+      onPageIssues.forEach(issue => {
+        if (!issue.id) {
+          issue.id = `onpage-${issue.severity}-${issue.message}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        }
+        issue.fixInstructions = getOnPageFixInstructions(issue)
+        issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
+        // Only add if not already in allIssues (avoid duplicates)
+        const existingIssue = allIssues.find(i => 
+          i.message === issue.message && 
+          i.category === issue.category &&
+          i.affectedPages?.[0] === issue.affectedPages?.[0]
+        )
+        if (!existingIssue) {
+          allIssues.push(issue)
+        }
+      })
+      
+      // Enhanced content analysis
+      const { data: contentData, issues: contentIssues } = analyzeEnhancedContent(page, html)
+      contentIssues.forEach(issue => {
+        if (!issue.id) {
+          issue.id = `content-${issue.severity}-${issue.message}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        }
+        issue.fixInstructions = getContentFixInstructions(issue)
+        issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
+        // Only add if not already in allIssues
+        const existingIssue = allIssues.find(i => 
+          i.message === issue.message && 
+          i.category === issue.category &&
+          i.affectedPages?.[0] === issue.affectedPages?.[0]
+        )
+        if (!existingIssue) {
+          allIssues.push(issue)
+        }
+      })
+    } catch (error) {
+      // Skip enhanced analysis if fetch fails
+      console.warn(`Enhanced analysis failed for ${page.url}:`, error)
+    }
+  }))
+  
   // Check social media presence (on main page) - re-fetch to get full HTML
   if (pages.length > 0) {
     try {
@@ -200,8 +283,28 @@ export async function runAudit(
     competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
   }
   
-  // Calculate scores
-  const scores = calculateScores(pages, allIssues, siteWide)
+  // Add fix instructions to existing issues that don't have them
+  allIssues.forEach(issue => {
+    if (!issue.fixInstructions) {
+      if (issue.category === 'Technical') {
+        issue.fixInstructions = getTechnicalFixInstructions(issue)
+      } else if (issue.category === 'On-page') {
+        issue.fixInstructions = getOnPageFixInstructions(issue)
+      } else if (issue.category === 'Content') {
+        issue.fixInstructions = getContentFixInstructions(issue)
+      }
+    }
+    // Set priority if not set
+    if (!issue.priority) {
+      issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
+    }
+  })
+  
+  // Sort issues by priority (highest first)
+  allIssues.sort((a, b) => (b.priority || 0) - (a.priority || 0))
+  
+  // Calculate scores (enhanced algorithm)
+  const scores = calculateEnhancedScores(pages, allIssues, siteWide)
   
   // Categorize issues
   const categorizedIssues = categorizeIssues(allIssues)
@@ -839,7 +942,12 @@ function consolidateIssue(issueMap: Map<string, Issue>, newIssue: Issue): void {
       existing.affectedPages = [...(existing.affectedPages || []), ...newIssue.affectedPages]
     }
   } else {
-    issueMap.set(key, { ...newIssue })
+    // Generate unique ID for the issue
+    const issueId = `${newIssue.category}-${newIssue.severity}-${newIssue.message}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    issueMap.set(key, { 
+      ...newIssue,
+      id: issueId
+    })
   }
 }
 
@@ -1150,7 +1258,171 @@ function analyzeSiteWideIssues(
 }
 
 /**
- * Calculate SEO scores
+ * Calculate enhanced SEO scores with more nuanced algorithm
+ * 
+ * Scoring weights (adjustable):
+ * - Technical: 30%
+ * - On-page: 30%
+ * - Content: 20%
+ * - Accessibility: 20%
+ */
+function calculateEnhancedScores(
+  pages: PageData[],
+  issues: Issue[],
+  siteWide: SiteWideData
+): {
+  overall: number
+  technical: number
+  onPage: number
+  content: number
+  accessibility: number
+} {
+  if (pages.length === 0) {
+    return {
+      overall: 0,
+      technical: 0,
+      onPage: 0,
+      content: 0,
+      accessibility: 0
+    }
+  }
+  
+  // Enhanced Technical score (0-100)
+  let technicalScore = 100
+  technicalScore -= !siteWide.robotsTxtExists ? 8 : 0
+  technicalScore -= !siteWide.sitemapExists ? 12 : 0
+  technicalScore -= Math.min((siteWide.brokenPages.length / pages.length) * 40, 40)
+  
+  const technicalIssues = issues.filter(i => i.category === 'Technical')
+  const highTechIssues = technicalIssues.filter(i => i.severity === 'High')
+  const mediumTechIssues = technicalIssues.filter(i => i.severity === 'Medium')
+  const lowTechIssues = technicalIssues.filter(i => i.severity === 'Low')
+  
+  // More nuanced penalty system
+  technicalScore -= Math.min(highTechIssues.length * 12, 50)
+  technicalScore -= Math.min(mediumTechIssues.length * 6, 30)
+  technicalScore -= Math.min(lowTechIssues.length * 2, 10)
+  
+  // Bonus for HTTPS
+  const hasHttps = pages.some(p => p.url.startsWith('https://'))
+  if (hasHttps) technicalScore = Math.min(100, technicalScore + 5)
+  
+  technicalScore = Math.max(0, Math.min(100, Math.round(technicalScore)))
+  
+  // Enhanced On-page score (0-100)
+  let onPageScore = 100
+  const onPageIssues = issues.filter(i => i.category === 'On-page')
+  
+  if (onPageIssues.length === 0) {
+    onPageScore = 100
+  } else {
+    const highOnPagePages = new Set<string>()
+    const mediumOnPagePages = new Set<string>()
+    const lowOnPagePages = new Set<string>()
+    
+    onPageIssues.forEach(issue => {
+      if (issue.affectedPages && issue.affectedPages.length > 0) {
+        issue.affectedPages.forEach(url => {
+          if (issue.severity === 'High') {
+            highOnPagePages.add(url)
+          } else if (issue.severity === 'Medium') {
+            mediumOnPagePages.add(url)
+          } else if (issue.severity === 'Low') {
+            lowOnPagePages.add(url)
+          }
+        })
+      }
+    })
+    
+    const highIssueRate = highOnPagePages.size / pages.length
+    const mediumIssueRate = mediumOnPagePages.size / pages.length
+    const lowIssueRate = lowOnPagePages.size / pages.length
+    
+    onPageScore -= Math.min(highIssueRate * 65, 65)
+    onPageScore -= Math.min(mediumIssueRate * 30, 30)
+    onPageScore -= Math.min(lowIssueRate * 10, 10)
+    
+    // Check for pages with good on-page elements
+    const pagesWithGoodOnPage = pages.filter(p => 
+      p.title && p.titleLength! >= 30 && p.titleLength! <= 60 &&
+      p.metaDescription && p.metaDescriptionLength! >= 120 && p.metaDescriptionLength! <= 160 &&
+      p.h1Count === 1
+    ).length
+    const goodOnPageRate = pagesWithGoodOnPage / pages.length
+    onPageScore += goodOnPageRate * 10 // Bonus for good on-page elements
+    
+    const uniqueIssueTypes = new Set(onPageIssues.map(i => i.message))
+    if (uniqueIssueTypes.size > pages.length * 0.5) {
+      onPageScore -= 5
+    }
+  }
+  
+  onPageScore = Math.max(0, Math.min(100, Math.round(onPageScore)))
+  
+  // Enhanced Content score (0-100)
+  let contentScore = 100
+  const thinPages = pages.filter(p => p.wordCount < 300).length
+  const goodContentPages = pages.filter(p => p.wordCount >= 1000).length
+  
+  contentScore -= Math.min((thinPages / pages.length) * 45, 45)
+  contentScore += Math.min((goodContentPages / pages.length) * 15, 15) // Bonus for comprehensive content
+  
+  const contentIssues = issues.filter(i => i.category === 'Content')
+  contentScore -= Math.min(contentIssues.filter(i => i.severity === 'High').length * 12, 40)
+  contentScore -= Math.min(contentIssues.filter(i => i.severity === 'Medium').length * 6, 25)
+  contentScore -= Math.min(contentIssues.filter(i => i.severity === 'Low').length * 2, 10)
+  
+  // Check average word count
+  const avgWordCount = pages.reduce((sum, p) => sum + p.wordCount, 0) / pages.length
+  if (avgWordCount >= 1000) {
+    contentScore += 5 // Bonus for comprehensive content
+  } else if (avgWordCount < 300) {
+    contentScore -= 10 // Penalty for thin content
+  }
+  
+  contentScore = Math.max(0, Math.min(100, Math.round(contentScore)))
+  
+  // Enhanced Accessibility score (0-100)
+  let accessibilityScore = 100
+  const totalImages = pages.reduce((sum, p) => sum + p.imageCount, 0)
+  const totalMissingAlt = pages.reduce((sum, p) => sum + p.missingAltCount, 0)
+  
+  if (totalImages > 0) {
+    const missingAltRate = totalMissingAlt / totalImages
+    accessibilityScore -= missingAltRate * 55 // More severe penalty
+  }
+  
+  const accessibilityIssues = issues.filter(i => i.category === 'Accessibility')
+  accessibilityScore -= Math.min(accessibilityIssues.filter(i => i.severity === 'High').length * 12, 40)
+  accessibilityScore -= Math.min(accessibilityIssues.filter(i => i.severity === 'Medium').length * 6, 25)
+  accessibilityScore -= Math.min(accessibilityIssues.filter(i => i.severity === 'Low').length * 2, 10)
+  
+  // Bonus for pages with viewport tags
+  const pagesWithViewport = pages.filter(p => p.hasViewport).length
+  const viewportRate = pagesWithViewport / pages.length
+  accessibilityScore += viewportRate * 5
+  
+  accessibilityScore = Math.max(0, Math.min(100, Math.round(accessibilityScore)))
+  
+  // Overall score (weighted average)
+  const overall = Math.round(
+    technicalScore * 0.3 +
+    onPageScore * 0.3 +
+    contentScore * 0.2 +
+    accessibilityScore * 0.2
+  )
+  
+  return {
+    overall,
+    technical: technicalScore,
+    onPage: onPageScore,
+    content: contentScore,
+    accessibility: accessibilityScore
+  }
+}
+
+/**
+ * Legacy calculateScores function (kept for backward compatibility)
  * 
  * Scoring weights (adjustable):
  * - Technical: 30%

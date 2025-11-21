@@ -850,8 +850,13 @@ function escapeHtml(text: string): string {
 
 /**
  * Get specific fix instructions for an issue based on its message
+ * Uses issue.fixInstructions if available, otherwise generates from message
  */
-function getFixInstructions(issue: { message: string; details?: string; category: string }): string {
+function getFixInstructions(issue: { message: string; details?: string; category: string; fixInstructions?: string }): string {
+  // If fix instructions already exist, use them
+  if (issue.fixInstructions) {
+    return issue.fixInstructions
+  }
   const msg = issue.message.toLowerCase()
   const details = issue.details || ''
   
@@ -896,12 +901,13 @@ function getFixInstructions(issue: { message: string; details?: string; category
 5. Example: <title>Your Primary Keyword - Your Brand Name</title>`
   }
   
-  if (msg.includes('page title too short')) {
-    return `1. Expand your page title to at least 50 characters
-2. Add more descriptive text that includes relevant keywords
-3. Include your brand name or location if space allows
-4. Ensure the title accurately describes the page content
-5. Test how it appears in search results (keep under 60 characters to avoid truncation)`
+  if (msg.includes('page title too short') || msg.includes('title tag too short') || msg.includes('title too short')) {
+    return `1. Expand your title tag to 50-60 characters
+2. Include your primary keyword near the beginning
+3. Add your brand name at the end (if space allows)
+4. Make it compelling and click-worthy
+5. Example: "Best [Keyword] Guide 2024 | [Brand Name]"
+6. Test how it appears in search results using SERP preview tools`
   }
   
   if (msg.includes('page title too long')) {
@@ -928,12 +934,13 @@ function getFixInstructions(issue: { message: string; details?: string; category
 5. Example: <meta name="description" content="Your compelling description here...">`
   }
   
-  if (msg.includes('meta description too short')) {
+  if (msg.includes('meta description too short') || msg.includes('description too short')) {
     return `1. Expand your meta description to 120-160 characters
-2. Add more detail about what users will find on the page
-3. Include a call-to-action if space allows
-4. Make it compelling to improve click-through rates from search results
-5. Ensure it accurately represents the page content`
+2. Include your primary keyword naturally
+3. Add a compelling call-to-action
+4. Highlight unique value proposition
+5. Example: "Discover the best [keyword] strategies. Learn proven techniques to [benefit]. Get started today!"
+6. Make it compelling to improve click-through rates from search results`
   }
   
   if (msg.includes('meta description too long')) {
@@ -970,23 +977,55 @@ function getFixInstructions(issue: { message: string; details?: string; category
   }
   
   // Content issues
-  if (msg.includes('thin content') || msg.includes('low word count')) {
-    return `1. Expand content on affected pages to at least 300 words
-2. Add detailed information, examples, or case studies related to the topic
-3. Include relevant keywords naturally throughout the content
-4. Add sections with H2/H3 headings to organize longer content
-5. Consider adding FAQs, related topics, or additional context
-6. Ensure content provides real value to readers, not just filler text`
+  if (msg.includes('thin content') || msg.includes('low word count') || msg.includes('content could be more comprehensive')) {
+    return `1. Expand content to at least 300 words for basic pages
+2. Aim for 1000+ words for comprehensive, authoritative content
+3. Add more detail, examples, and explanations
+4. Include FAQs, case studies, or related information
+5. Break content into logical sections with headings
+6. Add supporting images, charts, or infographics
+7. Consider creating a content calendar for regular updates`
+  }
+  
+  if (msg.includes('content is very difficult to read') || msg.includes('content readability could be improved') || msg.includes('flesch')) {
+    return `1. Simplify sentence structure - aim for 15-20 words per sentence
+2. Use shorter, more common words instead of complex vocabulary
+3. Break long sentences into shorter ones
+4. Use active voice instead of passive voice
+5. Add transition words to connect ideas
+6. Use bullet points and lists for complex information
+7. Test readability using tools like Hemingway Editor
+8. Aim for Flesch Reading Ease score of 60+ for general audiences`
+  }
+  
+  if (msg.includes('sentences are too long')) {
+    return `1. Break long sentences into shorter ones
+2. Aim for 15-20 words per sentence on average
+3. Remove unnecessary clauses and phrases
+4. Use commas and semicolons appropriately
+5. Read sentences aloud to check natural flow
+6. Use sentence variety - mix short and medium sentences`
+  }
+  
+  if (msg.includes('content could benefit from lists') || msg.includes('lists')) {
+    return `1. Use bulleted lists for unordered items
+2. Use numbered lists for sequential steps
+3. Keep list items concise (one line when possible)
+4. Use parallel structure in list items
+5. Introduce lists with a brief sentence
+6. Limit lists to 5-7 items for readability
+7. Break very long lists into multiple shorter lists`
   }
   
   // Accessibility issues
-  if (msg.includes('missing alt') || msg.includes('alt text')) {
+  if (msg.includes('missing alt') || msg.includes('alt text') || msg.includes('alt attribute') || msg.includes('high percentage of images missing alt')) {
     return `1. Add descriptive alt attributes to all images on affected pages
 2. Describe what the image shows or its purpose (e.g., alt="Woman using laptop at desk")
 3. Keep alt text concise (under 125 characters recommended)
 4. For decorative images, use alt="" (empty but present)
 5. Include relevant keywords naturally if the image is content-related
-6. Example: <img src="image.jpg" alt="Descriptive text here">`
+6. Example: <img src="image.jpg" alt="Descriptive text here">
+7. Don't start with "image of" or "picture of" - be direct and descriptive`
   }
   
   if (msg.includes('viewport') || msg.includes('mobile')) {

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
-import { Download, Mail, Copy, AlertCircle, CheckCircle, Info, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
+import { Download, Mail, Copy, AlertCircle, CheckCircle, Info, Archive, ArchiveRestore, Trash2, ChevronDown, ChevronUp, Wrench } from 'lucide-react'
 
 interface AuditData {
   id: string
@@ -33,6 +33,20 @@ interface AuditData {
   rawJson: any
 }
 
+// Helper function to get score color
+function getScoreColor(score: number): string {
+  if (score >= 80) return '#10b981' // green
+  if (score >= 60) return '#f59e0b' // yellow
+  return '#ef4444' // red
+}
+
+// Helper function to get score border color
+function getScoreBorderColor(score: number): string {
+  if (score >= 80) return '#d1fae5' // light green
+  if (score >= 60) return '#fef3c7' // light yellow
+  return '#fee2e2' // light red
+}
+
 export default function AuditDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -40,6 +54,7 @@ export default function AuditDetailPage() {
   const [audit, setAudit] = useState<AuditData | null>(null)
   const [loading, setLoading] = useState(true)
   const [emailLoading, setEmailLoading] = useState(false)
+  const [expandedIssues, setExpandedIssues] = useState<Set<string>>(new Set())
 
   const fetchAudit = useCallback(async () => {
     try {
@@ -371,36 +386,116 @@ export default function AuditDetailPage() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Scores */}
+        {/* Enhanced Scores with Visual Indicators */}
         <div className="grid grid-cols-5 gap-4 mb-8">
-          <Card>
+          <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
             <CardHeader className="pb-2">
-              <CardDescription>Overall Score</CardDescription>
-              <CardTitle className="text-3xl">{audit.overallScore}</CardTitle>
+              <CardDescription className="font-medium">Overall Score</CardDescription>
+              <div className="flex items-baseline gap-2 mt-2">
+                <CardTitle className="text-4xl font-bold" style={{ color: getScoreColor(audit.overallScore) }}>
+                  {audit.overallScore}
+                </CardTitle>
+                <span className="text-sm text-gray-500">/100</span>
+              </div>
+              <div className="mt-2">
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="h-2 rounded-full transition-all"
+                    style={{
+                      width: `${audit.overallScore}%`,
+                      backgroundColor: getScoreColor(audit.overallScore)
+                    }}
+                  />
+                </div>
+              </div>
             </CardHeader>
           </Card>
-          <Card>
+          <Card className="border-2" style={{ borderColor: getScoreBorderColor(audit.technicalScore) }}>
             <CardHeader className="pb-2">
-              <CardDescription>Technical</CardDescription>
-              <CardTitle className="text-2xl">{audit.technicalScore}</CardTitle>
+              <CardDescription className="font-medium">Technical</CardDescription>
+              <div className="flex items-baseline gap-2 mt-2">
+                <CardTitle className="text-3xl font-bold" style={{ color: getScoreColor(audit.technicalScore) }}>
+                  {audit.technicalScore}
+                </CardTitle>
+                <span className="text-xs text-gray-500">/100</span>
+              </div>
+              <div className="mt-2">
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="h-1.5 rounded-full transition-all"
+                    style={{
+                      width: `${audit.technicalScore}%`,
+                      backgroundColor: getScoreColor(audit.technicalScore)
+                    }}
+                  />
+                </div>
+              </div>
             </CardHeader>
           </Card>
-          <Card>
+          <Card className="border-2" style={{ borderColor: getScoreBorderColor(audit.onPageScore) }}>
             <CardHeader className="pb-2">
-              <CardDescription>On-Page</CardDescription>
-              <CardTitle className="text-2xl">{audit.onPageScore}</CardTitle>
+              <CardDescription className="font-medium">On-Page</CardDescription>
+              <div className="flex items-baseline gap-2 mt-2">
+                <CardTitle className="text-3xl font-bold" style={{ color: getScoreColor(audit.onPageScore) }}>
+                  {audit.onPageScore}
+                </CardTitle>
+                <span className="text-xs text-gray-500">/100</span>
+              </div>
+              <div className="mt-2">
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="h-1.5 rounded-full transition-all"
+                    style={{
+                      width: `${audit.onPageScore}%`,
+                      backgroundColor: getScoreColor(audit.onPageScore)
+                    }}
+                  />
+                </div>
+              </div>
             </CardHeader>
           </Card>
-          <Card>
+          <Card className="border-2" style={{ borderColor: getScoreBorderColor(audit.contentScore) }}>
             <CardHeader className="pb-2">
-              <CardDescription>Content</CardDescription>
-              <CardTitle className="text-2xl">{audit.contentScore}</CardTitle>
+              <CardDescription className="font-medium">Content</CardDescription>
+              <div className="flex items-baseline gap-2 mt-2">
+                <CardTitle className="text-3xl font-bold" style={{ color: getScoreColor(audit.contentScore) }}>
+                  {audit.contentScore}
+                </CardTitle>
+                <span className="text-xs text-gray-500">/100</span>
+              </div>
+              <div className="mt-2">
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="h-1.5 rounded-full transition-all"
+                    style={{
+                      width: `${audit.contentScore}%`,
+                      backgroundColor: getScoreColor(audit.contentScore)
+                    }}
+                  />
+                </div>
+              </div>
             </CardHeader>
           </Card>
-          <Card>
+          <Card className="border-2" style={{ borderColor: getScoreBorderColor(audit.accessibilityScore) }}>
             <CardHeader className="pb-2">
-              <CardDescription>Accessibility</CardDescription>
-              <CardTitle className="text-2xl">{audit.accessibilityScore}</CardTitle>
+              <CardDescription className="font-medium">Accessibility</CardDescription>
+              <div className="flex items-baseline gap-2 mt-2">
+                <CardTitle className="text-3xl font-bold" style={{ color: getScoreColor(audit.accessibilityScore) }}>
+                  {audit.accessibilityScore}
+                </CardTitle>
+                <span className="text-xs text-gray-500">/100</span>
+              </div>
+              <div className="mt-2">
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="h-1.5 rounded-full transition-all"
+                    style={{
+                      width: `${audit.accessibilityScore}%`,
+                      backgroundColor: getScoreColor(audit.accessibilityScore)
+                    }}
+                  />
+                </div>
+              </div>
             </CardHeader>
           </Card>
         </div>
@@ -443,19 +538,73 @@ export default function AuditDetailPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {issues.map((issue) => (
-                          <div key={issue.id} className="border-l-4 border-gray-300 pl-4 py-2">
-                            <div className="font-semibold">{issue.message}</div>
-                            {issue.details && (
-                              <div className="text-sm text-gray-600 mt-1">{issue.details}</div>
-                            )}
-                            {issue.affectedPages && issue.affectedPages.length > 0 && (
-                              <div className="text-xs text-gray-500 mt-1">
-                                Affected: {issue.affectedPages.length} page(s)
+                        {issues.map((issue) => {
+                          const isExpanded = expandedIssues.has(issue.id)
+                          const borderColor = severity === 'High' ? 'border-red-500' : severity === 'Medium' ? 'border-yellow-500' : 'border-green-500'
+                          return (
+                            <div key={issue.id} className={`border-l-4 ${borderColor} pl-4 py-3 bg-gray-50 rounded-r-lg`}>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="font-semibold text-gray-900">{issue.message}</div>
+                                  {issue.details && (
+                                    <div className="text-sm text-gray-600 mt-1">{issue.details}</div>
+                                  )}
+                                  {issue.affectedPages && issue.affectedPages.length > 0 && (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      Affected: {issue.affectedPages.length} page(s)
+                                      {issue.affectedPages.length <= 3 && (
+                                        <span className="ml-2">
+                                          ({issue.affectedPages.slice(0, 3).map((url, idx) => (
+                                            <span key={idx} className="font-mono text-xs">
+                                              {new URL(url).pathname}
+                                              {idx < issue.affectedPages!.length - 1 && ', '}
+                                            </span>
+                                          ))})
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                {(issue as any).fixInstructions && (
+                                  <button
+                                    onClick={() => {
+                                      const newExpanded = new Set(expandedIssues)
+                                      if (isExpanded) {
+                                        newExpanded.delete(issue.id)
+                                      } else {
+                                        newExpanded.add(issue.id)
+                                      }
+                                      setExpandedIssues(newExpanded)
+                                    }}
+                                    className="ml-4 flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                  >
+                                    <Wrench className="h-4 w-4" />
+                                    {isExpanded ? (
+                                      <>
+                                        Hide Fix <ChevronUp className="h-4 w-4" />
+                                      </>
+                                    ) : (
+                                      <>
+                                        Show Fix <ChevronDown className="h-4 w-4" />
+                                      </>
+                                    )}
+                                  </button>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        ))}
+                              {isExpanded && (issue as any).fixInstructions && (
+                                <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Wrench className="h-4 w-4 text-blue-600" />
+                                    <h4 className="font-semibold text-blue-900">How to Fix</h4>
+                                  </div>
+                                  <div className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                                    {(issue as any).fixInstructions}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     </CardContent>
                   </Card>
