@@ -575,12 +575,12 @@ async function crawlPages(
             
             // If the response URL is different from the request URL, we were redirected
             if (responseUrl.hostname !== currentUrlObj.hostname) {
-              // Check if it's a subdomain of the same root domain
-              if (isSameDomain(responseUrl.hostname, actualDomain)) {
-                actualDomain = responseUrl.hostname
-                console.log(`[Audit Progress] Detected redirect: ${url} -> ${response.url}`)
-                console.log(`[Audit Progress] Updated domain to ${actualDomain}`)
-              }
+              // Always update to the response domain (it's the actual domain we're on)
+              // This handles cases like wikipedia.com -> www.wikipedia.org
+              // We need to use the actual domain we landed on, not the original
+              actualDomain = responseUrl.hostname
+              console.log(`[Audit Progress] Detected redirect: ${url} -> ${response.url}`)
+              console.log(`[Audit Progress] Updated domain from ${baseDomain} to ${actualDomain}`)
             }
           } catch (err) {
             console.warn(`[Audit Progress] Could not parse response URL: ${err}`)
@@ -612,16 +612,26 @@ async function crawlPages(
             if (foundDomains.size > 0) {
               console.log(`[Audit Progress] Found links with domains: ${Array.from(foundDomains).slice(0, 5).join(', ')}${foundDomains.size > 5 ? '...' : ''}`)
               
-              // Try each domain to see if it matches our base domain
+              // Try each domain to see if it matches our actual domain (after redirect)
+              // This handles cases where links point to subdomains like en.wikipedia.org
               for (const foundDomain of foundDomains) {
                 if (isSameDomain(foundDomain, actualDomain)) {
-                  console.log(`[Audit Progress] Retrying link extraction with domain ${foundDomain}`)
+                  console.log(`[Audit Progress] Found matching subdomain ${foundDomain}, extracting links...`)
                   internalLinks = extractInternalLinks(html, response.url, foundDomain)
                   if (internalLinks.length > 0) {
+                    // Use the first subdomain that works (e.g., en.wikipedia.org)
+                    // This ensures we can crawl pages on that subdomain
                     actualDomain = foundDomain
+                    console.log(`[Audit Progress] Successfully extracted ${internalLinks.length} links using domain ${actualDomain}`)
                     break
                   }
                 }
+              }
+              
+              // If still no links, try with the response domain directly
+              if (internalLinks.length === 0 && foundDomains.size > 0) {
+                console.log(`[Audit Progress] Trying with response domain ${actualDomain} directly...`)
+                internalLinks = extractInternalLinks(html, response.url, actualDomain)
               }
             } else {
               console.log(`[Audit Progress] No link hrefs found in HTML at all`)
