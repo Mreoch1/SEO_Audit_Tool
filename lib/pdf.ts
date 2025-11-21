@@ -297,14 +297,21 @@ function generateReportHTML(
     <div style="margin-bottom: 20px;">
       <h2>Service Tier</h2>
       <p><strong>${result.raw.options.tier.charAt(0).toUpperCase() + result.raw.options.tier.slice(1)}</strong> - ${getTierDescription(result.raw.options.tier)}</p>
-      ${result.raw.options.addOns?.fastDelivery ? `<p style="color: #f59e0b; font-weight: bold; margin-top: 10px;">⚡ Fast Delivery: 24-hour delivery enabled</p>` : ''}
+      ${result.raw.options.addOns?.fastDelivery || result.raw.options.addOns?.additionalDays ? (() => {
+        const tier = result.raw.options.tier
+        if (tier === 'standard' || tier === 'advanced') {
+          const days = result.raw.options.addOns?.additionalDays || 1
+          return `<p style="color: #f59e0b; font-weight: bold; margin-top: 10px;">⚡ Fast Delivery: ${days}-day delivery enabled</p>`
+        }
+        return ''
+      })() : ''}
     </div>
     ` : ''}
     ${result.raw.options.addOns && Object.keys(result.raw.options.addOns).length > 0 ? `
     <div>
       <h2>Included Add-Ons</h2>
       <ul style="padding-left: 20px;">
-        ${getAddOnsList(result.raw.options.addOns)}
+        ${getAddOnsList(result.raw.options.addOns, result.raw.options.tier)}
       </ul>
     </div>
     ` : ''}
@@ -771,19 +778,39 @@ function generateReportHTML(
         </tr>
       </thead>
       <tbody>
-        ${result.pages.slice(0, 50).map(page => `
+        ${result.pages.slice(0, 50).map(page => {
+          // Escape URL to prevent LaTeX interpretation
+          const urlText = escapeHtml(page.url)
+          
+          // Format title (truncate if needed)
+          const titleText = page.title 
+            ? escapeHtml(page.title.length > 30 ? page.title.substring(0, 27) + '...' : page.title)
+            : 'Missing'
+          
+          // Format links (use single line, escape to prevent LaTeX)
+          const totalLinks = page.internalLinkCount + page.externalLinkCount
+          const linksText = escapeHtml(`${totalLinks} (${page.internalLinkCount} int, ${page.externalLinkCount} ext)`)
+          
+          // Format load time (escape to prevent LaTeX)
+          const loadTimeMs = page.loadTime || 0
+          const loadTimeText = escapeHtml(`${loadTimeMs} ms`)
+          const lcpValue = page.performanceMetrics?.lcp || page.pageSpeedMobile?.lcp || page.pageSpeedDesktop?.lcp
+          const lcpText = lcpValue ? `<br><small style="font-size: 9px;">${escapeHtml(`LCP: ${Math.round(lcpValue)} ms`)}</small>` : ''
+          
+          return `
           <tr>
-            <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; word-break: break-all; font-size: 11px;">${page.url}</td>
-            <td style="text-align: center;">${page.statusCode || 'Error'}</td>
-            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 11px;">${page.title ? escapeHtml(page.title.length > 30 ? page.title.substring(0, 30) + '...' : page.title) : 'Missing'}</td>
-            <td style="text-align: center;">${page.wordCount}</td>
-            <td style="text-align: center;">${page.h1Count}</td>
-            <td style="text-align: center;">${page.imageCount}</td>
-            <td style="text-align: center;">${page.missingAltCount}</td>
-            <td style="text-align: center; font-size: 11px;">${page.internalLinkCount + page.externalLinkCount}<br><small>(${page.internalLinkCount} int, ${page.externalLinkCount}<br>ext)</small></td>
-            <td style="text-align: center; font-size: 11px;">${page.loadTime} ms${(page.performanceMetrics?.lcp || page.pageSpeedMobile?.lcp || page.pageSpeedDesktop?.lcp) ? `<br><small>LCP: ${Math.round(page.performanceMetrics?.lcp || page.pageSpeedMobile?.lcp || page.pageSpeedDesktop?.lcp || 0)} ms</small>` : ''}</td>
+            <td style="max-width: 200px; word-break: break-word; font-size: 9px; line-height: 1.3; padding: 8px;">${urlText}</td>
+            <td style="text-align: center; padding: 8px;">${page.statusCode || 'Error'}</td>
+            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 10px; padding: 8px;" title="${page.title ? escapeHtml(page.title) : ''}">${titleText}</td>
+            <td style="text-align: center; padding: 8px;">${page.wordCount || 0}</td>
+            <td style="text-align: center; padding: 8px;">${page.h1Count || 0}</td>
+            <td style="text-align: center; padding: 8px;">${page.imageCount || 0}</td>
+            <td style="text-align: center; padding: 8px;">${page.missingAltCount || 0}</td>
+            <td style="text-align: center; font-size: 10px; line-height: 1.3; padding: 8px;">${linksText}</td>
+            <td style="text-align: center; font-size: 10px; line-height: 1.3; padding: 8px;">${loadTimeText}${lcpText}</td>
           </tr>
-        `).join('')}
+        `
+        }).join('')}
       </tbody>
     </table>
     ${result.pages.length > 50 ? `<p style="margin-top: 15px; color: #666;">Note: Showing top 50 of ${result.pages.length} pages. Full data available in web interface.</p>` : ''}
@@ -816,6 +843,7 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
+    .replace(/\$/g, '&#36;') // Escape dollar signs to prevent LaTeX interpretation
 }
 
 /**
@@ -1139,11 +1167,11 @@ function generatePriorityActionPlan(result: AuditResult): string {
 function getTierDescription(tier: string): string {
   switch (tier) {
     case 'starter':
-      return 'Quick scan of 1-3 pages with key SEO issues and fixes'
+      return 'Quick scan of 1–3 pages with key SEO issues and fixes.'
     case 'standard':
-      return 'Full site audit (up to 20 pages) with technical, on-page, and performance checks'
+      return 'Full site audit with technical, on-page, and performance checks.'
     case 'advanced':
-      return 'Complete audit (up to 50 pages) with detailed analysis and priority action plan'
+      return 'Complete audit plus competitor analysis and action plan.'
     default:
       return ''
   }
@@ -1152,23 +1180,45 @@ function getTierDescription(tier: string): string {
 /**
  * Get add-ons list for PDF
  */
-function getAddOnsList(addOns: any): string {
-  const addOnNames: Record<string, string> = {
-    fastDelivery: 'Fast Delivery (+$25)',
-    additionalPages: `Additional Pages (+$${10 * (addOns.additionalPages || 0)}) - ${addOns.additionalPages || 0} pages`,
-    additionalKeywords: `Additional Keywords (+$${5 * (addOns.additionalKeywords || 0)}) - ${addOns.additionalKeywords || 0} keywords`,
-    imageAltTags: 'Image Alt Tags Optimization (+$15)',
-    schemaMarkup: 'Schema Markup Analysis (+$30)',
-    competitorAnalysis: 'Competitor Keyword Gap Report (+$39)'
+function getAddOnsList(addOns: any, tier?: string): string {
+  const items: string[] = []
+  
+  // New add-ons structure
+  if (addOns.additionalDays && typeof addOns.additionalDays === 'number' && addOns.additionalDays > 0) {
+    // Fast Delivery (Additional Days) pricing: $10 for Standard, $15 for Advanced
+    let pricePerDay = 0
+    if (tier === 'standard') pricePerDay = 10
+    else if (tier === 'advanced') pricePerDay = 15
+    // Only show if price is available (not for Starter tier)
+    if (pricePerDay > 0) {
+      items.push(`Fast Delivery (${addOns.additionalDays} ${addOns.additionalDays === 1 ? 'day' : 'days'}) - +$${pricePerDay * addOns.additionalDays}.00`)
+    }
   }
   
-  const items: string[] = []
-  if (addOns.fastDelivery) items.push(addOnNames.fastDelivery)
-  if (addOns.additionalPages) items.push(addOnNames.additionalPages)
-  if (addOns.additionalKeywords) items.push(addOnNames.additionalKeywords)
-  if (addOns.imageAltTags) items.push(addOnNames.imageAltTags)
-  if (addOns.schemaMarkup) items.push(addOnNames.schemaMarkup)
-  if (addOns.competitorAnalysis) items.push(addOnNames.competitorAnalysis)
+  if (addOns.competitorAnalysis) {
+    items.push('Competitor Keyword Gap Report - +$15.00')
+  }
+  
+  // Legacy add-ons (for backward compatibility with old audits)
+  if (addOns.fastDelivery) {
+    // Fast Delivery pricing: $10 for Standard, $15 for Advanced
+    let price = 0
+    if (tier === 'standard') price = 10
+    else if (tier === 'advanced') price = 15
+    if (price > 0) {
+      items.push(`Fast Delivery - +$${price}.00`)
+    } else {
+      items.push('Fast Delivery - Included')
+    }
+  }
+  if (addOns.additionalPages && typeof addOns.additionalPages === 'number' && addOns.additionalPages > 0) {
+    items.push(`Additional Pages (${addOns.additionalPages} ${addOns.additionalPages === 1 ? 'page' : 'pages'}) - +$${5 * addOns.additionalPages}.00`)
+  }
+  if (addOns.additionalKeywords && typeof addOns.additionalKeywords === 'number' && addOns.additionalKeywords > 0) {
+    items.push(`Additional Keywords (${addOns.additionalKeywords} ${addOns.additionalKeywords === 1 ? 'keyword' : 'keywords'}) - +$${1 * addOns.additionalKeywords}.00`)
+  }
+  if (addOns.imageAltTags) items.push('Image Alt Tags Optimization - +$15.00')
+  if (addOns.schemaMarkup) items.push('Schema Markup Analysis - +$15.00')
   
   return items.map(item => `<li>${escapeHtml(item)}</li>`).join('')
 }

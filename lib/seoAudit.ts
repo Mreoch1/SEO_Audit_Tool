@@ -62,6 +62,8 @@ export async function runAudit(
   }
   const startTime = Date.now()
   
+  console.log(`[Audit] Starting audit for ${url} (max pages: ${finalMaxPages}, max depth: ${opts.maxDepth})`)
+  
   // Normalize URL
   const rootUrl = normalizeUrl(url)
   const baseDomain = new URL(rootUrl).hostname
@@ -83,15 +85,20 @@ export async function runAudit(
   }
   
   // Check robots.txt
+  console.log('[Audit] Checking robots.txt...')
   await checkRobotsTxt(rootUrl, siteWide)
   
   // Check sitemap.xml
+  console.log('[Audit] Checking sitemap.xml...')
   await checkSitemap(rootUrl, siteWide)
   
   // Crawl pages (pass imageAltTags flag if add-on is selected)
+  console.log(`[Audit] Starting to crawl up to ${opts.maxPages} pages...`)
   await crawlPages(rootUrl, baseDomain, opts, crawledUrls, pages, allIssues, opts.addOns?.imageAltTags || false)
+  console.log(`[Audit] Finished crawling ${pages.length} pages`)
   
   // Analyze site-wide issues
+  console.log('[Audit] Analyzing site-wide issues...')
   analyzeSiteWideIssues(pages, siteWide, allIssues)
   
   // Check social media presence (on main page) - re-fetch to get full HTML
@@ -346,6 +353,7 @@ async function crawlPages(
 ): Promise<void> {
   const queue: Array<{ url: string; depth: number }> = [{ url: startUrl, depth: 0 }]
   const issueMap = new Map<string, Issue>()
+  const startTime = Date.now()
   
   while (queue.length > 0 && pages.length < options.maxPages) {
     const { url, depth } = queue.shift()!
@@ -357,9 +365,16 @@ async function crawlPages(
     crawledUrls.add(url)
     
     try {
+      // Log progress
+      const elapsed = Math.round((Date.now() - startTime) / 1000)
+      console.log(`[Audit Progress] Analyzing page ${pages.length + 1}/${options.maxPages}: ${url} (${elapsed}s elapsed)`)
+      
       // Check if this is the main/start page
       const isMainPage = url === startUrl && depth === 0
+      const pageStartTime = Date.now()
       const pageData = await analyzePage(url, options.userAgent, needsImageDetails, isMainPage)
+      const pageTime = Math.round((Date.now() - pageStartTime) / 1000)
+      console.log(`[Audit Progress] Completed page ${pages.length + 1} in ${pageTime}s`)
       pages.push(pageData)
       
       // Generate performance issues (checks both performanceMetrics and pageSpeedData)
@@ -472,6 +487,9 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
     
     // Fetch PageSpeed Insights (only for main page to save API calls and time)
     // This is async and won't block the audit, but we'll wait for it
+    if (isMainPage) {
+      console.log(`[Audit Progress] Fetching PageSpeed Insights for main page (this may take 60+ seconds)...`)
+    }
     const pageSpeedPromise = isMainPage ? fetchPageSpeedInsights(url) : Promise.resolve(null)
     
     // Parse the rendered HTML
@@ -1167,19 +1185,55 @@ function calculateScores(
   technicalScore = Math.max(0, Math.min(100, technicalScore))
   
   // On-page score (0-100)
+  // Base score starts at 100, then we deduct points based on issues
   let onPageScore = 100
   const onPageIssues = issues.filter(i => i.category === 'On-page')
-  const pagesWithIssues = new Set<string>()
-  onPageIssues.forEach(issue => {
-    if (issue.affectedPages) {
-      issue.affectedPages.forEach(url => pagesWithIssues.add(url))
+  
+  if (onPageIssues.length === 0) {
+    // Perfect score if no issues
+    onPageScore = 100
+  } else {
+    // Calculate penalty based on issue severity and frequency
+    // Count unique pages affected by each severity level
+    const highSeverityPages = new Set<string>()
+    const mediumSeverityPages = new Set<string>()
+    const lowSeverityPages = new Set<string>()
+    
+    onPageIssues.forEach(issue => {
+      if (issue.affectedPages && issue.affectedPages.length > 0) {
+        issue.affectedPages.forEach(url => {
+          if (issue.severity === 'High') {
+            highSeverityPages.add(url)
+          } else if (issue.severity === 'Medium') {
+            mediumSeverityPages.add(url)
+          } else if (issue.severity === 'Low') {
+            lowSeverityPages.add(url)
+          }
+        })
+      }
+    })
+    
+    // Calculate penalties based on affected page percentages
+    const highIssueRate = highSeverityPages.size / pages.length
+    const mediumIssueRate = mediumSeverityPages.size / pages.length
+    const lowIssueRate = lowSeverityPages.size / pages.length
+    
+    // Deduct points based on severity and coverage
+    // High severity issues are weighted more heavily
+    onPageScore -= Math.min(highIssueRate * 60, 60) // Max 60 points for high severity issues
+    onPageScore -= Math.min(mediumIssueRate * 30, 30) // Max 30 points for medium severity issues
+    onPageScore -= Math.min(lowIssueRate * 10, 10) // Max 10 points for low severity issues
+    
+    // Also account for total number of issue instances (consolidated issues)
+    // If there are many different types of issues, that's worse
+    const uniqueIssueTypes = new Set(onPageIssues.map(i => i.message))
+    if (uniqueIssueTypes.size > pages.length * 0.5) {
+      // More than 50% of pages have unique issue types = more variety of problems
+      onPageScore -= 5
     }
-  })
-  const issueRate = pagesWithIssues.size / pages.length
-  onPageScore -= issueRate * 50
-  onPageScore -= onPageIssues.filter(i => i.severity === 'High').length * 5
-  onPageScore -= onPageIssues.filter(i => i.severity === 'Medium').length * 2
-  onPageScore = Math.max(0, Math.min(100, onPageScore))
+  }
+  
+  onPageScore = Math.max(0, Math.min(100, Math.round(onPageScore)))
   
   // Content score (0-100)
   let contentScore = 100
@@ -1437,40 +1491,94 @@ async function generateCompetitorAnalysis(
   // Extract keywords from the audited site
   const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
   
-  // Extract core topic keywords from the site's content to generate niche-specific analysis
+  // If we have good extracted keywords from the site, use those as core topics
+  // Otherwise, extract meaningful phrases from titles and H1s
   const coreTopics = new Set<string>()
-  const stopWords = new Set(['this', 'that', 'with', 'from', 'your', 'their', 'have', 'been', 'will', 'would', 'could', 'should'])
-  // Filter out generic/common words that shouldn't be core topics
-  const genericWords = new Set(['free', 'online', 'best', 'new', 'top', 'get', 'use', 'make', 'find', 'see', 'more', 'here', 'page', 'site', 'web', 'www', 'com', 'org', 'net'])
   
-  pages.forEach(page => {
-    if (page.title) {
-      const titleWords = page.title.toLowerCase()
-        .replace(/[^\w\s]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length > 3 && !stopWords.has(w) && !genericWords.has(w))
-      titleWords.forEach(w => coreTopics.add(w))
-    }
-    if (page.h1Text) {
-      page.h1Text.forEach(h1 => {
-        const h1Words = h1.toLowerCase()
+  // First, try to extract meaningful multi-word phrases from the site's extracted keywords
+  if (siteKeywords.length > 0) {
+    // Use the site's extracted keywords as core topics (they're already meaningful phrases)
+    siteKeywords.forEach(kw => {
+      const kwLower = kw.toLowerCase().trim()
+      // Only use keywords that are 2+ words and meaningful (filter out single generic words)
+      const words = kwLower.split(/\s+/)
+      if (words.length >= 2 && kwLower.length >= 5 && kwLower.length < 40) {
+        // Filter out patterns that start with generic words
+        const genericStarters = ['how', 'best', 'new', 'top', 'get', 'use', 'free', 'online']
+        if (!genericStarters.includes(words[0])) {
+          coreTopics.add(kwLower)
+        }
+      }
+    })
+  }
+  
+  // If we don't have enough good keywords from extractedKeywords, extract from titles/H1s more intelligently
+  if (coreTopics.size < 3) {
+    const stopWords = new Set(['this', 'that', 'with', 'from', 'your', 'their', 'have', 'been', 'will', 'would', 'could', 'should', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'as', 'is', 'was', 'are', 'were'])
+    const genericWords = new Set(['free', 'online', 'best', 'new', 'top', 'get', 'use', 'make', 'find', 'see', 'more', 'here', 'page', 'site', 'web', 'www', 'com', 'org', 'net'])
+    
+    pages.forEach(page => {
+      // Extract meaningful 2-3 word phrases from titles
+      if (page.title) {
+        const titleWords = page.title.toLowerCase()
           .replace(/[^\w\s]/g, ' ')
           .split(/\s+/)
-          .filter(w => w.length > 3 && !stopWords.has(w) && !genericWords.has(w))
-        h1Words.forEach(w => coreTopics.add(w))
-      })
-    }
-  })
+          .filter(w => w.length > 2 && !stopWords.has(w) && !genericWords.has(w))
+        
+        // Create 2-3 word phrases from title
+        for (let i = 0; i < titleWords.length - 1 && i < 4; i++) {
+          const phrase = `${titleWords[i]} ${titleWords[i + 1]}`
+          if (phrase.length >= 5 && phrase.length < 30) {
+            coreTopics.add(phrase)
+          }
+          if (i < titleWords.length - 2) {
+            const phrase3 = `${titleWords[i]} ${titleWords[i + 1]} ${titleWords[i + 2]}`
+            if (phrase3.length >= 8 && phrase3.length < 40) {
+              coreTopics.add(phrase3)
+            }
+          }
+        }
+      }
+      
+      // Extract meaningful phrases from H1s
+      if (page.h1Text && page.h1Text.length > 0) {
+        page.h1Text.forEach(h1 => {
+          const h1Words = h1.toLowerCase()
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter(w => w.length > 2 && !stopWords.has(w) && !genericWords.has(w))
+          
+          // Create 2-3 word phrases from H1
+          for (let i = 0; i < h1Words.length - 1 && i < 4; i++) {
+            const phrase = `${h1Words[i]} ${h1Words[i + 1]}`
+            if (phrase.length >= 5 && phrase.length < 30) {
+              coreTopics.add(phrase)
+            }
+            if (i < h1Words.length - 2) {
+              const phrase3 = `${h1Words[i]} ${h1Words[i + 1]} ${h1Words[i + 2]}`
+              if (phrase3.length >= 8 && phrase3.length < 40) {
+                coreTopics.add(phrase3)
+              }
+            }
+          }
+        })
+      }
+    })
+  }
   
   // Generate niche-specific competitor keywords by combining core topics with common SEO patterns
+  // Only use meaningful multi-word topics, not single words
   const commonPatterns = [
     'how to',
-    'best',
-    'guide',
+    'best practices',
+    'complete guide',
+    'ultimate guide',
+    'getting started',
     'tutorial',
     'review',
     'vs',
     'alternatives',
+    'comparison',
     'pricing',
     'features',
     'benefits',
@@ -1478,61 +1586,40 @@ async function generateCompetitorAnalysis(
     'what is',
     'examples',
     'tips',
-    'ideas',
-    'online',
-    'free',
-    'tool',
-    'software',
-    'service'
+    'troubleshooting',
+    'advanced',
+    'beginner'
   ]
   
   // Create niche-specific competitor keywords
   const nicheCompetitorKeywords: string[] = []
-  const coreTopicsArray = Array.from(coreTopics).slice(0, 8) // Use top 8 core topics
+  const coreTopicsArray = Array.from(coreTopics).slice(0, 5) // Use top 5 meaningful topics only
   
-  // Combine core topics with patterns to create relevant keywords (one direction only to avoid duplicates)
-  coreTopicsArray.forEach(topic => {
-    commonPatterns.slice(0, 12).forEach(pattern => {
-      if (pattern.includes(' ')) {
-        // Multi-word patterns: prefer "how to [topic]" over "[topic] how to"
-        nicheCompetitorKeywords.push(`${pattern} ${topic}`)
-      } else {
-        // Single word patterns: prefer "[pattern] [topic]" for most, but "[topic] [pattern]" for some
-        if (['review', 'guide', 'tutorial', 'tips', 'ideas'].includes(pattern)) {
-          nicheCompetitorKeywords.push(`${topic} ${pattern}`)
-        } else {
+  // Only generate competitor keywords if we have meaningful core topics
+  if (coreTopicsArray.length > 0) {
+    // Combine meaningful topics with patterns
+    coreTopicsArray.forEach(topic => {
+      // Skip single-word topics that don't make sense
+      if (topic.split(/\s+/).length < 2) return
+      
+      commonPatterns.slice(0, 10).forEach(pattern => {
+        if (pattern.includes(' ')) {
+          // Multi-word patterns: "how to [topic]", "complete guide to [topic]"
           nicheCompetitorKeywords.push(`${pattern} ${topic}`)
+          nicheCompetitorKeywords.push(`${pattern} for ${topic}`)
+        } else {
+          // Single word patterns: "[topic] tutorial", "[topic] review"
+          if (['tutorial', 'review', 'tips', 'guide', 'examples'].includes(pattern)) {
+            nicheCompetitorKeywords.push(`${topic} ${pattern}`)
+          } else {
+            nicheCompetitorKeywords.push(`${pattern} ${topic}`)
+          }
         }
-      }
+      })
     })
-  })
+  }
   
-  // Also include standalone high-value patterns
-  const standalonePatterns = [
-    'best practices',
-    'comparison',
-    'alternatives',
-    'pricing guide',
-    'features',
-    'benefits',
-    'advantages',
-    'disadvantages',
-    'definition',
-    'case study',
-    'testimonials',
-    'faq',
-    'help',
-    'support'
-  ]
-  
-  // Add core topics with standalone patterns
-  coreTopicsArray.forEach(topic => {
-    standalonePatterns.forEach(pattern => {
-      nicheCompetitorKeywords.push(`${topic} ${pattern}`)
-    })
-  })
-  
-  // Combine with some generic high-value keywords (but fewer)
+  // Combine with some generic high-value keywords that are always relevant
   const genericHighValue = [
     'best practices',
     'how to guide',
@@ -1540,20 +1627,39 @@ async function generateCompetitorAnalysis(
     'complete guide',
     'ultimate guide',
     'beginner guide',
-    'expert tips'
+    'advanced techniques',
+    'troubleshooting guide',
+    'comparison guide',
+    'getting started guide'
   ]
   
   const allCompetitorKeywords = [
     ...nicheCompetitorKeywords,
-    ...genericHighValue,
-    ...Array.from(coreTopics).map(t => `${t} guide`),
-    ...Array.from(coreTopics).map(t => `best ${t}`)
+    ...genericHighValue
   ]
   
-  // Remove duplicates and limit
+  // Remove duplicates, filter out nonsensical combinations, and limit
   const uniqueCompetitorKeywords = Array.from(new Set(allCompetitorKeywords))
-    .filter(kw => kw.length > 3 && kw.length < 50)
-    .slice(0, 30)
+    .filter(kw => {
+      const kwLower = kw.toLowerCase()
+      // Filter out keywords that are too short or too long
+      if (kwLower.length < 8 || kwLower.length > 50) return false
+      
+      // Filter out nonsensical patterns like "how to next" or "best docs"
+      const words = kwLower.split(/\s+/)
+      const genericSingleWords = ['next', 'docs', 'page', 'site', 'web', 'www', 'com', 'org', 'net']
+      // If a keyword starts with a pattern but the topic is a generic single word, skip it
+      if (words.length === 2 && genericSingleWords.includes(words[words.length - 1])) {
+        return false
+      }
+      
+      // Filter out repetitive word patterns
+      const uniqueWords = new Set(words)
+      if (uniqueWords.size < 2) return false
+      
+      return true
+    })
+    .slice(0, 25) // Limit to 25 competitor keywords
   
   // Find keyword gaps (competitor keywords not in site)
   const keywordGaps = uniqueCompetitorKeywords.filter(kw => {
