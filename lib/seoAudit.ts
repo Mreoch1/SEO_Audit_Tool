@@ -269,7 +269,20 @@ export async function runAudit(
   const allKeywords = new Set<string>()
   pages.forEach(page => {
     if (page.extractedKeywords) {
-      page.extractedKeywords.forEach(kw => allKeywords.add(kw))
+      page.extractedKeywords.forEach(kw => {
+        // Only add if it's a valid 2+ word phrase (safety check)
+        const words = kw.split(/\s+/).filter(w => w.trim().length > 0)
+        if (words.length >= 2) {
+          // Ensure each word is meaningful (at least 2 chars after cleaning)
+          const allWordsValid = words.every(w => {
+            const cleanW = w.replace(/[^\w]/g, '')
+            return cleanW.length >= 2
+          })
+          if (allWordsValid) {
+            allKeywords.add(kw.trim())
+          }
+        }
+      })
     }
   })
   
@@ -278,7 +291,13 @@ export async function runAudit(
   if (opts.addOns?.additionalKeywords) {
     keywordCount += opts.addOns.additionalKeywords
   }
-  const topKeywords = Array.from(allKeywords).slice(0, keywordCount)
+  const topKeywords = Array.from(allKeywords)
+    .filter(kw => {
+      // Final safety check: ensure it's a 2+ word phrase
+      const words = kw.split(/\s+/).filter(w => w.trim().length > 0)
+      return words.length >= 2
+    })
+    .slice(0, keywordCount)
   
   // Image Alt Tags Analysis (if add-on is selected)
   let imageAltAnalysis: ImageAltAnalysis[] | undefined
@@ -1043,42 +1062,66 @@ function parseHtml(
   
   keywordSources.forEach(text => {
     // Normalize text first - preserve word boundaries better
+    // Handle special characters and encoding issues that might split words
     const normalizedText = text.toLowerCase()
-      .replace(/[^\w\s-]/g, ' ') // Keep hyphens for compound words
+      .replace(/[^\w\s-]/g, ' ') // Replace non-word chars (except hyphens) with space
       .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/([a-z])([A-Z])/g, '$1 $2') // Handle camelCase
       .trim()
     
     const words = normalizedText
       .split(/\s+/)
+      .map(w => w.replace(/[^\w-]/g, '')) // Clean each word, keep hyphens
       .filter(w => {
-        // Remove punctuation-only "words" and very short words
-        const cleanWord = w.replace(/[^\w]/g, '')
-        return cleanWord.length > 2 && !stopWords.has(cleanWord)
+        // Remove very short words and stop words
+        const cleanWord = w.replace(/-/g, '') // Check length without hyphens
+        return cleanWord.length > 3 && !stopWords.has(cleanWord) // Increased min length to 3
       })
       // Filter out consecutive duplicate words
       .filter((w, i, arr) => {
-        const cleanW = w.replace(/[^\w]/g, '')
-        const cleanPrev = i > 0 ? arr[i - 1].replace(/[^\w]/g, '') : ''
+        const cleanW = w.replace(/-/g, '')
+        const cleanPrev = i > 0 ? arr[i - 1].replace(/-/g, '') : ''
         return i === 0 || cleanW !== cleanPrev
       })
-      .map(w => w.replace(/[^\w]/g, '')) // Clean words for consistency
+      // Filter out words that look like they were split incorrectly (very short after cleaning)
+      .filter(w => {
+        const cleanW = w.replace(/-/g, '')
+        // If a word is 3 chars or less and not a common word, it might be a fragment
+        if (cleanW.length <= 3) {
+          const commonShortWords = new Set(['web', 'net', 'com', 'org', 'edu', 'gov', 'www'])
+          return commonShortWords.has(cleanW)
+        }
+        return true
+      })
 
     // Create 2-word phrases
     for (let i = 0; i < words.length - 1; i++) {
-      // Skip if words are the same
-      if (words[i] === words[i + 1]) continue
+      const word1 = words[i].replace(/-/g, '')
+      const word2 = words[i + 1].replace(/-/g, '')
+      
+      // Skip if words are the same or too short
+      if (word1 === word2 || word1.length < 3 || word2.length < 3) continue
+      
       const phrase = `${words[i]} ${words[i + 1]}`
-      if (phrase.length >= 5 && phrase.length <= 40) {
+      // Ensure phrase is meaningful (at least 8 chars total, max 40)
+      if (phrase.replace(/-/g, '').length >= 8 && phrase.length <= 40) {
         extractedKeywords.push(phrase)
       }
     }
     
     // Create 3-word phrases
     for (let i = 0; i < words.length - 2; i++) {
-      // Skip if any consecutive words are the same
-      if (words[i] === words[i + 1] || words[i + 1] === words[i + 2]) continue
+      const word1 = words[i].replace(/-/g, '')
+      const word2 = words[i + 1].replace(/-/g, '')
+      const word3 = words[i + 2].replace(/-/g, '')
+      
+      // Skip if any words are the same or too short
+      if (word1 === word2 || word2 === word3 || word1 === word3) continue
+      if (word1.length < 3 || word2.length < 3 || word3.length < 3) continue
+      
       const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`
-      if (phrase.length >= 8 && phrase.length <= 50) {
+      // Ensure phrase is meaningful (at least 12 chars total, max 50)
+      if (phrase.replace(/-/g, '').length >= 12 && phrase.length <= 50) {
         extractedKeywords.push(phrase)
       }
     }
@@ -1128,9 +1171,38 @@ function parseHtml(
       // Filter out single words - we only want 2-3 word phrases
       if (words.length < 2) return false
       
+      // Additional check: ensure each word in the phrase is at least 3 characters
+      // This prevents fragments like "dia", "a", etc.
+      const allWordsValid = words.every(w => {
+        const cleanW = w.replace(/[^\w]/g, '')
+        // Must be at least 3 characters, or be a common short word
+        if (cleanW.length < 3) {
+          const commonShortWords = new Set(['web', 'net', 'com', 'org', 'edu', 'gov', 'www', 'api', 'url', 'www'])
+          return commonShortWords.has(cleanW.toLowerCase())
+        }
+        return true
+      })
+      if (!allWordsValid) return false
+      
+      // Final check: ensure the phrase itself is meaningful (not just two very short words)
+      const totalLength = words.reduce((sum, w) => sum + w.replace(/[^\w]/g, '').length, 0)
+      if (totalLength < 6) return false // At least 6 characters total across all words
+      
       return true
     })
     .map(kw => kw.trim().replace(/\s+/g, ' ')) // Normalize whitespace in final output
+    .filter(kw => {
+      // Final safety check: ensure it's actually a 2+ word phrase with meaningful words
+      const phraseWords = kw.split(/\s+/).filter(w => w.length > 0)
+      if (phraseWords.length < 2) return false
+      
+      // Ensure each word is at least 2 characters (after cleaning)
+      const allWordsValid = phraseWords.every(w => {
+        const cleanW = w.replace(/[^\w]/g, '')
+        return cleanW.length >= 2
+      })
+      return allWordsValid
+    })
     .slice(0, 20)
   
   // Count words (text content only)
