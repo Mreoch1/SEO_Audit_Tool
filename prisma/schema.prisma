@@ -24,14 +24,15 @@ model Audit {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   archived          Boolean  @default(false)
-  overallScore      Int
-  technicalScore    Int
-  onPageScore       Int
-  contentScore      Int
-  accessibilityScore Int
-  shortSummary      String
-  detailedSummary   String
-  rawJson           String   // JSON string of full AuditResult
+  status            String   @default("completed") // "running" | "completed" | "failed"
+  overallScore      Int      @default(0)
+  technicalScore    Int      @default(0)
+  onPageScore       Int      @default(0)
+  contentScore      Int      @default(0)
+  accessibilityScore Int      @default(0)
+  shortSummary      String   @default("")
+  detailedSummary   String   @default("")
+  rawJson           String?  // JSON string of full AuditResult (null while running)
   issues            AuditIssue[]
 }
 

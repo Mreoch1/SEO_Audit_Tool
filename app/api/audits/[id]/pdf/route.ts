@@ -7,15 +7,18 @@ import { generatePDF } from '@/lib/pdf'
 // GET /api/audits/[id]/pdf - Generate PDF report
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   const session = await getServerSession(authOptions)
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const resolvedParams = params instanceof Promise ? await params : params
+  const auditId = resolvedParams.id
+
   const audit = await prisma.audit.findUnique({
-    where: { id: params.id }
+    where: { id: auditId }
   })
 
   if (!audit) {
@@ -33,12 +36,16 @@ export async function GET(
     logoUrl: settings?.logoUrl || undefined
   }
 
+  if (!audit.rawJson) {
+    return NextResponse.json({ error: 'Audit data not found' }, { status: 404 })
+  }
+
   const auditResult = JSON.parse(audit.rawJson)
 
   try {
     const pdfBuffer = await generatePDF(auditResult, branding, audit.url)
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBuffer as unknown as BodyInit, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="seo-audit-${audit.id}.pdf"`

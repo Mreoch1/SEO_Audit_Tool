@@ -146,17 +146,15 @@ export type AuditAddOn =
   | 'fastDelivery'
   | 'additionalPages'
   | 'additionalKeywords'
-  | 'imageAltTags'
   | 'schemaMarkup'
   | 'competitorAnalysis'
 
 export interface AuditAddOns {
-  fastDelivery?: boolean
+  fastDelivery?: boolean // Fast delivery option (tier-based pricing)
   additionalPages?: number // Number of additional pages
   additionalKeywords?: number // Number of additional keywords
-  imageAltTags?: boolean
-  schemaMarkup?: boolean
-  competitorAnalysis?: boolean
+  schemaMarkup?: boolean // Schema markup analysis
+  competitorAnalysis?: boolean // Competitor keyword gap analysis
 }
 
 export interface AuditOptions {

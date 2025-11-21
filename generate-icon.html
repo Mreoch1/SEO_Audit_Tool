@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SEO Audit Icon Generator</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #canvas {
+            width: 512px;
+            height: 512px;
+            border: 2px solid #333;
+            background: #3b82f6;
+            border-radius: 20px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>SEO Audit App Icon Generator</h1>
+    <canvas id="canvas" width="512" height="512"></canvas>
+    <button onclick="downloadIcon()">Download Icon (PNG)</button>
+    
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Draw blue background
+        ctx.fillStyle = '#3b82f6';
+        ctx.fillRect(0, 0, 512, 512);
+        
+        // Draw white rounded rectangle
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.roundRect(50, 50, 412, 412, 80);
+        ctx.fill();
+        
+        // Draw "SEO" text
+        ctx.fillStyle = '#3b82f6';
+        ctx.font = 'bold 120px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('SEO', 256, 220);
+        
+        // Draw "AUDIT" text
+        ctx.font = 'bold 80px Arial';
+        ctx.fillText('AUDIT', 256, 320);
+        
+        // Add roundRect if not available
+        if (!ctx.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, width, height, radius) {
+                this.beginPath();
+                this.moveTo(x + radius, y);
+                this.lineTo(x + width - radius, y);
+                this.quadraticCurveTo(x + width, y, x + width, y + radius);
+                this.lineTo(x + width, y + height - radius);
+                this.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                this.lineTo(x + radius, y + height);
+                this.quadraticCurveTo(x, y + height, x, y + height - radius);
+                this.lineTo(x, y + radius);
+                this.quadraticCurveTo(x, y, x + radius, y);
+                this.closePath();
+            };
+        }
+        
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'seo-audit-icon.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+        
+        // Redraw with roundRect
+        ctx.clearRect(0, 0, 512, 512);
+        ctx.fillStyle = '#3b82f6';
+        ctx.fillRect(0, 0, 512, 512);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.roundRect(50, 50, 412, 412, 80);
+        ctx.fill();
+        ctx.fillStyle = '#3b82f6';
+        ctx.font = 'bold 120px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('SEO', 256, 220);
+        ctx.font = 'bold 80px Arial';
+        ctx.fillText('AUDIT', 256, 320);
+    </script>
+</body>
+</html>
+

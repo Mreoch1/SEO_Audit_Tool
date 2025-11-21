@@ -14,10 +14,12 @@ import { fetchPageSpeedInsights } from './pagespeed'
 import { checkHttpVersion, checkCompression } from './technical'
 import { checkSocialMediaPresence } from './social'
 
-const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier'>> = {
+const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
   maxDepth: 3,
-  userAgent: 'SEO-Audit-Bot/1.0'
+  userAgent: 'SEO-Audit-Bot/1.0',
+  addOns: undefined,
+  competitorUrls: undefined
 }
 
 /**
@@ -44,7 +46,7 @@ export async function runAudit(
   options: AuditOptions = {}
 ): Promise<AuditResult> {
   // Apply tier-based limits if tier is specified
-  const tierLimits = options.tier ? getTierLimits(options.tier) : {}
+  const tierLimits = options.tier ? getTierLimits(options.tier) : { maxPages: undefined, maxDepth: undefined }
   
   // Apply add-ons
   let finalMaxPages = options.maxPages ?? tierLimits.maxPages ?? DEFAULT_OPTIONS.maxPages
@@ -52,13 +54,17 @@ export async function runAudit(
     finalMaxPages += options.addOns.additionalPages
   }
   
-  const opts = { 
+  const opts: Required<AuditOptions> = { 
     ...DEFAULT_OPTIONS, 
     ...options,
     ...tierLimits,
     maxPages: finalMaxPages,
+    maxDepth: options.maxDepth ?? tierLimits.maxDepth ?? DEFAULT_OPTIONS.maxDepth,
+    userAgent: options.userAgent ?? DEFAULT_OPTIONS.userAgent,
+    tier: options.tier ?? 'advanced', // Default tier if not specified
     // Preserve add-ons
-    addOns: options.addOns
+    addOns: options.addOns ?? {},
+    competitorUrls: options.competitorUrls ?? []
   }
   const startTime = Date.now()
   
@@ -94,7 +100,7 @@ export async function runAudit(
   
   // Crawl pages (pass imageAltTags flag if add-on is selected)
   console.log(`[Audit] Starting to crawl up to ${opts.maxPages} pages...`)
-  await crawlPages(rootUrl, baseDomain, opts, crawledUrls, pages, allIssues, opts.addOns?.imageAltTags || false)
+  await crawlPages(rootUrl, baseDomain, opts, crawledUrls, pages, allIssues, false) // Image alt tags analysis is done separately
   console.log(`[Audit] Finished crawling ${pages.length} pages`)
   
   // Analyze site-wide issues
@@ -177,7 +183,7 @@ export async function runAudit(
   
   // Image Alt Tags Analysis (if add-on is selected)
   let imageAltAnalysis: ImageAltAnalysis[] | undefined
-  if (opts.addOns?.imageAltTags) {
+  if (false) { // Image alt tags analysis disabled - use separate endpoint if needed
     imageAltAnalysis = await analyzeImageAltTags(pages)
   }
   

@@ -297,11 +297,13 @@ function generateReportHTML(
     <div style="margin-bottom: 20px;">
       <h2>Service Tier</h2>
       <p><strong>${result.raw.options.tier.charAt(0).toUpperCase() + result.raw.options.tier.slice(1)}</strong> - ${getTierDescription(result.raw.options.tier)}</p>
-      ${result.raw.options.addOns?.fastDelivery || result.raw.options.addOns?.additionalDays ? (() => {
+      ${result.raw.options.addOns?.fastDelivery || result.raw.options.addOns?.additionalPages ? (() => {
         const tier = result.raw.options.tier
         if (tier === 'standard' || tier === 'advanced') {
-          const days = result.raw.options.addOns?.additionalDays || 1
-          return `<p style="color: #f59e0b; font-weight: bold; margin-top: 10px;">⚡ Fast Delivery: ${days}-day delivery enabled</p>`
+          const days = result.raw.options.addOns?.additionalPages || 1
+          // Escape to prevent LaTeX interpretation
+          const daysText = escapeHtml(`${days}-day delivery enabled`)
+          return `<p style="color: #f59e0b; font-weight: bold; margin-top: 10px;">⚡ Fast Delivery: ${daysText}</p>`
         }
         return ''
       })() : ''}
@@ -794,12 +796,12 @@ function generateReportHTML(
           // Format load time (escape to prevent LaTeX)
           const loadTimeMs = page.loadTime || 0
           const loadTimeText = escapeHtml(`${loadTimeMs} ms`)
-          const lcpValue = page.performanceMetrics?.lcp || page.pageSpeedMobile?.lcp || page.pageSpeedDesktop?.lcp
+          const lcpValue = page.performanceMetrics?.lcp || page.pageSpeedData?.mobile?.lcp || page.pageSpeedData?.desktop?.lcp
           const lcpText = lcpValue ? `<br><small style="font-size: 9px;">${escapeHtml(`LCP: ${Math.round(lcpValue)} ms`)}</small>` : ''
           
           return `
           <tr>
-            <td style="max-width: 200px; word-break: break-word; font-size: 9px; line-height: 1.3; padding: 8px;">${urlText}</td>
+            <td style="max-width: 200px; word-break: break-all; word-wrap: break-word; font-size: 9px; line-height: 1.3; padding: 8px; font-family: monospace;">${urlText}</td>
             <td style="text-align: center; padding: 8px;">${page.statusCode || 'Error'}</td>
             <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 10px; padding: 8px;" title="${page.title ? escapeHtml(page.title) : ''}">${titleText}</td>
             <td style="text-align: center; padding: 8px;">${page.wordCount || 0}</td>
@@ -1148,7 +1150,9 @@ function generatePriorityActionPlan(result: AuditResult): string {
         html += `<tr>`
         for (let j = 0; j < columns; j++) {
           if (j < row.length) {
-            html += `<td style="padding: 6px; border: 1px solid #e5e7eb; font-size: 12px; text-align: center;">${escapeHtml(row[j])}</td>`
+            // Escape keyword to prevent LaTeX interpretation and HTML issues
+            const keywordText = escapeHtml(row[j]).replace(/\s+/g, ' ') // Normalize whitespace
+            html += `<td style="padding: 6px; border: 1px solid #e5e7eb; font-size: 12px; text-align: center; word-break: break-word;">${keywordText}</td>`
           } else {
             html += `<td style="padding: 6px; border: 1px solid #e5e7eb;"></td>`
           }
@@ -1191,12 +1195,15 @@ function getAddOnsList(addOns: any, tier?: string): string {
     else if (tier === 'advanced') pricePerDay = 15
     // Only show if price is available (not for Starter tier)
     if (pricePerDay > 0) {
-      items.push(`Fast Delivery (${addOns.additionalDays} ${addOns.additionalDays === 1 ? 'day' : 'days'}) - +$${pricePerDay * addOns.additionalDays}.00`)
+      const totalPrice = pricePerDay * addOns.additionalDays
+      // Use &#36; to escape dollar signs and prevent LaTeX interpretation
+      items.push(`Fast Delivery (${addOns.additionalDays} ${addOns.additionalDays === 1 ? 'day' : 'days'}) - +&#36;${totalPrice}.00`)
     }
   }
   
   if (addOns.competitorAnalysis) {
-    items.push('Competitor Keyword Gap Report - +$15.00')
+    // Use &#36; to escape dollar signs
+    items.push('Competitor Keyword Gap Report - +&#36;15.00')
   }
   
   // Legacy add-ons (for backward compatibility with old audits)
@@ -1206,20 +1213,23 @@ function getAddOnsList(addOns: any, tier?: string): string {
     if (tier === 'standard') price = 10
     else if (tier === 'advanced') price = 15
     if (price > 0) {
-      items.push(`Fast Delivery - +$${price}.00`)
+      items.push(`Fast Delivery - +&#36;${price}.00`)
     } else {
       items.push('Fast Delivery - Included')
     }
   }
   if (addOns.additionalPages && typeof addOns.additionalPages === 'number' && addOns.additionalPages > 0) {
-    items.push(`Additional Pages (${addOns.additionalPages} ${addOns.additionalPages === 1 ? 'page' : 'pages'}) - +$${5 * addOns.additionalPages}.00`)
+    const totalPrice = 5 * addOns.additionalPages
+    items.push(`Additional Pages (${addOns.additionalPages} ${addOns.additionalPages === 1 ? 'page' : 'pages'}) - +&#36;${totalPrice}.00`)
   }
   if (addOns.additionalKeywords && typeof addOns.additionalKeywords === 'number' && addOns.additionalKeywords > 0) {
-    items.push(`Additional Keywords (${addOns.additionalKeywords} ${addOns.additionalKeywords === 1 ? 'keyword' : 'keywords'}) - +$${1 * addOns.additionalKeywords}.00`)
+    const totalPrice = 1 * addOns.additionalKeywords
+    items.push(`Additional Keywords (${addOns.additionalKeywords} ${addOns.additionalKeywords === 1 ? 'keyword' : 'keywords'}) - +&#36;${totalPrice}.00`)
   }
-  if (addOns.imageAltTags) items.push('Image Alt Tags Optimization - +$15.00')
-  if (addOns.schemaMarkup) items.push('Schema Markup Analysis - +$15.00')
+  if (addOns.imageAltTags) items.push('Image Alt Tags Optimization - +&#36;15.00')
+  if (addOns.schemaMarkup) items.push('Schema Markup Analysis - +&#36;15.00')
   
-  return items.map(item => `<li>${escapeHtml(item)}</li>`).join('')
+  // Items already contain escaped HTML entities, so don't escape again
+  return items.map(item => `<li>${item}</li>`).join('')
 }
 

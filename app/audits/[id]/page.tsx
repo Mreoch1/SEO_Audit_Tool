@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ interface AuditData {
   url: string
   createdAt: string
   archived: boolean
+  status: string // "running" | "completed" | "failed"
   overallScore: number
   technicalScore: number
   onPageScore: number
@@ -40,26 +41,65 @@ export default function AuditDetailPage() {
   const [loading, setLoading] = useState(true)
   const [emailLoading, setEmailLoading] = useState(false)
 
-  useEffect(() => {
-    fetchAudit()
-  }, [params.id])
-
-  const fetchAudit = async () => {
+  const fetchAudit = useCallback(async () => {
     try {
       const res = await fetch(`/api/audits/${params.id}`)
-      if (!res.ok) throw new Error('Failed to fetch audit')
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error(`[Fetch Audit] HTTP ${res.status}:`, errorText)
+        throw new Error(`Failed to fetch audit: ${res.status} ${res.statusText}`)
+      }
       const data = await res.json()
+      
+      console.log(`[Fetch Audit] Status: ${data.status}, Completed: ${data.rawJson ? 'Yes' : 'No'}`)
+      
       setAudit(data)
+      
+      // Stop loading once audit is complete or failed
+      if (data.status === 'completed' || data.status === 'failed') {
+        console.log(`[Fetch Audit] Audit ${data.status}, stopping loading`)
+        setLoading(false)
+      } else if (data.status === 'running') {
+        console.log(`[Fetch Audit] Audit still running, will continue polling`)
+      }
     } catch (error) {
+      console.error('[Fetch Audit] Error:', error)
       toast({
         title: 'Error',
-        description: 'Failed to load audit',
+        description: error instanceof Error ? error.message : 'Failed to load audit',
         variant: 'destructive'
       })
-    } finally {
       setLoading(false)
     }
-  }
+  }, [params.id, toast])
+
+  useEffect(() => {
+    fetchAudit()
+  }, [fetchAudit])
+
+  // Poll for audit completion if status is "running"
+  useEffect(() => {
+    if (!audit || audit.status !== 'running') {
+      if (audit && (audit.status === 'completed' || audit.status === 'failed')) {
+        setLoading(false)
+      }
+      return
+    }
+
+    console.log(`[Polling] Audit ${params.id} is running, starting poll...`)
+    
+    // Poll every 3 seconds
+    const pollInterval = setInterval(() => {
+      console.log(`[Polling] Checking status for audit ${params.id}...`)
+      fetchAudit()
+    }, 3000)
+
+    // Cleanup on unmount or when status changes
+    return () => {
+      console.log(`[Polling] Stopping poll for audit ${params.id}`)
+      clearInterval(pollInterval)
+    }
+  }, [audit?.status, fetchAudit, params.id])
 
   const handleDownloadPDF = () => {
     window.open(`/api/audits/${params.id}/pdf`, '_blank')
@@ -155,7 +195,7 @@ export default function AuditDetailPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !audit) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>
   }
 
@@ -163,7 +203,58 @@ export default function AuditDetailPage() {
     return <div className="min-h-screen flex items-center justify-center">Audit not found</div>
   }
 
-  const allIssues = audit.issues
+  // Show loading state if audit is still running
+  if (audit.status === 'running') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="border-b bg-white">
+          <div className="container mx-auto px-4 py-4">
+            <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
+            <h1 className="text-2xl font-bold mt-2">{audit.url}</h1>
+          </div>
+        </div>
+        <div className="container mx-auto px-4 py-8">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <h3 className="text-lg font-semibold mb-2">Audit in Progress</h3>
+              <p className="text-gray-600 mb-4">{audit.detailedSummary}</p>
+              <p className="text-sm text-gray-500">This page will automatically refresh when the audit is complete...</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state if audit failed
+  if (audit.status === 'failed') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="border-b bg-white">
+          <div className="container mx-auto px-4 py-4">
+            <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
+            <h1 className="text-2xl font-bold mt-2">{audit.url}</h1>
+          </div>
+        </div>
+        <div className="container mx-auto px-4 py-8">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2 text-red-600">Audit Failed</h3>
+              <p className="text-gray-600 mb-4">{audit.detailedSummary}</p>
+              <Link href="/audits/new">
+                <Button>Try Again</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  // Only process issues if audit is completed and has data
+  const allIssues = audit.issues || []
   const issuesByCategory = {
     Technical: allIssues.filter(i => i.category === 'Technical'),
     'On-page': allIssues.filter(i => i.category === 'On-page'),
@@ -207,27 +298,34 @@ export default function AuditDetailPage() {
                   <div>
                     <span className="font-medium">Add-Ons: </span>
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {audit.rawJson.raw.options.addOns.fastDelivery && (
+                      {/* New add-ons structure */}
+                      {audit.rawJson.raw.options.addOns?.additionalDays && typeof audit.rawJson.raw.options.addOns.additionalDays === 'number' && audit.rawJson.raw.options.addOns.additionalDays > 0 && (
+                        <span className="px-2 py-0.5 bg-white rounded text-xs border">
+                          Additional Days ({audit.rawJson.raw.options.addOns.additionalDays})
+                        </span>
+                      )}
+                      {audit.rawJson.raw.options.addOns?.competitorAnalysis && (
+                        <span className="px-2 py-0.5 bg-white rounded text-xs border">Competitor Keyword Gap Report</span>
+                      )}
+                      {/* Legacy add-ons (for backward compatibility with old audits) */}
+                      {audit.rawJson.raw.options.addOns?.fastDelivery && (
                         <span className="px-2 py-0.5 bg-white rounded text-xs border">Fast Delivery</span>
                       )}
-                      {audit.rawJson.raw.options.addOns.additionalPages && (
+                      {audit.rawJson.raw.options.addOns?.additionalPages && (
                         <span className="px-2 py-0.5 bg-white rounded text-xs border">
                           +{audit.rawJson.raw.options.addOns.additionalPages} Pages
                         </span>
                       )}
-                      {audit.rawJson.raw.options.addOns.additionalKeywords && (
+                      {audit.rawJson.raw.options.addOns?.additionalKeywords && (
                         <span className="px-2 py-0.5 bg-white rounded text-xs border">
                           +{audit.rawJson.raw.options.addOns.additionalKeywords} Keywords
                         </span>
                       )}
-                      {audit.rawJson.raw.options.addOns.imageAltTags && (
+                      {audit.rawJson.raw.options.addOns?.imageAltTags && (
                         <span className="px-2 py-0.5 bg-white rounded text-xs border">Image Alt Tags</span>
                       )}
-                      {audit.rawJson.raw.options.addOns.schemaMarkup && (
+                      {audit.rawJson.raw.options.addOns?.schemaMarkup && (
                         <span className="px-2 py-0.5 bg-white rounded text-xs border">Schema Markup</span>
-                      )}
-                      {audit.rawJson.raw.options.addOns.competitorAnalysis && (
-                        <span className="px-2 py-0.5 bg-white rounded text-xs border">Competitor Analysis</span>
                       )}
                     </div>
                   </div>

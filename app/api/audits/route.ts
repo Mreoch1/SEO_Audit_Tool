@@ -116,8 +116,13 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error('GET /api/audits error:', error)
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch audits' },
+      { 
+        error: error instanceof Error ? error.message : 'Failed to fetch audits',
+        audits: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+      },
       { status: 500 }
     )
   }
@@ -138,23 +143,79 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
     }
 
-    // Run audit with tier-based options, add-ons, and competitor URLs
-    const auditResult = await runAudit(url, { 
-      maxPages, 
-      maxDepth, 
-      tier, 
-      addOns,
-      competitorUrls: competitorUrls && Array.isArray(competitorUrls) ? competitorUrls : undefined
+    // Create audit record immediately with "running" status
+    const audit = await prisma.audit.create({
+      data: {
+        url,
+        status: 'running',
+        overallScore: 0,
+        technicalScore: 0,
+        onPageScore: 0,
+        contentScore: 0,
+        accessibilityScore: 0,
+        shortSummary: 'Audit in progress...',
+        detailedSummary: 'The audit is currently running. This may take several minutes for large sites.',
+        rawJson: null
+      }
     })
+
+    // Run audit in background (don't await - return immediately)
+    // Use .catch() to ensure errors are logged and don't crash the process
+    processAuditInBackground(audit.id, url, { maxPages, maxDepth, tier, addOns, competitorUrls }).catch((error) => {
+      console.error(`Background audit processing failed for ${audit.id}:`, error)
+      // Error is already handled in processAuditInBackground, just log here
+    })
+
+    return NextResponse.json({ id: audit.id, status: 'running' })
+  } catch (error) {
+    console.error('Audit creation error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to create audit' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * Process audit in background
+ * This function runs asynchronously and updates the audit record when complete
+ */
+async function processAuditInBackground(
+  auditId: string,
+  url: string,
+  options: {
+    maxPages?: number
+    maxDepth?: number
+    tier?: 'starter' | 'standard' | 'advanced'
+    addOns?: any
+    competitorUrls?: string[]
+  }
+) {
+  try {
+    console.log(`[Audit ${auditId}] Starting background processing for ${url}...`)
+    const auditStartTime = Date.now()
+    
+    // Run audit with tier-based options, add-ons, and competitor URLs
+    const auditResult = await runAudit(url, {
+      maxPages: options.maxPages,
+      maxDepth: options.maxDepth,
+      tier: options.tier,
+      addOns: options.addOns,
+      competitorUrls: options.competitorUrls && Array.isArray(options.competitorUrls) ? options.competitorUrls : undefined
+    })
+
+    const auditDuration = Math.round((Date.now() - auditStartTime) / 1000)
+    console.log(`[Audit ${auditId}] Audit completed in ${auditDuration}s, processing ${auditResult.pages.length} pages`)
 
     // Generate summaries
     const shortSummary = generateShortSummary(auditResult)
     const detailedSummary = generateDetailedSummary(auditResult)
 
-    // Save to database
-    const audit = await prisma.audit.create({
+    // Update audit record with results
+    await prisma.audit.update({
+      where: { id: auditId },
       data: {
-        url,
+        status: 'completed',
         overallScore: auditResult.summary.overallScore,
         technicalScore: auditResult.summary.technicalScore,
         onPageScore: auditResult.summary.onPageScore,
@@ -180,14 +241,26 @@ export async function POST(request: NextRequest) {
         }
       }
     })
-
-    return NextResponse.json({ id: audit.id })
+    
+    console.log(`[Audit ${auditId}] Successfully completed and saved`)
   } catch (error) {
-    console.error('Audit creation error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create audit' },
-      { status: 500 }
-    )
+    console.error(`[Audit ${auditId}] Processing error:`, error)
+    console.error(`[Audit ${auditId}] Error stack:`, error instanceof Error ? error.stack : 'No stack trace')
+    
+    // Update audit with failed status
+    try {
+      await prisma.audit.update({
+        where: { id: auditId },
+        data: {
+          status: 'failed',
+          shortSummary: 'Audit failed to complete',
+          detailedSummary: error instanceof Error ? error.message : 'An unknown error occurred during the audit.'
+        }
+      })
+      console.log(`[Audit ${auditId}] Marked as failed in database`)
+    } catch (updateError) {
+      console.error(`[Audit ${auditId}] Failed to update status to 'failed':`, updateError)
+    }
   }
 }
 

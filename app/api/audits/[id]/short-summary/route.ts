@@ -6,15 +6,18 @@ import { prisma } from '@/lib/db'
 // GET /api/audits/[id]/short-summary - Get short summary for copying
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   const session = await getServerSession(authOptions)
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const resolvedParams = params instanceof Promise ? await params : params
+  const auditId = resolvedParams.id
+
   const audit = await prisma.audit.findUnique({
-    where: { id: params.id },
+    where: { id: auditId },
     select: { shortSummary: true }
   })
 

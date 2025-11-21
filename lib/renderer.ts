@@ -316,7 +316,7 @@ export async function analyzeImages(page: Page, baseUrl: string): Promise<{
     
     // Picture elements
     document.querySelectorAll('picture source').forEach(source => {
-      const srcset = source.srcset || source.getAttribute('srcset')
+      const srcset = (source as HTMLSourceElement).srcset || source.getAttribute('srcset')
       if (srcset) {
         images.push({
           src: srcset,
@@ -387,7 +387,7 @@ export async function analyzeLinks(page: Page, baseUrl: string): Promise<{
     // Regular anchor tags
     document.querySelectorAll('a[href]').forEach(a => {
       try {
-        const href = a.href || a.getAttribute('href')
+        const href = (a as HTMLAnchorElement).href || a.getAttribute('href')
         if (!href) return
         
         const url = new URL(href, base)

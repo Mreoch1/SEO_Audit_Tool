@@ -8,12 +8,15 @@ import { sendEmail } from '@/lib/email'
 // POST /api/audits/[id]/email - Email PDF report
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   const session = await getServerSession(authOptions)
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const resolvedParams = params instanceof Promise ? await params : params
+  const auditId = resolvedParams.id
 
   const body = await request.json()
   const { emailTo } = body
@@ -23,7 +26,7 @@ export async function POST(
   }
 
   const audit = await prisma.audit.findUnique({
-    where: { id: params.id }
+    where: { id: auditId }
   })
 
   if (!audit) {
@@ -39,6 +42,10 @@ export async function POST(
     brandSubtitle: settings?.brandSubtitle || undefined,
     primaryColor: settings?.primaryColor || '#3b82f6',
     logoUrl: settings?.logoUrl || undefined
+  }
+
+  if (!audit.rawJson) {
+    return NextResponse.json({ error: 'Audit data not found' }, { status: 404 })
   }
 
   const auditResult = JSON.parse(audit.rawJson)

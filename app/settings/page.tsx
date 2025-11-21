@@ -16,6 +16,7 @@ interface Settings {
   smtpHost?: string
   smtpPort?: number
   smtpUser?: string
+  smtpPassword?: string
   smtpFrom?: string
 }
 

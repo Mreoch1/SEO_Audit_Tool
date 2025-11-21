@@ -18,22 +18,143 @@ export default function NewAuditPage() {
   const [selectedTier, setSelectedTier] = useState<AuditTier | null>(null)
   const [loading, setLoading] = useState(false)
   const [addOns, setAddOns] = useState<AuditAddOns>({})
+  const [urlError, setUrlError] = useState('')
   
   const tierInfo = {
-    starter: { maxPages: 3, maxDepth: 2, price: '$39', name: 'Starter', description: 'Quick scan of 1-3 pages' },
-    standard: { maxPages: 20, maxDepth: 3, price: '$89', name: 'Standard', description: 'Full site audit (up to 20 pages)' },
-    advanced: { maxPages: 50, maxDepth: 5, price: '$149', name: 'Advanced', description: 'Complete audit (up to 50 pages)' }
+    starter: { 
+      maxPages: 3, 
+      maxDepth: 2, 
+      price: '$19', 
+      name: 'Starter: Mini SEO Audit', 
+      description: 'Quick scan of 1–3 pages with key SEO issues and fixes.',
+      deliveryDays: 1,
+      keywords: 0,
+      includes: {
+        titleOptimization: true,
+        h1H2H3Tags: true,
+        metaDescription: true,
+        imageAltTags: true,
+        schemaMarkup: false,
+        pageAudit: false
+      }
+    },
+    standard: { 
+      maxPages: 20, 
+      maxDepth: 3, 
+      price: '$29', 
+      name: 'Standard: Full SEO Audit', 
+      description: 'Full site audit with technical, on-page, and performance checks.',
+      deliveryDays: 2,
+      keywords: 5,
+      includes: {
+        titleOptimization: true,
+        h1H2H3Tags: true,
+        metaDescription: true,
+        imageAltTags: true,
+        schemaMarkup: true,
+        pageAudit: true
+      }
+    },
+    advanced: { 
+      maxPages: 50, 
+      maxDepth: 5, 
+      price: '$39', 
+      name: 'Advanced: SEO Audit+Competitor', 
+      description: 'Complete audit plus competitor analysis and action plan.',
+      deliveryDays: 2,
+      keywords: 10,
+      includes: {
+        titleOptimization: true,
+        h1H2H3Tags: true,
+        metaDescription: true,
+        imageAltTags: true,
+        schemaMarkup: true,
+        pageAudit: true
+      }
+    }
   }
+
+  const serviceOptions = [
+    { key: 'titleOptimization', label: 'Title Optimization' },
+    { key: 'h1H2H3Tags', label: 'H1, H2, H3 Tags' },
+    { key: 'metaDescription', label: 'Meta Description' },
+    { key: 'imageAltTags', label: 'Image Alt Tags' },
+    { key: 'schemaMarkup', label: 'Schema Markup' },
+    { key: 'pageAudit', label: 'Page Audit' }
+  ]
   
   const addOnInfo = {
-    fastDelivery: { name: 'Fast Delivery', price: 25, description: '24-hour delivery' },
-    additionalPages: { name: 'Additional Pages', price: 10, description: 'Per page', unit: 'pages' },
-    additionalKeywords: { name: 'Additional Keywords', price: 5, description: 'Per keyword', unit: 'keywords' },
-    imageAltTags: { name: 'Image Alt Tags', price: 15, description: 'Alt tag optimization' },
-    schemaMarkup: { name: 'Schema Markup', price: 30, description: 'Schema markup analysis' },
-    competitorAnalysis: { name: 'Competitor Keyword Gap', price: 39, description: 'Competitor analysis report' }
+    fastDelivery: {
+      name: 'Fast Delivery',
+      getPrice: (tier: AuditTier | null) => {
+        if (tier === 'standard') return 10
+        if (tier === 'advanced') return 15
+        return 0 // Not available for starter
+      },
+      getDays: () => 1,
+      description: 'Faster delivery'
+    },
+    additionalPages: {
+      name: 'Additional Page Optimized',
+      price: 5,
+      description: 'Per page',
+      unit: 'pages'
+    },
+    additionalKeywords: {
+      name: 'Additional Keyword Researched',
+      price: 1,
+      description: 'Per keyword',
+      unit: 'keywords'
+    },
+    schemaMarkup: {
+      name: 'Schema Markup',
+      price: 15,
+      description: 'Schema markup analysis'
+    },
+    competitorAnalysis: { 
+      name: 'Competitor Keyword Gap Report', 
+      price: 15, 
+      description: 'Full keyword gap analysis for your top competitors.' 
+    }
   }
   
+  const formatUrl = (input: string): string => {
+    const trimmed = input.trim()
+    if (!trimmed) return trimmed
+    
+    // If it already starts with http:// or https://, return as-is
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    
+    // Otherwise, add https://
+    return `https://${trimmed}`
+  }
+
+  const validateUrl = (input: string): boolean => {
+    if (!input.trim()) {
+      setUrlError('URL is required')
+      return false
+    }
+    
+    try {
+      const formatted = formatUrl(input)
+      new URL(formatted)
+      setUrlError('')
+      return true
+    } catch {
+      setUrlError('Please enter a valid URL (e.g., example.com or https://example.com)')
+      return false
+    }
+  }
+
+  const handleUrlChange = (value: string) => {
+    setUrl(value)
+    if (urlError) {
+      setUrlError('')
+    }
+  }
+
   const toggleAddOn = (key: keyof AuditAddOns, isNumeric = false) => {
     if (isNumeric) {
       const current = (addOns[key] as number) || 0
@@ -58,10 +179,15 @@ export default function NewAuditPage() {
   
   const calculateTotal = () => {
     let total = selectedTier ? parseInt(tierInfo[selectedTier].price.replace('$', '')) : 0
-    if (addOns.fastDelivery) total += addOnInfo.fastDelivery.price
-    if (addOns.additionalPages) total += addOnInfo.additionalPages.price * (addOns.additionalPages as number)
-    if (addOns.additionalKeywords) total += addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)
-    if (addOns.imageAltTags) total += addOnInfo.imageAltTags.price
+    if (addOns.fastDelivery && selectedTier) {
+      total += addOnInfo.fastDelivery.getPrice(selectedTier)
+    }
+    if (addOns.additionalPages) {
+      total += addOnInfo.additionalPages.price * (addOns.additionalPages as number)
+    }
+    if (addOns.additionalKeywords) {
+      total += addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)
+    }
     if (addOns.schemaMarkup) total += addOnInfo.schemaMarkup.price
     if (addOns.competitorAnalysis) total += addOnInfo.competitorAnalysis.price
     return total
@@ -80,14 +206,12 @@ export default function NewAuditPage() {
       return
     }
     
-    if (!url) {
-      toast({
-        title: 'URL required',
-        description: 'Please enter a website URL',
-        variant: 'destructive'
-      })
+    // Validate and format URL
+    if (!validateUrl(url)) {
       return
     }
+    
+    const formattedUrl = formatUrl(url)
     
     setLoading(true)
 
@@ -97,7 +221,7 @@ export default function NewAuditPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url,
+          url: formattedUrl,
           tier: auditTier,
           maxPages: tierData.maxPages,
           maxDepth: tierData.maxDepth,
@@ -106,20 +230,26 @@ export default function NewAuditPage() {
       })
 
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to create audit')
+        // Try to parse error message, but handle HTML responses
+        let errorMessage = 'Failed to create audit'
+        try {
+          const errorData = await res.json()
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          // If response is not JSON (e.g., 404 HTML page), use status text
+          errorMessage = `Server error: ${res.status} ${res.statusText}`
+        }
+        throw new Error(errorMessage)
       }
 
       const data = await res.json()
       toast({
         title: 'Audit started',
-        description: 'The audit is running. You will be redirected when complete.'
+        description: 'The audit is running. You will be redirected to the audit page.'
       })
       
-      // Poll for completion (simple approach - in production, use websockets or better polling)
-      setTimeout(() => {
-        router.push(`/audits/${data.id}`)
-      }, 2000)
+      // Redirect immediately to audit page (it will poll for completion)
+      router.push(`/audits/${data.id}`)
     } catch (error) {
       toast({
         title: 'Error',
@@ -154,14 +284,20 @@ export default function NewAuditPage() {
                   id="url"
                   type="url"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://example.com"
+                  onChange={(e) => handleUrlChange(e.target.value)}
+                  onBlur={() => url && validateUrl(url)}
+                  placeholder="example.com or https://example.com"
                   required
                   disabled={loading}
+                  className={urlError ? 'border-red-500' : ''}
                 />
-                <p className="text-sm text-gray-500">
-                  Enter the root domain or any page URL to start crawling
-                </p>
+                {urlError ? (
+                  <p className="text-sm text-red-600">{urlError}</p>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    Enter the root domain or any page URL to start crawling
+                  </p>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -190,8 +326,26 @@ export default function NewAuditPage() {
                         <div className="font-semibold text-lg">{info.name}</div>
                         <div className="text-2xl font-bold text-blue-600 mt-1">{info.price}</div>
                         <div className="text-sm text-gray-600 mt-2">{info.description}</div>
-                        <div className="text-xs text-gray-500 mt-2">
-                          Up to {info.maxPages} pages • Depth {info.maxDepth}
+                        <div className="text-xs text-gray-500 mt-2 space-y-1">
+                          <div>Up to {info.maxPages} pages • Depth {info.maxDepth}</div>
+                          <div>{info.keywords} keywords • {info.deliveryDays} {info.deliveryDays === 1 ? 'day' : 'days'} delivery</div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="text-xs font-medium text-gray-700 mb-2">Includes:</div>
+                          <div className="space-y-1">
+                            {serviceOptions.map(service => (
+                              <div key={service.key} className="flex items-center text-xs">
+                                {info.includes[service.key as keyof typeof info.includes] ? (
+                                  <Check className="h-3 w-3 text-green-600 mr-1.5 flex-shrink-0" />
+                                ) : (
+                                  <div className="h-3 w-3 mr-1.5 flex-shrink-0" />
+                                )}
+                                <span className={info.includes[service.key as keyof typeof info.includes] ? 'text-gray-700' : 'text-gray-400'}>
+                                  {service.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </button>
                     )
@@ -202,37 +356,39 @@ export default function NewAuditPage() {
               {selectedTier && (
                 <div className="space-y-3 border-t pt-4">
                   <Label>Optional Add-Ons</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     {/* Fast Delivery */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <div className="font-medium">{addOnInfo.fastDelivery.name}</div>
-                        <div className="text-sm text-gray-500">{addOnInfo.fastDelivery.description}</div>
+                    {selectedTier !== 'starter' && (
+                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.fastDelivery ? 'bg-blue-50 border-blue-200' : ''}`}>
+                        <div>
+                          <div className="font-medium">{addOnInfo.fastDelivery.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.fastDelivery.description} ({addOnInfo.fastDelivery.getDays()} delivery day)</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">+${addOnInfo.fastDelivery.getPrice(selectedTier)}.00</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={addOns.fastDelivery ? "default" : "outline"}
+                            onClick={() => toggleAddOn('fastDelivery')}
+                            disabled={loading}
+                          >
+                            {addOns.fastDelivery ? 'Added' : 'Add'}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.fastDelivery.price}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={addOns.fastDelivery ? "default" : "outline"}
-                          onClick={() => toggleAddOn('fastDelivery')}
-                          disabled={loading}
-                        >
-                          {addOns.fastDelivery ? 'Added' : 'Add'}
-                        </Button>
-                      </div>
-                    </div>
+                    )}
 
-                    {/* Additional Pages */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                    {/* Additional Page Optimized */}
+                    <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.additionalPages && (addOns.additionalPages as number) > 0 ? 'bg-blue-50 border-blue-200' : ''}`}>
                       <div>
                         <div className="font-medium">{addOnInfo.additionalPages.name}</div>
                         <div className="text-sm text-gray-500">{addOnInfo.additionalPages.description}</div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.additionalPages.price}/{addOnInfo.additionalPages.unit}</span>
-                        <div className="flex items-center gap-1">
-                          {addOns.additionalPages && (addOns.additionalPages as number) > 0 && (
+                        <span className="text-sm font-medium">+${addOnInfo.additionalPages.price}.00/{addOnInfo.additionalPages.unit}</span>
+                        <div className="flex items-center gap-2">
+                          {addOns.additionalPages && (addOns.additionalPages as number) > 0 ? (
                             <>
                               <Button
                                 type="button"
@@ -243,32 +399,44 @@ export default function NewAuditPage() {
                               >
                                 <Minus className="h-3 w-3" />
                               </Button>
-                              <span className="text-sm w-8 text-center">{addOns.additionalPages}</span>
+                              <span className="text-sm font-semibold w-8 text-center">{addOns.additionalPages}</span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => toggleAddOn('additionalPages', true)}
+                                disabled={loading}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                              <span className="text-xs text-gray-600">(+${addOnInfo.additionalPages.price * (addOns.additionalPages as number)}.00)</span>
                             </>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleAddOn('additionalPages', true)}
+                              disabled={loading}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add
+                            </Button>
                           )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => toggleAddOn('additionalPages', true)}
-                            disabled={loading}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
                         </div>
                       </div>
                     </div>
 
-                    {/* Additional Keywords */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                    {/* Additional Keyword Researched */}
+                    <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.additionalKeywords && (addOns.additionalKeywords as number) > 0 ? 'bg-blue-50 border-blue-200' : ''}`}>
                       <div>
                         <div className="font-medium">{addOnInfo.additionalKeywords.name}</div>
                         <div className="text-sm text-gray-500">{addOnInfo.additionalKeywords.description}</div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.additionalKeywords.price}/{addOnInfo.additionalKeywords.unit}</span>
-                        <div className="flex items-center gap-1">
-                          {addOns.additionalKeywords && (addOns.additionalKeywords as number) > 0 && (
+                        <span className="text-sm font-medium">+${addOnInfo.additionalKeywords.price}.00/{addOnInfo.additionalKeywords.unit}</span>
+                        <div className="flex items-center gap-2">
+                          {addOns.additionalKeywords && (addOns.additionalKeywords as number) > 0 ? (
                             <>
                               <Button
                                 type="button"
@@ -279,50 +447,42 @@ export default function NewAuditPage() {
                               >
                                 <Minus className="h-3 w-3" />
                               </Button>
-                              <span className="text-sm w-8 text-center">{addOns.additionalKeywords}</span>
+                              <span className="text-sm font-semibold w-8 text-center">{addOns.additionalKeywords}</span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => toggleAddOn('additionalKeywords', true)}
+                                disabled={loading}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                              <span className="text-xs text-gray-600">(+${addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)}.00)</span>
                             </>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleAddOn('additionalKeywords', true)}
+                              disabled={loading}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add
+                            </Button>
                           )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => toggleAddOn('additionalKeywords', true)}
-                            disabled={loading}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
                         </div>
                       </div>
                     </div>
 
-                    {/* Image Alt Tags */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <div className="font-medium">{addOnInfo.imageAltTags.name}</div>
-                        <div className="text-sm text-gray-500">{addOnInfo.imageAltTags.description}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.imageAltTags.price}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={addOns.imageAltTags ? "default" : "outline"}
-                          onClick={() => toggleAddOn('imageAltTags')}
-                          disabled={loading}
-                        >
-                          {addOns.imageAltTags ? 'Added' : 'Add'}
-                        </Button>
-                      </div>
-                    </div>
-
                     {/* Schema Markup */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.schemaMarkup ? 'bg-blue-50 border-blue-200' : ''}`}>
                       <div>
                         <div className="font-medium">{addOnInfo.schemaMarkup.name}</div>
                         <div className="text-sm text-gray-500">{addOnInfo.schemaMarkup.description}</div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.schemaMarkup.price}</span>
+                        <span className="text-sm font-medium">+${addOnInfo.schemaMarkup.price}.00</span>
                         <Button
                           type="button"
                           size="sm"
@@ -335,14 +495,14 @@ export default function NewAuditPage() {
                       </div>
                     </div>
 
-                    {/* Competitor Analysis */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                    {/* Competitor Keyword Gap Report */}
+                    <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.competitorAnalysis ? 'bg-blue-50 border-blue-200' : ''}`}>
                       <div>
                         <div className="font-medium">{addOnInfo.competitorAnalysis.name}</div>
                         <div className="text-sm text-gray-500">{addOnInfo.competitorAnalysis.description}</div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.competitorAnalysis.price}</span>
+                        <span className="text-sm font-medium">+${addOnInfo.competitorAnalysis.price}.00</span>
                         <Button
                           type="button"
                           size="sm"
@@ -356,10 +516,46 @@ export default function NewAuditPage() {
                     </div>
                   </div>
                   
-                  <div className="flex justify-end pt-2 border-t">
-                    <div className="text-right">
-                      <div className="text-sm text-gray-500">Total</div>
-                      <div className="text-2xl font-bold text-blue-600">${calculateTotal()}</div>
+                  <div className="pt-4 border-t">
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">{selectedTier ? tierInfo[selectedTier].name : ''} Audit</span>
+                        <span className="font-medium">${selectedTier ? parseInt(tierInfo[selectedTier].price.replace('$', '')) : 0}.00</span>
+                      </div>
+                      {addOns.fastDelivery && selectedTier && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.fastDelivery.name}</span>
+                          <span className="font-medium">+${addOnInfo.fastDelivery.getPrice(selectedTier)}.00</span>
+                        </div>
+                      )}
+                      {addOns.additionalPages && (addOns.additionalPages as number) > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.additionalPages.name} ({(addOns.additionalPages as number)} {addOns.additionalPages === 1 ? 'page' : 'pages'})</span>
+                          <span className="font-medium">+${addOnInfo.additionalPages.price * (addOns.additionalPages as number)}.00</span>
+                        </div>
+                      )}
+                      {addOns.additionalKeywords && (addOns.additionalKeywords as number) > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.additionalKeywords.name} ({(addOns.additionalKeywords as number)} {addOns.additionalKeywords === 1 ? 'keyword' : 'keywords'})</span>
+                          <span className="font-medium">+${addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)}.00</span>
+                        </div>
+                      )}
+                      {addOns.schemaMarkup && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.schemaMarkup.name}</span>
+                          <span className="font-medium">+${addOnInfo.schemaMarkup.price}.00</span>
+                        </div>
+                      )}
+                      {addOns.competitorAnalysis && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.competitorAnalysis.name}</span>
+                          <span className="font-medium">+${addOnInfo.competitorAnalysis.price}.00</span>
+                        </div>
+                      )}
+                      <div className="border-t pt-2 mt-2 flex justify-between items-center">
+                        <span className="font-semibold text-gray-900">Total</span>
+                        <span className="text-2xl font-bold text-blue-600">${calculateTotal()}.00</span>
+                      </div>
                     </div>
                   </div>
                 </div>

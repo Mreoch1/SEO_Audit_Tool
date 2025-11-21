@@ -39,21 +39,44 @@ export async function fetchPageSpeedInsights(url: string): Promise<PageSpeedData
 
   try {
     // Fetch mobile and desktop data in parallel
-    const [mobileResult, desktopResult] = await Promise.all([
+    // Use Promise.allSettled to handle partial failures gracefully
+    // (If one strategy fails, we still return data from the other)
+    const [mobileSettled, desktopSettled] = await Promise.allSettled([
       fetchPageSpeedForStrategy(url, API_KEY, 'mobile'),
       fetchPageSpeedForStrategy(url, API_KEY, 'desktop')
     ])
 
-    if (!mobileResult || !desktopResult) {
+    const mobileResult = mobileSettled.status === 'fulfilled' ? mobileSettled.value : null
+    const desktopResult = desktopSettled.status === 'fulfilled' ? desktopSettled.value : null
+
+    // Return null if both failed (don't return partial data)
+    if (!mobileResult && !desktopResult) {
       return null
     }
 
+    // If one or both succeeded, return what we have
+    // The audit will still work, just with partial or full PageSpeed data
     return {
-      mobile: mobileResult,
-      desktop: desktopResult
+      mobile: mobileResult || {
+        lcp: 0,
+        fcp: 0,
+        cls: 0,
+        inp: 0,
+        ttfb: 0,
+        opportunities: []
+      },
+      desktop: desktopResult || {
+        lcp: 0,
+        fcp: 0,
+        cls: 0,
+        inp: 0,
+        ttfb: 0,
+        opportunities: []
+      }
     }
   } catch (error) {
-    console.error('PageSpeed Insights API error:', error)
+    // This catch block should rarely be hit since individual errors are handled in fetchPageSpeedForStrategy
+    console.warn('PageSpeed Insights API error:', error instanceof Error ? error.message : error)
     return null
   }
 }
@@ -70,12 +93,31 @@ async function fetchPageSpeedForStrategy(
 
   try {
     const response = await fetch(apiUrl, {
-      signal: AbortSignal.timeout(30000) // 30 second timeout
+      signal: AbortSignal.timeout(60000) // 60 second timeout for long audits
     })
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`PageSpeed API error (${strategy}):`, response.status, errorText)
+      let errorMessage = `PageSpeed API returned ${response.status}`
+      try {
+        const errorData = await response.json()
+        if (errorData?.error?.message) {
+          errorMessage = errorData.error.message
+          // Check for common error types
+          if (errorMessage.includes('FAILED_DOCUMENT_REQUEST') || errorMessage.includes('ERR_TIMED_OUT')) {
+            console.warn(`PageSpeed API: Page ${url} timed out or couldn't be loaded (${strategy}). This is normal for slow websites.`)
+          } else if (errorMessage.includes('INVALID_URL')) {
+            console.warn(`PageSpeed API: Invalid URL ${url} (${strategy})`)
+          } else {
+            console.warn(`PageSpeed API error (${strategy}): ${errorMessage}`)
+          }
+        } else {
+          console.warn(`PageSpeed API error (${strategy}): ${response.status}`)
+        }
+      } catch (e) {
+        // Response might not be JSON
+        console.warn(`PageSpeed API error (${strategy}): ${response.status} - Unable to parse error response`)
+      }
+      // Return null gracefully - the audit will continue without PageSpeed data
       return null
     }
 
@@ -151,10 +193,13 @@ async function fetchPageSpeedForStrategy(
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error(`PageSpeed Insights fetch timeout for ${strategy}:`, url)
+      console.warn(`PageSpeed Insights fetch timeout for ${strategy}: ${url} (exceeded 60s limit). This is normal for slow websites.`)
+    } else if (error instanceof Error && error.message.includes('fetch')) {
+      console.warn(`PageSpeed Insights fetch failed for ${strategy}: Network error (${url}). The audit will continue without PageSpeed data.`)
     } else {
-      console.error(`PageSpeed Insights fetch failed for ${strategy}:`, error)
+      console.warn(`PageSpeed Insights fetch failed for ${strategy}: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
+    // Return null gracefully - the audit will continue without PageSpeed data
     return null
   }
 }
