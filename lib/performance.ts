@@ -2,21 +2,64 @@
  * Performance Analysis Module
  * 
  * Analyzes Core Web Vitals and generates performance issues
+ * Uses PageSpeed Insights API data when available, falls back to performanceMetrics
  */
 
 import { Issue, PageData } from './types'
 
 /**
  * Generate performance issues based on Core Web Vitals
+ * Prefers PageSpeed Insights data (more accurate), falls back to performanceMetrics
  */
 export function generatePerformanceIssues(page: PageData): Issue[] {
   const issues: Issue[] = []
   
-  if (!page.performanceMetrics) {
-    return issues
+  // Use PageSpeed data if available (more accurate), otherwise fall back to performanceMetrics
+  let lcp: number | undefined
+  let fcp: number | undefined
+  let cls: number | undefined
+  let inp: number | undefined
+  let fid: number | undefined
+  let ttfb: number | undefined
+  let tbt: number | undefined
+  let opportunities: Array<{ title: string; description: string; savings: number }> = []
+  
+  if (page.pageSpeedData) {
+    // Use mobile metrics (stricter standards)
+    const mobile = page.pageSpeedData.mobile
+    lcp = mobile.lcp
+    fcp = mobile.fcp
+    cls = mobile.cls
+    inp = mobile.inp
+    ttfb = mobile.ttfb
+    opportunities = mobile.opportunities.map(opp => ({
+      title: opp.title,
+      description: opp.description,
+      savings: opp.savings
+    }))
+  } else if (page.performanceMetrics) {
+    // Fall back to performanceMetrics from Puppeteer
+    lcp = page.performanceMetrics.lcp
+    fcp = page.performanceMetrics.fcp
+    cls = page.performanceMetrics.cls
+    fid = page.performanceMetrics.fid
+    tbt = page.performanceMetrics.tbt
+    ttfb = page.performanceMetrics.ttfb
   }
   
-  const { lcp, cls, fid, tbt, fcp, ttfb } = page.performanceMetrics
+  // If no performance data available at all, check basic load time
+  if (!lcp && !fcp && !page.pageSpeedData && !page.performanceMetrics) {
+    if (page.loadTime > 3000) {
+      issues.push({
+        category: 'Performance',
+        severity: page.loadTime > 5000 ? 'High' : 'Medium',
+        message: 'Slow page load time',
+        details: `Page loads in ${page.loadTime}ms (recommended: <3s). Consider optimizing assets, using a CDN, or reducing server response time.`,
+        affectedPages: [page.url]
+      })
+    }
+    return issues
+  }
   
   // LCP (Largest Contentful Paint)
   // Good: <2.5s, Needs Improvement: 2.5s-4s, Poor: >4s
@@ -62,9 +105,29 @@ export function generatePerformanceIssues(page: PageData): Issue[] {
     }
   }
   
-  // FID (First Input Delay) / INP (Interaction to Next Paint)
-  // Good: <100ms, Needs Improvement: 100ms-300ms, Poor: >300ms
-  if (fid) {
+  // INP (Interaction to Next Paint) - preferred over FID
+  // Good: <200ms, Needs Improvement: 200ms-500ms, Poor: >500ms
+  if (inp !== undefined) {
+    if (inp > 500) {
+      issues.push({
+        category: 'Performance',
+        severity: 'High',
+        message: 'Slow Interaction to Next Paint (INP)',
+        details: `INP is ${Math.round(inp)}ms (target: <200ms, poor: >500ms). Users experience delays when interacting with your page.`,
+        affectedPages: [page.url]
+      })
+    } else if (inp > 200) {
+      issues.push({
+        category: 'Performance',
+        severity: 'Medium',
+        message: 'Interaction to Next Paint needs improvement',
+        details: `INP is ${Math.round(inp)}ms (target: <200ms). Reduce JavaScript execution time, break up long tasks.`,
+        affectedPages: [page.url]
+      })
+    }
+  } else if (fid) {
+    // Fall back to FID if INP not available
+    // Good: <100ms, Needs Improvement: 100ms-300ms, Poor: >300ms
     if (fid > 300) {
       issues.push({
         category: 'Performance',
@@ -150,15 +213,40 @@ export function generatePerformanceIssues(page: PageData): Issue[] {
     }
   }
   
-  // Overall load time (fallback if no CWV available)
-  if (page.loadTime > 3000 && !lcp && !fcp) {
-    issues.push({
-      category: 'Performance',
-      severity: page.loadTime > 5000 ? 'High' : 'Medium',
-      message: 'Slow page load time',
-      details: `Page loads in ${page.loadTime}ms (recommended: <3s). Consider optimizing assets, using a CDN, or reducing server response time.`,
-      affectedPages: [page.url]
+  // Add PageSpeed opportunities as issues
+  if (opportunities.length > 0) {
+    opportunities.slice(0, 5).forEach(opp => {
+      if (opp.savings > 500) { // Only show opportunities with >500ms savings
+        issues.push({
+          category: 'Performance',
+          severity: 'Medium',
+          message: opp.title,
+          details: `${opp.description} Potential savings: ${Math.round(opp.savings)}ms.`,
+          affectedPages: [page.url]
+        })
+      }
     })
+  }
+  
+  // TBT (Total Blocking Time) - only from performanceMetrics
+  if (tbt) {
+    if (tbt > 600) {
+      issues.push({
+        category: 'Performance',
+        severity: 'High',
+        message: 'High Total Blocking Time (TBT)',
+        details: `TBT is ${tbt}ms (target: <200ms, poor: >600ms). Long tasks block the main thread and hurt interactivity.`,
+        affectedPages: [page.url]
+      })
+    } else if (tbt > 200) {
+      issues.push({
+        category: 'Performance',
+        severity: 'Medium',
+        message: 'Total Blocking Time needs improvement',
+        details: `TBT is ${tbt}ms (target: <200ms). Optimize JavaScript, reduce third-party script impact, use code splitting.`,
+        affectedPages: [page.url]
+      })
+    }
   }
   
   return issues

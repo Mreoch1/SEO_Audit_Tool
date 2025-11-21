@@ -13,7 +13,8 @@
     "audit": "tsx scripts/runAudit.ts",
     "runScheduledAudits": "tsx scripts/runScheduledAudits.ts",
     "create-user": "tsx scripts/createUser.ts",
-    "test-rendering": "tsx scripts/testRendering.ts"
+    "test-rendering": "tsx scripts/testRendering.ts",
+    "test-pagespeed": "tsx scripts/testPageSpeed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.7.1",

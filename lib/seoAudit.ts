@@ -10,6 +10,9 @@ import { renderPage, RenderedPageData } from './renderer'
 import { generatePerformanceIssues } from './performance'
 import { calculateRenderingPercentage, generateLLMReadabilityIssues } from './llmReadability'
 import { analyzeSchema } from './schemaAnalyzer'
+import { fetchPageSpeedInsights } from './pagespeed'
+import { checkHttpVersion, checkCompression } from './technical'
+import { checkSocialMediaPresence } from './social'
 
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier'>> = {
   maxPages: 50,
@@ -90,6 +93,21 @@ export async function runAudit(
   
   // Analyze site-wide issues
   analyzeSiteWideIssues(pages, siteWide, allIssues)
+  
+  // Check social media presence (on main page) - re-fetch to get full HTML
+  if (pages.length > 0) {
+    try {
+      const response = await fetch(rootUrl, {
+        signal: AbortSignal.timeout(5000),
+        headers: { 'User-Agent': opts.userAgent }
+      })
+      const html = await response.text()
+      siteWide.socialMedia = checkSocialMediaPresence(html, rootUrl)
+    } catch (error) {
+      // If fetch fails, skip social media check
+      console.warn('Failed to fetch HTML for social media check:', error)
+    }
+  }
   
   // Enhanced schema issues (includes Identity Schema checks)
   // Only check for Standard/Advanced tiers or if schema add-on is selected
@@ -277,6 +295,7 @@ async function crawlPages(
   needsImageDetails = false
 ): Promise<void> {
   const queue: Array<{ url: string; depth: number }> = [{ url: startUrl, depth: 0 }]
+  const issueMap = new Map<string, Issue>()
   
   while (queue.length > 0 && pages.length < options.maxPages) {
     const { url, depth } = queue.shift()!
@@ -288,16 +307,16 @@ async function crawlPages(
     crawledUrls.add(url)
     
     try {
-      const pageData = await analyzePage(url, options.userAgent, needsImageDetails)
+      // Check if this is the main/start page
+      const isMainPage = url === startUrl && depth === 0
+      const pageData = await analyzePage(url, options.userAgent, needsImageDetails, isMainPage)
       pages.push(pageData)
       
-      // Generate performance issues if metrics are available
-      if (pageData.performanceMetrics) {
-        const perfIssues = generatePerformanceIssues(pageData)
-        perfIssues.forEach(issue => {
-          consolidateIssue(issueMap, issue)
-        })
-      }
+      // Generate performance issues (checks both performanceMetrics and pageSpeedData)
+      const perfIssues = generatePerformanceIssues(pageData)
+      perfIssues.forEach(issue => {
+        consolidateIssue(issueMap, issue)
+      })
       
       // Generate LLM Readability issues if data is available
       if (pageData.llmReadability) {
@@ -346,12 +365,17 @@ async function crawlPages(
       })
     }
   }
+  
+  // Add consolidated issues from crawl to main issues array
+  issueMap.forEach(issue => {
+    issues.push(issue)
+  })
 }
 
 /**
  * Analyze a single page using JavaScript rendering
  */
-async function analyzePage(url: string, userAgent: string, needsImageDetails = false): Promise<PageData> {
+async function analyzePage(url: string, userAgent: string, needsImageDetails = false, isMainPage = false): Promise<PageData> {
   try {
     // Use Puppeteer to render the page with JavaScript execution
     const rendered = await renderPage(url, userAgent)
@@ -372,6 +396,16 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
     // Calculate LLM Readability (rendering percentage)
     const llmReadability = calculateRenderingPercentage(initialHtml, rendered.renderedHtml)
     
+    // Check HTTP version and compression (quick checks)
+    const [httpVersion, compression] = await Promise.all([
+      checkHttpVersion(url, userAgent),
+      checkCompression(url, userAgent)
+    ])
+    
+    // Fetch PageSpeed Insights (only for main page to save API calls and time)
+    // This is async and won't block the audit, but we'll wait for it
+    const pageSpeedPromise = isMainPage ? fetchPageSpeedInsights(url) : Promise.resolve(null)
+    
     // Parse the rendered HTML
     const pageData = await parseHtmlWithRenderer(
       rendered.renderedHtml,
@@ -384,14 +418,36 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
       rendered.imageData,
       rendered.linkData,
       llmReadability,
-      needsImageDetails
+      needsImageDetails,
+      httpVersion,
+      compression
     )
+    
+    // Wait for PageSpeed data and add it
+    const pageSpeedData = await pageSpeedPromise
+    if (pageSpeedData) {
+      pageData.pageSpeedData = pageSpeedData
+    }
     
     return pageData
   } catch (error) {
     // Fallback to basic fetch if rendering fails
     console.warn(`Rendering failed for ${url}, falling back to basic fetch:`, error)
-    return analyzePageFallback(url, userAgent)
+    const fallbackData = await analyzePageFallback(url, userAgent)
+    
+    // Still try to get HTTP version and compression even in fallback
+    try {
+      const [httpVersion, compression] = await Promise.all([
+        checkHttpVersion(url, userAgent),
+        checkCompression(url, userAgent)
+      ])
+      fallbackData.httpVersion = httpVersion
+      fallbackData.compression = compression
+    } catch {
+      // Ignore errors for technical checks
+    }
+    
+    return fallbackData
   }
 }
 
@@ -437,7 +493,9 @@ async function parseHtmlWithRenderer(
   imageData?: RenderedPageData['imageData'],
   linkData?: RenderedPageData['linkData'],
   llmReadability?: PageData['llmReadability'],
-  needsImageDetails = false
+  needsImageDetails = false,
+  httpVersion?: PageData['httpVersion'],
+  compression?: PageData['compression']
 ): Promise<PageData> {
   // Parse basic HTML elements (title, meta, headers, etc.)
   const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType)
@@ -499,7 +557,9 @@ async function parseHtmlWithRenderer(
     internalLinkCount: finalLinkData.internalLinkCount,
     externalLinkCount: finalLinkData.externalLinkCount,
     performanceMetrics,
-    llmReadability
+    llmReadability,
+    httpVersion,
+    compression
   }
 }
 
@@ -864,8 +924,40 @@ function analyzeSiteWideIssues(
       })
     }
     
+    // HTTP version check
+    if (page.httpVersion === 'http/1.1') {
+      consolidateIssue(issueMap, {
+        category: 'Technical',
+        severity: 'Low',
+        message: 'Using HTTP/1.1',
+        details: 'Consider upgrading to HTTP/2 or HTTP/3 for better performance. HTTP/2 provides multiplexing and header compression.',
+        affectedPages: [page.url]
+      })
+    }
+    
+    // Compression check
+    if (page.compression) {
+      if (!page.compression.gzip && !page.compression.brotli) {
+        consolidateIssue(issueMap, {
+          category: 'Technical',
+          severity: 'Medium',
+          message: 'No compression enabled',
+          details: 'Enable GZIP or Brotli compression to reduce page size and improve load times. Most servers support GZIP compression.',
+          affectedPages: [page.url]
+        })
+      } else if (page.compression.gzip && !page.compression.brotli) {
+        consolidateIssue(issueMap, {
+          category: 'Technical',
+          severity: 'Low',
+          message: 'Consider enabling Brotli compression',
+          details: 'GZIP is enabled, but Brotli provides better compression ratios (typically 15-20% better than GZIP).',
+          affectedPages: [page.url]
+        })
+      }
+    }
+    
     // Slow page (only if no performance metrics available)
-    if (page.loadTime > 3000 && !page.performanceMetrics) {
+    if (page.loadTime > 3000 && !page.performanceMetrics && !page.pageSpeedData) {
       consolidateIssue(issueMap, {
         category: 'Performance',
         severity: 'Medium',
@@ -909,7 +1001,14 @@ function analyzeSiteWideIssues(
       category: 'Technical',
       severity: 'Low',
       message: 'Missing robots.txt',
-      details: 'robots.txt file not found'
+      details: 'robots.txt file not found. While not critical, it helps search engines understand crawling rules.'
+    })
+  } else if (siteWide.robotsTxtExists && !siteWide.robotsTxtReachable) {
+    issues.push({
+      category: 'Technical',
+      severity: 'Medium',
+      message: 'robots.txt unreachable',
+      details: 'robots.txt file exists but cannot be accessed (may return errors).'
     })
   }
   
@@ -920,6 +1019,41 @@ function analyzeSiteWideIssues(
       message: 'Missing sitemap.xml',
       details: 'sitemap.xml file not found'
     })
+  }
+  
+  // Social media issues
+  if (siteWide.socialMedia) {
+    const social = siteWide.socialMedia.metaTags
+    
+    // Open Graph issues
+    if (!social.openGraph.hasTags || social.openGraph.missingRequired.length > 0) {
+      issues.push({
+        category: 'On-page',
+        severity: 'Low',
+        message: 'Missing Open Graph tags',
+        details: `Missing required tags: ${social.openGraph.missingRequired.join(', ')}. Open Graph tags improve social media sharing appearance.`
+      })
+    }
+    
+    // Twitter Card issues
+    if (!social.twitter.hasCards || social.twitter.missingRequired.length > 0) {
+      issues.push({
+        category: 'On-page',
+        severity: 'Low',
+        message: 'Missing Twitter Card tags',
+        details: `Missing required tags: ${social.twitter.missingRequired.join(', ')}. Twitter Cards improve appearance when sharing on X/Twitter.`
+      })
+    }
+    
+    // Favicon check
+    if (!siteWide.socialMedia.hasFavicon) {
+      issues.push({
+        category: 'Technical',
+        severity: 'Low',
+        message: 'Missing favicon',
+        details: 'No favicon detected. Add a favicon.ico file or <link rel="icon"> tag for better branding in browser tabs.'
+      })
+    }
   }
 }
 

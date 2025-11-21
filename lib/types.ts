@@ -2,6 +2,8 @@
  * Core types for SEO audit system
  */
 
+import { PageSpeedData } from './pagespeed'
+
 export type IssueCategory = 
   | "Technical" 
   | "On-page" 
@@ -62,8 +64,19 @@ export interface PageData {
     renderedHtmlLength: number
     hasHighRendering: boolean
   }
+  httpVersion?: 'http/1.1' | 'http/2' | 'http/3' | 'unknown'
+  compression?: {
+    gzip: boolean
+    brotli: boolean
+    uncompressedSize?: number
+    compressedSize?: number
+    savingsPercent?: number
+  }
+  pageSpeedData?: PageSpeedData
   error?: string
 }
+
+import { SocialMediaData } from './social'
 
 export interface SiteWideData {
   robotsTxtExists: boolean
@@ -73,6 +86,7 @@ export interface SiteWideData {
   duplicateTitles: string[]
   duplicateMetaDescriptions: string[]
   brokenPages: string[]
+  socialMedia?: SocialMediaData
 }
 
 export interface ImageAltAnalysis {

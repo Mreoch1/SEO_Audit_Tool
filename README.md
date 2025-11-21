@@ -6,21 +6,28 @@ A production-ready web application and CLI tool for performing automated SEO sit
 
 - **Automated SEO Auditing**: Crawls websites and identifies technical, on-page, content, and accessibility issues
 - **JavaScript Rendering**: Uses Puppeteer to render pages with full JS execution, detecting dynamically loaded content
-- **Core Web Vitals**: Measures LCP, FID, CLS, TBT, FCP, and TTFB for real performance insights
+- **Core Web Vitals**: Measures LCP, INP, CLS, TBT, FCP, and TTFB via Google PageSpeed Insights API (free)
+- **Performance Opportunities**: Shows top optimization opportunities with potential time savings (e.g., "Remove unused CSS - saves 1,234ms")
+- **HTTP/2 & HTTP/3 Detection**: Automatically detects HTTP version (HTTP/1.1, HTTP/2, HTTP/3)
+- **Compression Detection**: Checks for GZIP and Brotli compression support
+- **Social Media Presence**: Detects Open Graph tags, Twitter Cards, social media links, Facebook Pixel, and favicons
 - **Advanced Image Detection**: Detects lazy-loaded images, background images, picture elements, and CSS images
 - **Enhanced Link Detection**: Finds JS-generated links, button-based navigation, and dynamically created anchors
 - **Tier-Based Audits**: Three service tiers (Starter, Standard, Advanced) with different page limits and features
 - **Optional Add-Ons**: Six paid add-ons including Fast Delivery, Additional Pages, Keywords, Image Alt Tags, Schema Markup, and Competitor Analysis
 - **White-Label PDF Reports**: Generate branded PDF reports with tier and add-ons clearly displayed
 - **Detailed Analysis**: 
-  - Schema markup detection (JSON-LD and microdata)
-  - Identity Schema detection (Organization/Person)
-  - LLM Readability analysis (detects dynamically rendered content)
-  - Keyword extraction from titles, headings, and meta descriptions
-  - Image alt tag optimization analysis
-  - Real competitor keyword gap analysis (with competitor URL crawling)
-  - Priority action plan with week-by-week recommendations
-  - Performance issues based on Core Web Vitals thresholds
+  - **Google PageSpeed Insights Integration**: Industry-standard Core Web Vitals + optimization opportunities
+  - **HTTP/2 & Compression Checks**: Technical performance indicators
+  - **Social Media Optimization**: Open Graph tags, Twitter Cards, Facebook Pixel, social links
+  - **Schema markup detection**: JSON-LD and microdata with Identity Schema validation
+  - **Identity Schema detection**: Organization/Person with required field validation
+  - **LLM Readability analysis**: Unique feature detecting dynamically rendered content that LLMs may miss
+  - **Keyword extraction**: From titles, headings, and meta descriptions
+  - **Image alt tag optimization**: Detailed analysis with specific recommendations
+  - **Real competitor analysis**: Crawls competitor URLs and extracts real keywords (not generic patterns)
+  - **Priority action plan**: Week-by-week recommendations based on severity
+  - **Performance issues**: Based on Core Web Vitals thresholds and PageSpeed opportunities
 - **Scheduled Audits**: Set up recurring audits with cron expressions
 - **Email Reports**: Automatically email PDF reports to clients
 - **CLI Tool**: Run audits from the command line with tier and add-on support
@@ -57,6 +64,12 @@ Required variables:
 - `NEXTAUTH_URL`: Your app URL (default: `http://localhost:3000`)
 - `NEXTAUTH_SECRET`: Secret key for NextAuth (generate a random string)
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`: SMTP settings for email
+
+Optional variables:
+- `PAGESPEED_INSIGHTS_API_KEY`: Google PageSpeed Insights API key (enables Core Web Vitals analysis)
+  - See `PAGESPEED_API_SETUP.md` for setup instructions
+  - Free tier: 25,000 requests/day
+  - Test with: `npm run test-pagespeed`
 
 ### 3. Set Up Database
 
@@ -304,13 +317,20 @@ Each PDF report includes:
 1. **Cover Page**: Branding, overall score, tier badge
 2. **Service Details**: Tier description and all purchased add-ons
 3. **Executive Summary**: Comprehensive overview of findings
-4. **Priority Action Plan**: Week-by-week recommendations (High → Medium priority)
-5. **SEO Scores Overview**: Category breakdowns
-6. **Issue Breakdown**: Detailed issues by category with fix instructions
-7. **Image Alt Tags Analysis**: (If add-on purchased) Detailed alt tag recommendations
-8. **Competitor Keyword Gap**: (If add-on purchased) Keyword opportunities and gaps
-9. **Page-Level Findings**: Table of all scanned pages with metrics
-10. **Raw Data**: Complete audit data in JSON format
+4. **Priority Action Plan**: Week-by-week recommendations (High → Medium → Low priority)
+5. **Technical Issues**: Technical SEO problems with fix instructions
+6. **On-Page Issues**: SEO optimization opportunities
+7. **Content Issues**: Content quality problems
+8. **Accessibility Issues**: WCAG compliance problems
+9. **Performance Issues**: Core Web Vitals and performance problems
+10. **Image Alt Tags Analysis**: (If add-on purchased) Detailed alt tag recommendations
+11. **Performance Metrics (Core Web Vitals)**: LCP, INP, CLS, FCP, TTFB + **Optimization Opportunities**
+12. **LLM Readability Analysis**: Unique rendering percentage analysis
+13. **Social Media Presence**: Open Graph, Twitter Cards, social links, favicon detection
+14. **Schema Markup Analysis**: Identity Schema detection and validation
+15. **Competitor Keyword Gap**: (If add-on purchased) Real keyword opportunities and gaps
+16. **Page-Level Findings**: Table of all scanned pages with metrics
+17. **Raw Data**: Complete audit data in JSON format
 
 ## Customization
 

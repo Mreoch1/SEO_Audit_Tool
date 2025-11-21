@@ -1,6 +1,50 @@
 # Changelog
 
-## [Unreleased] - Phase 1 & 2 Upgrades Complete
+## [Unreleased] - Latest Features (2025-01-XX)
+
+### Latest: PageSpeed Insights & Social Media Integration
+
+#### Added
+- **Google PageSpeed Insights API Integration** (`lib/pagespeed.ts`)
+  - Fetches Core Web Vitals (LCP, INP, CLS, FCP, TTFB) for mobile and desktop
+  - Extracts optimization opportunities with potential savings (e.g., "Remove unused CSS - saves 1,234ms")
+  - Shows top 5 opportunities in PDF reports
+  - Free API: 25,000 requests/day
+  - Test with: `npm run test-pagespeed`
+
+- **HTTP/2 & HTTP/3 Detection** (`lib/technical.ts`)
+  - Detects HTTP version (HTTP/1.1, HTTP/2, HTTP/3)
+  - Checks Alt-Svc header for HTTP/3 support
+  - Generates low-severity issue if using HTTP/1.1
+
+- **Compression Detection** (`lib/technical.ts`)
+  - Detects GZIP and Brotli compression support
+  - Generates medium-severity issue if no compression
+  - Generates low-severity issue if GZIP but not Brotli
+
+- **Social Media Presence Checker** (`lib/social.ts`)
+  - Detects Open Graph tags (og:title, og:description, og:image, og:url, og:type)
+  - Detects Twitter Card tags (twitter:card, twitter:title, twitter:description, etc.)
+  - Extracts social media links (Facebook, Twitter, Instagram, YouTube, LinkedIn, TikTok)
+  - Detects Facebook Pixel (fbq, facebook.com/tr)
+  - Detects favicon (favicon.ico, <link rel="icon">)
+  - Generates issues for missing OG/Twitter tags and favicon
+  - New "Social Media Presence" section in PDF reports
+
+#### Changed
+- **Performance Metrics**: Now uses PageSpeed Insights data when available (more accurate than Puppeteer metrics)
+- **PDF Reports**: Added "Performance Opportunities" section showing optimization recommendations
+- **PDF Reports**: Added "Social Media Presence" section with comprehensive social checks
+- **robots.txt Check**: Now generates a formal low-severity Technical issue (not just site-wide data)
+- **Core Web Vitals Section**: Updated to prefer PageSpeed data, shows opportunities directly
+
+#### Fixed
+- Fixed `ReferenceError: httpVersion is not defined` in `parseHtml` function
+- Fixed PageSpeed API integration to properly load environment variables in test scripts
+
+---
+
+## [Previous] - Phase 1 & 2 Upgrades Complete
 
 ### Phase 2: Advanced Features (Completed)
 

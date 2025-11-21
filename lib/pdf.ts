@@ -471,24 +471,53 @@ function generateReportHTML(
   ` : ''}
   
   <!-- Performance Metrics (Core Web Vitals) -->
-  ${result.pages.some(p => p.performanceMetrics) ? `
+  ${result.pages.some(p => p.pageSpeedData || p.performanceMetrics) ? `
   <div class="page">
     <h1>Performance Metrics (Core Web Vitals)</h1>
-    <p style="margin-bottom: 20px;">Real performance data measured during page rendering:</p>
+    <p style="margin-bottom: 20px;">Performance data from Google PageSpeed Insights and page rendering:</p>
     <div class="issues-section">
-      ${result.pages.filter(p => p.performanceMetrics).slice(0, 10).map(page => {
-        const metrics = page.performanceMetrics!
+      ${result.pages.filter(p => p.pageSpeedData || p.performanceMetrics).slice(0, 10).map(page => {
+        // Use PageSpeed data if available (more accurate), otherwise fall back to performanceMetrics
+        const pageSpeed = page.pageSpeedData
+        const mobile = pageSpeed?.mobile
+        const desktop = pageSpeed?.desktop
+        const metrics = page.performanceMetrics
+        
+        // Use mobile metrics (stricter) if PageSpeed available
+        const lcp = mobile?.lcp || metrics?.lcp
+        const fcp = mobile?.fcp || metrics?.fcp
+        const cls = mobile?.cls !== undefined ? mobile.cls : metrics?.cls
+        const inp = mobile?.inp || metrics?.fid // INP from PageSpeed, FID from metrics
+        const ttfb = mobile?.ttfb || metrics?.ttfb
+        const tbt = metrics?.tbt // TBT only from metrics
+        
         return `
         <div class="issue-item">
           <div class="issue-title">${page.url}</div>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px;">
-            ${metrics.lcp ? `<div><strong>LCP:</strong> ${metrics.lcp}ms ${metrics.lcp > 4000 ? '❌ Poor' : metrics.lcp > 2500 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${metrics.cls !== undefined ? `<div><strong>CLS:</strong> ${metrics.cls.toFixed(3)} ${metrics.cls > 0.25 ? '❌ Poor' : metrics.cls > 0.1 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${metrics.fid ? `<div><strong>FID:</strong> ${metrics.fid}ms ${metrics.fid > 300 ? '❌ Poor' : metrics.fid > 100 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${metrics.tbt ? `<div><strong>TBT:</strong> ${metrics.tbt}ms ${metrics.tbt > 600 ? '❌ Poor' : metrics.tbt > 200 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${metrics.fcp ? `<div><strong>FCP:</strong> ${metrics.fcp}ms ${metrics.fcp > 3000 ? '❌ Poor' : metrics.fcp > 1800 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
-            ${metrics.ttfb ? `<div><strong>TTFB:</strong> ${metrics.ttfb}ms ${metrics.ttfb > 1800 ? '❌ Poor' : metrics.ttfb > 800 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
+          <div style="margin-bottom: 15px;">
+            ${pageSpeed ? '<div style="color: #059669; font-weight: bold; margin-bottom: 10px;">📊 Data from Google PageSpeed Insights</div>' : '<div style="color: #666; margin-bottom: 10px;">📊 Data from page rendering</div>'}
           </div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px;">
+            ${lcp ? `<div><strong>LCP:</strong> ${Math.round(lcp)}ms ${lcp > 4000 ? '❌ Poor' : lcp > 2500 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
+            ${cls !== undefined ? `<div><strong>CLS:</strong> ${cls.toFixed(3)} ${cls > 0.25 ? '❌ Poor' : cls > 0.1 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
+            ${inp ? `<div><strong>${pageSpeed ? 'INP' : 'FID'}:</strong> ${Math.round(inp)}ms ${inp > 500 ? '❌ Poor' : inp > 200 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
+            ${tbt ? `<div><strong>TBT:</strong> ${tbt}ms ${tbt > 600 ? '❌ Poor' : tbt > 200 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
+            ${fcp ? `<div><strong>FCP:</strong> ${Math.round(fcp)}ms ${fcp > 3000 ? '❌ Poor' : fcp > 1800 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
+            ${ttfb ? `<div><strong>TTFB:</strong> ${Math.round(ttfb)}ms ${ttfb > 1800 ? '❌ Poor' : ttfb > 800 ? '⚠️ Needs Improvement' : '✅ Good'}</div>` : ''}
+          </div>
+          ${mobile && mobile.opportunities.length > 0 ? `
+          <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb;">
+            <div style="font-weight: bold; margin-bottom: 10px; color: #dc2626;">⚡ Performance Opportunities:</div>
+            <ul style="margin-left: 20px; color: #666;">
+              ${mobile.opportunities.slice(0, 5).map(opp => `
+                <li style="margin-bottom: 8px;">
+                  <strong>${escapeHtml(opp.title)}</strong> - Potential savings: ${Math.round(opp.savings)}ms
+                  ${opp.description ? `<br><small style="color: #888;">${escapeHtml(opp.description.substring(0, 150))}${opp.description.length > 150 ? '...' : ''}</small>` : ''}
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+          ` : ''}
         </div>
         `
       }).join('')}
@@ -524,6 +553,89 @@ function generateReportHTML(
         </div>
         `
       }).join('')}
+    </div>
+  </div>
+  ` : ''}
+  
+  <!-- Social Media Presence -->
+  ${result.siteWide?.socialMedia ? `
+  <div class="page">
+    <h1>Social Media Presence</h1>
+    <p style="margin-bottom: 20px;">Analysis of social media integration and sharing optimization:</p>
+    <div class="issues-section">
+      ${(() => {
+        const social = result.siteWide.socialMedia!
+        const meta = social.metaTags
+        const links = social.socialLinks
+        
+        let html = ''
+        
+        // Open Graph section
+        html += `
+        <div class="issue-item ${meta.openGraph.hasTags && meta.openGraph.missingRequired.length === 0 ? 'good' : 'medium'}">
+          <div class="issue-title">Open Graph Tags</div>
+          <div class="issue-details">
+            <strong>Status:</strong> ${meta.openGraph.hasTags ? '✅ Detected' : '❌ Missing'}<br>
+            ${meta.openGraph.ogTitle ? `<strong>OG Title:</strong> ${escapeHtml(meta.openGraph.ogTitle)}<br>` : ''}
+            ${meta.openGraph.ogDescription ? `<strong>OG Description:</strong> ${escapeHtml(meta.openGraph.ogDescription.substring(0, 100))}${meta.openGraph.ogDescription.length > 100 ? '...' : ''}<br>` : ''}
+            ${meta.openGraph.ogImage ? `<strong>OG Image:</strong> ${escapeHtml(meta.openGraph.ogImage.substring(0, 80))}...<br>` : ''}
+            ${meta.openGraph.missingRequired.length > 0 ? `<strong>Missing:</strong> ${meta.openGraph.missingRequired.join(', ')}` : ''}
+          </div>
+        </div>
+        `
+        
+        // Twitter Cards section
+        html += `
+        <div class="issue-item ${meta.twitter.hasCards && meta.twitter.missingRequired.length === 0 ? 'good' : 'medium'}">
+          <div class="issue-title">Twitter Card Tags</div>
+          <div class="issue-details">
+            <strong>Status:</strong> ${meta.twitter.hasCards ? '✅ Detected' : '❌ Missing'}<br>
+            ${meta.twitter.cardType ? `<strong>Card Type:</strong> ${escapeHtml(meta.twitter.cardType)}<br>` : ''}
+            ${meta.twitter.twitterSite ? `<strong>Twitter Site:</strong> @${escapeHtml(meta.twitter.twitterSite)}<br>` : ''}
+            ${meta.twitter.missingRequired.length > 0 ? `<strong>Missing:</strong> ${meta.twitter.missingRequired.join(', ')}` : ''}
+          </div>
+        </div>
+        `
+        
+        // Social Links section
+        const linkCount = Object.keys(links).length
+        html += `
+        <div class="issue-item ${linkCount > 0 ? 'good' : 'low'}">
+          <div class="issue-title">Social Media Links</div>
+          <div class="issue-details">
+            <strong>Status:</strong> ${linkCount > 0 ? `✅ Found ${linkCount} platform(s)` : '⚠️ No social links detected'}<br>
+            ${links.facebook ? `<strong>Facebook:</strong> <a href="${escapeHtml(links.facebook)}" style="color: #3b82f6;">${escapeHtml(links.facebook)}</a><br>` : ''}
+            ${links.twitter ? `<strong>Twitter/X:</strong> <a href="${escapeHtml(links.twitter)}" style="color: #3b82f6;">${escapeHtml(links.twitter)}</a><br>` : ''}
+            ${links.instagram ? `<strong>Instagram:</strong> <a href="${escapeHtml(links.instagram)}" style="color: #3b82f6;">${escapeHtml(links.instagram)}</a><br>` : ''}
+            ${links.youtube ? `<strong>YouTube:</strong> <a href="${escapeHtml(links.youtube)}" style="color: #3b82f6;">${escapeHtml(links.youtube)}</a><br>` : ''}
+            ${links.linkedin ? `<strong>LinkedIn:</strong> <a href="${escapeHtml(links.linkedin)}" style="color: #3b82f6;">${escapeHtml(links.linkedin)}</a><br>` : ''}
+          </div>
+        </div>
+        `
+        
+        // Facebook Pixel section
+        html += `
+        <div class="issue-item ${social.hasFacebookPixel ? 'good' : 'low'}">
+          <div class="issue-title">Facebook Pixel</div>
+          <div class="issue-details">
+            <strong>Status:</strong> ${social.hasFacebookPixel ? '✅ Detected' : '⚠️ Not detected'}
+          </div>
+        </div>
+        `
+        
+        // Favicon section
+        html += `
+        <div class="issue-item ${social.hasFavicon ? 'good' : 'low'}">
+          <div class="issue-title">Favicon</div>
+          <div class="issue-details">
+            <strong>Status:</strong> ${social.hasFavicon ? '✅ Detected' : '⚠️ Missing'}<br>
+            ${social.faviconUrl ? `<strong>URL:</strong> <a href="${escapeHtml(social.faviconUrl)}" style="color: #3b82f6;">${escapeHtml(social.faviconUrl)}</a>` : ''}
+          </div>
+        </div>
+        `
+        
+        return html
+      })()}
     </div>
   </div>
   ` : ''}

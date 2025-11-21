@@ -37,6 +37,23 @@
    - Add optional add-ons if needed
    - Click "Run [Tier] Audit"
 
+## New Features (Latest)
+
+Your audit now includes:
+- ✅ **Google PageSpeed Insights**: Core Web Vitals (LCP, INP, CLS) + optimization opportunities
+- ✅ **HTTP/2 & HTTP/3 Detection**: Technical performance checks
+- ✅ **Compression Detection**: GZIP/Brotli support checks
+- ✅ **Social Media Presence**: Open Graph tags, Twitter Cards, Facebook Pixel, social links
+
+**Setup PageSpeed API** (optional but recommended):
+```bash
+# 1. Get free API key from: https://developers.google.com/speed/docs/insights/v5/get-started
+# 2. Add to .env.local:
+echo "PAGESPEED_INSIGHTS_API_KEY=your_key_here" >> .env.local
+# 3. Test it:
+npm run test-pagespeed
+```
+
 ## Service Tiers
 
 - **Starter** ($39): 3 pages, basic audit
