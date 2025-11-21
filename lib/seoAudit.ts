@@ -247,7 +247,8 @@ export async function runAudit(
             affectedPages: [page.url]
           })
         }
-      } else if (!page.hasSchemaMarkup) {
+      } else if (!page.hasSchemaMarkup && !page.schemaAnalysis?.hasSchema) {
+        // Only flag as missing if both hasSchemaMarkup and schemaAnalysis confirm no schema
         consolidateIssue(schemaIssueMap, {
           category: 'Technical',
           severity: 'Medium',
@@ -1072,7 +1073,12 @@ function parseHtml(
   // Remove duplicates and filter out phrases with repeated words or nonsense
   const uniqueKeywords = Array.from(new Set(extractedKeywords))
     .filter(kw => {
-      const words = kw.split(' ')
+      // Normalize whitespace first
+      const normalized = kw.trim().replace(/\s+/g, ' ')
+      if (normalized.length < 3) return false
+      
+      const words = normalized.split(' ').filter(w => w.length > 0)
+      
       // Filter out phrases where all words are the same
       if (new Set(words).size === 1) return false
       
@@ -1085,16 +1091,26 @@ function parseHtml(
       }
       
       // Filter out phrases that are too generic or contain common domain words
-      const genericWords = new Set(['www', 'com', 'org', 'net', 'gov', 'edu', 'html', 'http', 'https', 'www', 'page', 'site', 'web'])
-      if (words.some(w => genericWords.has(w))) {
-        // Allow if it's part of a meaningful phrase (e.g., "gov brings" is probably not meaningful)
-        // But "nasa gov" might be okay if it's a real phrase
-        // For now, be conservative and filter out phrases with generic words unless they're clearly meaningful
-        if (words.length === 2 && genericWords.has(words[1])) return false
+      const genericWords = new Set(['www', 'com', 'org', 'net', 'gov', 'edu', 'html', 'http', 'https', 'page', 'site', 'web'])
+      if (words.some(w => genericWords.has(w.toLowerCase()))) {
+        // Filter out phrases ending with generic domain words
+        if (words.length === 2 && genericWords.has(words[1].toLowerCase())) return false
+        // Filter out single generic words
+        if (words.length === 1 && genericWords.has(words[0].toLowerCase())) return false
+      }
+      
+      // Filter out phrases that look like broken words (e.g., "encyclope dia")
+      // Check if any word is suspiciously short (1-2 chars) and not a common word
+      const commonShortWords = new Set(['a', 'an', 'as', 'at', 'be', 'by', 'do', 'go', 'he', 'if', 'in', 'is', 'it', 'me', 'my', 'no', 'of', 'on', 'or', 'so', 'to', 'up', 'us', 'we'])
+      const hasSuspiciousShortWord = words.some(w => w.length <= 2 && !commonShortWords.has(w.toLowerCase()))
+      if (hasSuspiciousShortWord && words.length > 2) {
+        // Might be a broken word, filter it out
+        return false
       }
       
       return true
     })
+    .map(kw => kw.trim().replace(/\s+/g, ' ')) // Normalize whitespace in final output
     .slice(0, 20)
   
   // Count words (text content only)
@@ -2109,17 +2125,35 @@ async function generateCompetitorAnalysis(
       // Skip single-word topics that don't make sense
       if (topic.split(/\s+/).length < 2) return
       
-      commonPatterns.slice(0, 10).forEach(pattern => {
+      // Only use the first 1-2 words of the topic to avoid creating nonsensical phrases
+      const topicWords = topic.split(/\s+/)
+      const shortTopic = topicWords.slice(0, 2).join(' ') // Use max 2 words from topic
+      
+      // Skip if topic is too generic or already contains pattern words
+      const topicLower = shortTopic.toLowerCase()
+      const hasPatternWord = commonPatterns.some(p => topicLower.includes(p.toLowerCase()))
+      if (hasPatternWord) return // Skip topics that already contain pattern words
+      
+      commonPatterns.slice(0, 8).forEach(pattern => {
+        const patternLower = pattern.toLowerCase()
+        
+        // Skip if pattern is already in the topic
+        if (topicLower.includes(patternLower)) return
+        
         if (pattern.includes(' ')) {
           // Multi-word patterns: "how to [topic]", "complete guide to [topic]"
-          nicheCompetitorKeywords.push(`${pattern} ${topic}`)
-          nicheCompetitorKeywords.push(`${pattern} for ${topic}`)
+          // Only add if it creates a meaningful phrase (3-5 words total)
+          const combined = `${pattern} ${shortTopic}`
+          if (combined.split(/\s+/).length <= 5 && combined.length < 50) {
+            nicheCompetitorKeywords.push(combined)
+          }
         } else {
           // Single word patterns: "[topic] tutorial", "[topic] review"
           if (['tutorial', 'review', 'tips', 'guide', 'examples'].includes(pattern)) {
-            nicheCompetitorKeywords.push(`${topic} ${pattern}`)
-          } else {
-            nicheCompetitorKeywords.push(`${pattern} ${topic}`)
+            const combined = `${shortTopic} ${pattern}`
+            if (combined.split(/\s+/).length <= 4 && combined.length < 40) {
+              nicheCompetitorKeywords.push(combined)
+            }
           }
         }
       })
