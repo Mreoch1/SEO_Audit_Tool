@@ -151,20 +151,29 @@ export async function POST(
                                 ${formattedSummary}
                             </div>
                             
-                            <!-- CTA Button -->
+                            <!-- Info Box -->
+                            <div style="background-color: #eff6ff; border-left: 4px solid ${primaryColor}; padding: 20px; border-radius: 6px; margin: 0 0 24px 0;">
+                                <p style="margin: 0 0 12px 0; color: #1e40af; font-size: 16px; font-weight: 600;">
+                                    📎 Your PDF Report is Attached
+                                </p>
+                                <p style="margin: 0 0 16px 0; color: #374151; font-size: 14px; line-height: 1.6;">
+                                    A detailed PDF report is attached to this email with comprehensive analysis, actionable recommendations, and page-level findings. Check your email attachments to download and view the full report.
+                                </p>
+                                <p style="margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6;">
+                                    <strong>Tip:</strong> If you don't see the attachment, check your email client's attachment panel or spam folder.
+                                </p>
+                            </div>
+                            
+                            <!-- Optional: Link to view audited website -->
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                 <tr>
                                     <td align="center" style="padding: 0 0 24px 0;">
-                                        <a href="${escapedUrl}" style="display: inline-block; background-color: ${primaryColor}; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
-                                            View Full Report (PDF Attached)
+                                        <a href="${escapedUrl}" style="display: inline-block; background-color: #f3f4f6; color: #374151; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 500; font-size: 14px; border: 1px solid #e5e7eb;">
+                                            View Audited Website →
                                         </a>
                                     </td>
                                 </tr>
                             </table>
-                            
-                            <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-                                A detailed PDF report is attached to this email with comprehensive analysis, actionable recommendations, and page-level findings.
-                            </p>
                         </td>
                     </tr>
                     
