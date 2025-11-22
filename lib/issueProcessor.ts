@@ -63,6 +63,40 @@ function normalizeIssueMessage(message: string): string {
 }
 
 /**
+ * Consolidate an issue into a map, merging duplicates
+ * Creates a unique key based on category, severity, and normalized message
+ */
+export function consolidateIssue(issueMap: Map<string, Issue>, issue: Issue): void {
+  const normalizedType = normalizeIssueMessage(issue.message)
+  const key = `${issue.category}|${issue.severity}|${normalizedType}`
+  
+  if (issueMap.has(key)) {
+    // Merge with existing issue
+    const existing = issueMap.get(key)!
+    // Merge affected pages
+    if (issue.affectedPages && issue.affectedPages.length > 0) {
+      if (!existing.affectedPages) {
+        existing.affectedPages = []
+      }
+      existing.affectedPages.push(...issue.affectedPages)
+      // Deduplicate
+      existing.affectedPages = Array.from(new Set(existing.affectedPages))
+    }
+    // Update details if the new issue has more information
+    if (issue.details && (!existing.details || issue.details.length > existing.details.length)) {
+      existing.details = issue.details
+    }
+    // Update fix instructions if missing
+    if (!existing.fixInstructions && issue.fixInstructions) {
+      existing.fixInstructions = issue.fixInstructions
+    }
+  } else {
+    // Add new issue
+    issueMap.set(key, { ...issue })
+  }
+}
+
+/**
  * Group issues by normalized type
  */
 export interface IssueGroup {

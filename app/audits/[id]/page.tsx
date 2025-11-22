@@ -711,11 +711,15 @@ export default function AuditDetailPage() {
                         These keywords are commonly used by competitors but missing from your site:
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {audit.rawJson.competitorAnalysis.keywordGaps.map((kw: string, idx: number) => (
-                          <span key={idx} className="px-3 py-1 bg-red-50 border border-red-200 rounded text-sm text-red-800">
-                            {kw}
-                          </span>
-                        ))}
+                        {audit.rawJson.competitorAnalysis.keywordGaps?.length > 0 ? (
+                          audit.rawJson.competitorAnalysis.keywordGaps.map((kw: string, idx: number) => (
+                            <span key={idx} className="px-3 py-1 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+                              {kw}
+                            </span>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">No keyword gaps identified</p>
+                        )}
                       </div>
                     </div>
 
@@ -725,11 +729,15 @@ export default function AuditDetailPage() {
                         Keywords you're already targeting that competitors also use:
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {audit.rawJson.competitorAnalysis.sharedKeywords.map((kw: string, idx: number) => (
-                          <span key={idx} className="px-3 py-1 bg-green-50 border border-green-200 rounded text-sm text-green-800">
-                            {kw}
-                          </span>
-                        ))}
+                        {audit.rawJson.competitorAnalysis.sharedKeywords?.length > 0 ? (
+                          audit.rawJson.competitorAnalysis.sharedKeywords.map((kw: string, idx: number) => (
+                            <span key={idx} className="px-3 py-1 bg-green-50 border border-green-200 rounded text-sm text-green-800">
+                              {kw}
+                            </span>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">No shared keywords identified</p>
+                        )}
                       </div>
                     </div>
 
@@ -739,11 +747,15 @@ export default function AuditDetailPage() {
                         Common keywords found in competitor analysis:
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {audit.rawJson.competitorAnalysis.competitorKeywords.map((kw: string, idx: number) => (
-                          <span key={idx} className="px-3 py-1 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                            {kw}
-                          </span>
-                        ))}
+                        {audit.rawJson.competitorAnalysis.competitorKeywords?.length > 0 ? (
+                          audit.rawJson.competitorAnalysis.competitorKeywords.map((kw: string, idx: number) => (
+                            <span key={idx} className="px-3 py-1 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                              {kw}
+                            </span>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">No competitor keywords found</p>
+                        )}
                       </div>
                     </div>
 

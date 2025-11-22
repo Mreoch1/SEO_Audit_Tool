@@ -20,6 +20,41 @@ import { classifyDomain } from './competitorData'
 import { deduplicateKeywords, formatKeywordsForDisplay, findKeywordGaps } from './keywordProcessor'
 import { consolidateIssue } from './issueProcessor'
 
+// NEW: Import fixed modules
+import { 
+  normalizeUrl as normalizeUrlNew, 
+  followRedirects, 
+  canonicalizeUrl, 
+  isInternalLink,
+  shouldMergeUrls,
+  getPreferredUrl,
+  getRootDomain,
+  isSameDomain,
+  CrawlContext
+} from './urlNormalizer'
+import { 
+  extractTitle, 
+  extractMetaDescription,
+  extractCanonical,
+  isTitleTooShort,
+  isTitleTooLong,
+  isMetaDescriptionTooShort,
+  isMetaDescriptionTooLong
+} from './titleMetaExtractor'
+import { 
+  validatePerformanceMetrics,
+  getPerformanceRating,
+  formatMetricValue
+} from './performanceValidator'
+import {
+  calculateAllScores,
+  calculateOverallScore
+} from './scoring'
+import {
+  analyzeCompetitors,
+  generateFallbackKeywordSuggestions
+} from './realCompetitorAnalysis'
+
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
   maxDepth: 3,
@@ -76,13 +111,23 @@ export async function runAudit(
   
   console.log(`[Audit] Starting audit for ${url} (max pages: ${finalMaxPages}, max depth: ${opts.maxDepth})`)
   
-  // Normalize URL and handle redirects
-  const rootUrl = normalizeUrl(url)
-  let baseDomain = new URL(rootUrl).hostname
+  // NEW: Follow redirects to get final URL and determine preferred hostname
+  console.log('[Audit] Following redirects to determine canonical URL...')
+  const redirectResult = await followRedirects(url, opts.userAgent)
+  const rootUrl = redirectResult.finalUrl
+  const parsedRoot = new URL(rootUrl)
+  let baseDomain = parsedRoot.hostname
   
-  // Check if URL redirects to a subdomain (e.g., wikipedia.com -> en.wikipedia.org)
-  // We'll update baseDomain after the first page is fetched if it redirects
-  let actualDomain: string | null = null
+  console.log(`[Audit] Final URL after redirects: ${rootUrl}`)
+  if (redirectResult.redirectChain.length > 1) {
+    console.log(`[Audit] Redirect chain: ${redirectResult.redirectChain.join(' → ')}`)
+  }
+  
+  const crawlContext: CrawlContext = {
+    preferredHostname: parsedRoot.hostname.toLowerCase(),
+    preferredProtocol: parsedRoot.protocol,
+    rootDomain: getRootDomain(parsedRoot.hostname)
+  }
   
   // Track crawled pages
   const crawledUrls = new Set<string>()
@@ -423,18 +468,17 @@ export async function runAudit(
 /**
  * Normalize URL to root domain
  */
+// OLD normalizeUrl function replaced with new implementation
+// Using normalizeUrlNew from urlNormalizer.ts
 function normalizeUrl(url: string): string {
-  try {
-    const parsed = new URL(url)
-    return `${parsed.protocol}//${parsed.hostname}${parsed.pathname === '/' ? '' : parsed.pathname}`
-  } catch {
-    // If invalid, try adding protocol
-    if (!url.startsWith('http')) {
-      return `https://${url}`
-    }
-    return url
-  }
+  return normalizeUrlNew(url)
 }
+
+// CrawlContext now imported from urlNormalizer.ts
+// getRootDomain now imported from urlNormalizer.ts
+
+// OLD canonicalizeUrl replaced - now using import from urlNormalizer.ts
+// (import statement already added above)
 
 /**
  * Check robots.txt
@@ -474,33 +518,8 @@ async function checkSitemap(rootUrl: string, siteWide: SiteWideData): Promise<vo
   }
 }
 
-/**
- * Check if two domains match (handles subdomains)
- */
-function isSameDomain(domain1: string, domain2: string): boolean {
-  // Remove www. prefix for comparison
-  const normalizeDomain = (d: string) => d.replace(/^www\./, '').toLowerCase()
-  const d1 = normalizeDomain(domain1)
-  const d2 = normalizeDomain(domain2)
-  
-  // Exact match
-  if (d1 === d2) return true
-  
-  // Extract root domain (e.g., wikipedia.org from en.wikipedia.org)
-  const getRootDomain = (domain: string): string => {
-    const parts = domain.split('.')
-    if (parts.length >= 2) {
-      return parts.slice(-2).join('.')
-    }
-    return domain
-  }
-  
-  const root1 = getRootDomain(d1)
-  const root2 = getRootDomain(d2)
-  
-  // Same root domain (handles subdomains)
-  return root1 === root2
-}
+// OLD isSameDomain replaced - now using import from urlNormalizer.ts
+// (import statement already added above)
 
 /**
  * Extract internal links from HTML
@@ -867,7 +886,17 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
     // Wait for PageSpeed data and add it
     const pageSpeedData = await pageSpeedPromise
     if (pageSpeedData) {
-      pageData.pageSpeedData = pageSpeedData
+      // NEW: Validate performance metrics
+      const validated = validatePerformanceMetrics(pageSpeedData)
+      if (validated.warnings.length > 0) {
+        console.warn(`[Performance] Validation warnings for ${url}:`, validated.warnings)
+      }
+      pageData.pageSpeedData = {
+        lcp: validated.lcp,
+        fcp: validated.fcp,
+        cls: validated.cls,
+        ttfb: validated.ttfb
+      }
     }
     
     return pageData
@@ -925,7 +954,17 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
         
         const pageSpeedData = await pageSpeedPromise
         if (pageSpeedData) {
-          pageData.pageSpeedData = pageSpeedData
+          // NEW: Validate performance metrics
+          const validated = validatePerformanceMetrics(pageSpeedData)
+          if (validated.warnings.length > 0) {
+            console.warn(`[Performance] Validation warnings for ${url}:`, validated.warnings)
+          }
+          pageData.pageSpeedData = {
+            lcp: validated.lcp,
+            fcp: validated.fcp,
+            cls: validated.cls,
+            ttfb: validated.ttfb
+          }
         }
         
         return pageData
@@ -1084,57 +1123,17 @@ function parseHtml(
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
   
-  // Extract title - use the LAST <title> tag found (in case there are multiple from templates)
-  // This ensures we get the JS-rendered title, not a template shell
-  const titleMatches = html.match(/<title[^>]*>([\s\S]*?)<\/title>/gi)
-  let title: string | undefined
-  if (titleMatches && titleMatches.length > 0) {
-    // Get the last title tag (most likely to be the final rendered one)
-    const lastTitleMatch = titleMatches[titleMatches.length - 1]
-    const titleContent = lastTitleMatch.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
-    if (titleContent) {
-      title = titleContent[1]
-        .replace(/<[^>]+>/g, '') // Remove any nested tags
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\s+/g, ' ') // Normalize whitespace
-        .trim()
-    }
-  }
+  // NEW: Use improved title/meta extractors
+  const titleData = extractTitle(html)
+  const title = titleData?.title
+  const titleLength = titleData?.length
+  const titlePixelWidth = titleData?.pixelWidth
   
-  // Extract meta description - try multiple patterns and use the last one found
-  let metaDescription: string | undefined
-  const metaDescPatterns = [
-    /<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/gi,
-    /<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/gi
-  ]
+  const metaData = extractMetaDescription(html)
+  const metaDescription = metaData?.description
+  const metaLength = metaData?.length
   
-  for (const pattern of metaDescPatterns) {
-    const matches = html.match(pattern)
-    if (matches && matches.length > 0) {
-      // Get the last match (most likely to be the final rendered one)
-      const lastMatch = matches[matches.length - 1]
-      const contentMatch = lastMatch.match(/content=["']([^"']+)["']/i)
-      if (contentMatch) {
-        metaDescription = contentMatch[1]
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&amp;/g, '&')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/\s+/g, ' ')
-          .trim()
-        break
-      }
-    }
-  }
-  
-  // Extract canonical
-  const canonicalMatch = cleanHtml.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)
-  const canonical = canonicalMatch ? canonicalMatch[1].trim() : undefined
+  const canonical = extractCanonical(html)
   
   // Extract H1 tags
   const h1Matches = cleanHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || []
@@ -1144,25 +1143,30 @@ function parseHtml(
   const imageMatches = cleanHtml.match(/<img[^>]*>/gi) || []
   const missingAltCount = imageMatches.filter(img => !img.match(/alt=["'][^"']+["']/i)).length
   
-  // Extract links
+  // NEW: Extract links using improved classification
   const linkMatches = cleanHtml.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
   let internalLinkCount = 0
   let externalLinkCount = 0
   
   try {
-    const baseUrl = new URL(url)
     linkMatches.forEach(link => {
       const hrefMatch = link.match(/href=["']([^"']+)["']/i)
       if (hrefMatch) {
+        const href = hrefMatch[1].trim()
+        // Skip anchor links, javascript:, mailto:, tel:, etc.
+        if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href === '') {
+          return
+        }
+        
         try {
-          const linkUrl = new URL(hrefMatch[1], url)
-          if (linkUrl.hostname === baseUrl.hostname) {
+          // Use new isInternalLink function that handles domain variants
+          if (isInternalLink(href, url)) {
             internalLinkCount++
           } else {
             externalLinkCount++
           }
         } catch {
-          // Relative or invalid URL, count as internal
+          // Invalid URL, count as internal
           internalLinkCount++
         }
       }
@@ -1207,11 +1211,24 @@ function parseHtml(
   keywordSources.forEach(text => {
     // Normalize text first - preserve word boundaries better
     // Handle special characters and encoding issues that might split words
-    const normalizedText = text.toLowerCase()
+    let normalizedText = text.toLowerCase()
       .replace(/[^\w\s-]/g, ' ') // Replace non-word chars (except hyphens) with space
       .replace(/\s+/g, ' ') // Normalize whitespace
       .replace(/([a-z])([A-Z])/g, '$1 $2') // Handle camelCase
       .trim()
+    
+    // Detect and split concatenated words (e.g., "frontiersread" -> "frontiers read")
+    // Look for long words (>10 chars) that might be two words concatenated
+    normalizedText = normalizedText.replace(/\b([a-z]{10,})\b/g, (match) => {
+      // Try to split at common word boundaries
+      // Look for patterns like: word1word2 where both parts are 4+ chars
+      const splitPattern = /([a-z]{4,})([a-z]{4,})/g
+      const splitMatch = splitPattern.exec(match)
+      if (splitMatch) {
+        return `${splitMatch[1]} ${splitMatch[2]}`
+      }
+      return match
+    })
     
     const words = normalizedText
       .split(/\s+/)
@@ -1271,83 +1288,12 @@ function parseHtml(
     }
   })
   
-  // Remove duplicates and filter out phrases with repeated words or nonsense
-  const uniqueKeywords = Array.from(new Set(extractedKeywords))
-    .filter(kw => {
-      // Normalize whitespace first
-      const normalized = kw.trim().replace(/\s+/g, ' ')
-      if (normalized.length < 3) return false
-      
-      const words = normalized.split(' ').filter(w => w.length > 0)
-      
-      // Filter out phrases where all words are the same
-      if (new Set(words).size === 1) return false
-      
-      // Filter out phrases with excessive repetition (e.g., "nasa gov gov")
-      const wordCounts = new Map<string, number>()
-      words.forEach(w => wordCounts.set(w, (wordCounts.get(w) || 0) + 1))
-      // If any word appears more than once in a 2-3 word phrase, it's likely nonsense
-      for (const count of wordCounts.values()) {
-        if (count > 1) return false
-      }
-      
-      // Filter out phrases that are too generic or contain common domain words
-      const genericWords = new Set(['www', 'com', 'org', 'net', 'gov', 'edu', 'html', 'http', 'https', 'page', 'site', 'web'])
-      if (words.some(w => genericWords.has(w.toLowerCase()))) {
-        // Filter out phrases ending with generic domain words
-        if (words.length === 2 && genericWords.has(words[1].toLowerCase())) return false
-        // Filter out single generic words
-        if (words.length === 1 && genericWords.has(words[0].toLowerCase())) return false
-      }
-      
-      // Filter out phrases that look like broken words (e.g., "encyclope dia")
-      // Check if any word is suspiciously short (1-2 chars) and not a common word
-      const commonShortWords = new Set(['a', 'an', 'as', 'at', 'be', 'by', 'do', 'go', 'he', 'if', 'in', 'is', 'it', 'me', 'my', 'no', 'of', 'on', 'or', 'so', 'to', 'up', 'us', 'we'])
-      const hasSuspiciousShortWord = words.some(w => {
-        const cleanW = w.replace(/[^\w]/g, '')
-        return cleanW.length > 0 && cleanW.length <= 2 && !commonShortWords.has(cleanW.toLowerCase())
-      })
-      if (hasSuspiciousShortWord) {
-        // Might be a broken word, filter it out
-        return false
-      }
-      
-      // Filter out single words - we only want 2-3 word phrases
-      if (words.length < 2) return false
-      
-      // Additional check: ensure each word in the phrase is at least 3 characters
-      // This prevents fragments like "dia", "a", etc.
-      const allWordsValid = words.every(w => {
-        const cleanW = w.replace(/[^\w]/g, '')
-        // Must be at least 3 characters, or be a common short word
-        if (cleanW.length < 3) {
-          const commonShortWords = new Set(['web', 'net', 'com', 'org', 'edu', 'gov', 'www', 'api', 'url', 'www'])
-          return commonShortWords.has(cleanW.toLowerCase())
-        }
-        return true
-      })
-      if (!allWordsValid) return false
-      
-      // Final check: ensure the phrase itself is meaningful (not just two very short words)
-      const totalLength = words.reduce((sum, w) => sum + w.replace(/[^\w]/g, '').length, 0)
-      if (totalLength < 6) return false // At least 6 characters total across all words
-      
-      return true
-    })
-    .map(kw => kw.trim().replace(/\s+/g, ' ')) // Normalize whitespace in final output
-    .filter(kw => {
-      // Final safety check: ensure it's actually a 2+ word phrase with meaningful words
-      const phraseWords = kw.split(/\s+/).filter(w => w.length > 0)
-      if (phraseWords.length < 2) return false
-      
-      // Ensure each word is at least 2 characters (after cleaning)
-      const allWordsValid = phraseWords.every(w => {
-        const cleanW = w.replace(/[^\w]/g, '')
-        return cleanW.length >= 2
-      })
-      return allWordsValid
-    })
-    .slice(0, 20)
+  // Use the keyword processor to clean and deduplicate keywords
+  // This handles concatenated words, nonsense patterns, and proper filtering
+  const cleanedKeywords = deduplicateKeywords(extractedKeywords)
+  
+  // Limit to top 20 keywords per page
+  const uniqueKeywords = cleanedKeywords.slice(0, 20)
   
   // Count words (text content only)
   const textContent = cleanHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -1359,9 +1305,10 @@ function parseHtml(
     loadTime,
     contentType,
     title,
-    titleLength: title?.length,
+    titleLength, // NEW: Using extracted length from titleMetaExtractor
+    titlePixelWidth, // NEW: Pixel width estimation
     metaDescription,
-    metaDescriptionLength: metaDescription?.length,
+    metaDescriptionLength: metaLength, // NEW: Using extracted length
     canonical,
     h1Count: h1Text.length,
     h1Text: h1Text.length > 0 ? h1Text : undefined,
@@ -1980,104 +1927,16 @@ function calculateScores(
     }
   }
   
-  // Technical score (0-100)
-  let technicalScore = 100
-  technicalScore -= !siteWide.robotsTxtExists ? 5 : 0
-  technicalScore -= !siteWide.sitemapExists ? 10 : 0
-  technicalScore -= (siteWide.brokenPages.length / pages.length) * 30
-  const technicalIssues = issues.filter(i => i.category === 'Technical')
-  technicalScore -= technicalIssues.filter(i => i.severity === 'High').length * 10
-  technicalScore -= technicalIssues.filter(i => i.severity === 'Medium').length * 5
-  technicalScore -= technicalIssues.filter(i => i.severity === 'Low').length * 2
-  technicalScore = Math.max(0, Math.min(100, technicalScore))
-  
-  // On-page score (0-100)
-  // Base score starts at 100, then we deduct points based on issues
-  let onPageScore = 100
-  const onPageIssues = issues.filter(i => i.category === 'On-page')
-  
-  if (onPageIssues.length === 0) {
-    // Perfect score if no issues
-    onPageScore = 100
-  } else {
-    // Calculate penalty based on issue severity and frequency
-    // Count unique pages affected by each severity level
-    const highSeverityPages = new Set<string>()
-    const mediumSeverityPages = new Set<string>()
-    const lowSeverityPages = new Set<string>()
-    
-    onPageIssues.forEach(issue => {
-      if (issue.affectedPages && issue.affectedPages.length > 0) {
-        issue.affectedPages.forEach(url => {
-          if (issue.severity === 'High') {
-            highSeverityPages.add(url)
-          } else if (issue.severity === 'Medium') {
-            mediumSeverityPages.add(url)
-          } else if (issue.severity === 'Low') {
-            lowSeverityPages.add(url)
-          }
-        })
-      }
-    })
-    
-    // Calculate penalties based on affected page percentages
-    const highIssueRate = highSeverityPages.size / pages.length
-    const mediumIssueRate = mediumSeverityPages.size / pages.length
-    const lowIssueRate = lowSeverityPages.size / pages.length
-    
-    // Deduct points based on severity and coverage
-    // High severity issues are weighted more heavily
-    onPageScore -= Math.min(highIssueRate * 60, 60) // Max 60 points for high severity issues
-    onPageScore -= Math.min(mediumIssueRate * 30, 30) // Max 30 points for medium severity issues
-    onPageScore -= Math.min(lowIssueRate * 10, 10) // Max 10 points for low severity issues
-    
-    // Also account for total number of issue instances (consolidated issues)
-    // If there are many different types of issues, that's worse
-    const uniqueIssueTypes = new Set(onPageIssues.map(i => i.message))
-    if (uniqueIssueTypes.size > pages.length * 0.5) {
-      // More than 50% of pages have unique issue types = more variety of problems
-      onPageScore -= 5
-    }
-  }
-  
-  onPageScore = Math.max(0, Math.min(100, Math.round(onPageScore)))
-  
-  // Content score (0-100)
-  let contentScore = 100
-  const thinPages = pages.filter(p => p.wordCount < 300).length
-  contentScore -= (thinPages / pages.length) * 40
-  const contentIssues = issues.filter(i => i.category === 'Content')
-  contentScore -= contentIssues.filter(i => i.severity === 'High').length * 10
-  contentScore -= contentIssues.filter(i => i.severity === 'Medium').length * 5
-  contentScore = Math.max(0, Math.min(100, contentScore))
-  
-  // Accessibility score (0-100)
-  let accessibilityScore = 100
-  const totalImages = pages.reduce((sum, p) => sum + p.imageCount, 0)
-  const totalMissingAlt = pages.reduce((sum, p) => sum + p.missingAltCount, 0)
-  if (totalImages > 0) {
-    const missingAltRate = totalMissingAlt / totalImages
-    accessibilityScore -= missingAltRate * 50
-  }
-  const accessibilityIssues = issues.filter(i => i.category === 'Accessibility')
-  accessibilityScore -= accessibilityIssues.filter(i => i.severity === 'High').length * 10
-  accessibilityScore -= accessibilityIssues.filter(i => i.severity === 'Medium').length * 5
-  accessibilityScore = Math.max(0, Math.min(100, accessibilityScore))
-  
-  // Overall score (weighted average)
-  const overall = Math.round(
-    technicalScore * 0.3 +
-    onPageScore * 0.3 +
-    contentScore * 0.2 +
-    accessibilityScore * 0.2
-  )
+  // NEW: Use improved scoring system with readability integration
+  const categoryScores = calculateAllScores(issues, pages, siteWide)
+  const overall = calculateOverallScore(categoryScores)
   
   return {
     overall,
-    technical: Math.round(technicalScore),
-    onPage: Math.round(onPageScore),
-    content: Math.round(contentScore),
-    accessibility: Math.round(accessibilityScore)
+    technical: categoryScores.technical,
+    onPage: categoryScores.onPage,
+    content: categoryScores.content,
+    accessibility: categoryScores.accessibility
   }
 }
 
@@ -2162,412 +2021,25 @@ async function analyzeImageAltTags(pages: PageData[]): Promise<ImageAltAnalysis[
 /**
  * Generate real competitor analysis by crawling competitor site
  */
+// NEW: Using improved competitor analysis from realCompetitorAnalysis.ts
 async function generateRealCompetitorAnalysis(
   competitorUrl: string,
   siteKeywords: string[],
   options: Required<AuditOptions>
 ): Promise<CompetitorAnalysis> {
-  console.log(`[Competitor Analysis] Starting analysis for ${competitorUrl}`)
-  console.log(`[Competitor Analysis] Client has ${siteKeywords.length} keywords: ${siteKeywords.slice(0, 5).join(', ')}...`)
-  
-  try {
-    // Crawl competitor site (limited to homepage + a few pages for performance)
-    const competitorPages: PageData[] = []
-    const competitorCrawledUrls = new Set<string>()
-    const competitorQueue: Array<{ url: string; depth: number }> = [{ url: competitorUrl, depth: 0 }]
-    
-    // Limit competitor crawl to 5 pages max
-    const maxCompetitorPages = 5
-    const maxCompetitorDepth = 2
-    
-    console.log(`[Competitor Analysis] Will crawl up to ${maxCompetitorPages} pages from competitor`)
-    
-    while (competitorQueue.length > 0 && competitorPages.length < maxCompetitorPages) {
-      const { url, depth } = competitorQueue.shift()!
-      
-      if (competitorCrawledUrls.has(url) || depth > maxCompetitorDepth) {
-        continue
-      }
-      
-      competitorCrawledUrls.add(url)
-      
-      try {
-        console.log(`[Competitor Analysis] Crawling page ${competitorPages.length + 1}/${maxCompetitorPages}: ${url}`)
-        const pageData = await analyzePage(url, options.userAgent, false)
-        competitorPages.push(pageData)
-        console.log(`[Competitor Analysis] Successfully crawled ${url} - found ${pageData.extractedKeywords?.length || 0} keywords`)
-        
-        // Extract links for further crawling (limited)
-        if (depth < maxCompetitorDepth && pageData.internalLinkCount > 0 && competitorPages.length < maxCompetitorPages) {
-          // Add common paths
-          const commonPaths = ['/about', '/products', '/services', '/blog']
-          for (const path of commonPaths) {
-            if (competitorPages.length >= maxCompetitorPages) break
-            try {
-              const linkUrl = new URL(path, url).toString()
-              if (!competitorCrawledUrls.has(linkUrl)) {
-                competitorQueue.push({ url: linkUrl, depth: depth + 1 })
-              }
-            } catch {
-              // Invalid URL, skip
-            }
-          }
-        }
-      } catch (error) {
-        // Skip failed pages
-        console.warn(`Failed to analyze competitor page ${url}:`, error)
-      }
-    }
-    
-    // Extract competitor keywords
-    const competitorKeywords = new Set<string>()
-    competitorPages.forEach(page => {
-      if (page.extractedKeywords) {
-        page.extractedKeywords.forEach(kw => competitorKeywords.add(kw))
-      }
-      // Also extract from title and H1
-      if (page.title) {
-        const titleWords = page.title.toLowerCase()
-          .replace(/[^\w\s]/g, ' ')
-          .split(/\s+/)
-          .filter(w => w.length > 3)
-        if (titleWords.length >= 2) {
-          competitorKeywords.add(titleWords.slice(0, 3).join(' '))
-        }
-      }
-      if (page.h1Text && page.h1Text.length > 0) {
-        page.h1Text.forEach(h1 => {
-          const h1Words = h1.toLowerCase()
-            .replace(/[^\w\s]/g, ' ')
-            .split(/\s+/)
-            .filter(w => w.length > 3)
-          if (h1Words.length >= 2) {
-            competitorKeywords.add(h1Words.slice(0, 3).join(' '))
-          }
-        })
-      }
-    })
-    
-    // Clean and deduplicate competitor keywords
-    const competitorKeywordsArray = deduplicateKeywords(Array.from(competitorKeywords))
-    
-    console.log(`[Competitor Analysis] Extracted ${competitorKeywordsArray.length} total keywords from ${competitorPages.length} competitor pages`)
-    console.log(`[Competitor Analysis] Sample competitor keywords: ${competitorKeywordsArray.slice(0, 10).join(', ')}`)
-    
-    // Use the improved keyword gap finder
-    const { gaps, shared, unique } = findKeywordGaps(siteKeywords, competitorKeywordsArray)
-    
-    console.log(`[Competitor Analysis] Found ${gaps.length} keyword gaps, ${shared.length} shared keywords, and ${unique.length} unique client keywords`)
-    
-    return {
-      competitorUrl,
-      competitorKeywords: formatKeywordsForDisplay(competitorKeywordsArray, 25),
-      keywordGaps: formatKeywordsForDisplay(gaps, 20),
-      sharedKeywords: formatKeywordsForDisplay(shared, 15)
-    }
-  } catch (error) {
-    // If competitor analysis fails, return placeholder
-    console.error(`[Competitor Analysis] Failed for ${competitorUrl}:`, error)
-    return {
-      competitorUrl,
-      competitorKeywords: [],
-      keywordGaps: [],
-      sharedKeywords: []
-    }
-  }
+  return analyzeCompetitors([competitorUrl], siteKeywords, options.userAgent)
 }
 
 /**
  * Generate competitor keyword gap analysis (fallback - pattern-based)
+ * NEW: Using generateFallbackKeywordSuggestions from realCompetitorAnalysis.ts
  */
 async function generateCompetitorAnalysis(
   pages: PageData[],
   siteKeywords: string[]
 ): Promise<CompetitorAnalysis> {
-  // Extract keywords from the audited site
-  const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
-  
-  // If we have good extracted keywords from the site, use those as core topics
-  // Otherwise, extract meaningful phrases from titles and H1s
-  const coreTopics = new Set<string>()
-  
-  // First, try to extract meaningful multi-word phrases from the site's extracted keywords
-  if (siteKeywords.length > 0) {
-    // Use the site's extracted keywords as core topics (they're already meaningful phrases)
-    siteKeywords.forEach(kw => {
-      const kwLower = kw.toLowerCase().trim()
-      // Only use keywords that are 2+ words and meaningful (filter out single generic words)
-      const words = kwLower.split(/\s+/)
-      if (words.length >= 2 && kwLower.length >= 5 && kwLower.length < 40) {
-        // Filter out patterns that start with generic words
-        const genericStarters = ['how', 'best', 'new', 'top', 'get', 'use', 'free', 'online']
-        if (!genericStarters.includes(words[0])) {
-          coreTopics.add(kwLower)
-        }
-      }
-    })
-  }
-  
-  // Define generic words at function scope so it can be used later
-  const genericWords = new Set(['free', 'online', 'best', 'new', 'top', 'get', 'use', 'make', 'find', 'see', 'more', 'here', 'page', 'site', 'web', 'www', 'com', 'org', 'net', 'gov', 'edu', 'html', 'http', 'https'])
-  
-  // If we don't have enough good keywords from extractedKeywords, extract from titles/H1s more intelligently
-  if (coreTopics.size < 3) {
-    const stopWords = new Set(['this', 'that', 'with', 'from', 'your', 'their', 'have', 'been', 'will', 'would', 'could', 'should', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'as', 'is', 'was', 'are', 'were'])
-    
-    pages.forEach(page => {
-      // Extract meaningful 2-3 word phrases from titles
-      if (page.title) {
-        const titleWords = page.title.toLowerCase()
-          .replace(/[^\w\s]/g, ' ')
-          .split(/\s+/)
-          .filter(w => w.length > 2 && !stopWords.has(w) && !genericWords.has(w))
-          // Remove consecutive duplicates
-          .filter((w, i, arr) => i === 0 || w !== arr[i - 1])
-        
-        // Create 2-3 word phrases from title, ensuring no repeated words
-        for (let i = 0; i < titleWords.length - 1 && i < 4; i++) {
-          // Skip if words are the same
-          if (titleWords[i] === titleWords[i + 1]) continue
-          const phrase = `${titleWords[i]} ${titleWords[i + 1]}`
-          if (phrase.length >= 5 && phrase.length < 30) {
-            coreTopics.add(phrase)
-          }
-          if (i < titleWords.length - 2) {
-            // Skip if any words are the same
-            if (titleWords[i] === titleWords[i + 1] || titleWords[i + 1] === titleWords[i + 2] || titleWords[i] === titleWords[i + 2]) continue
-            const phrase3 = `${titleWords[i]} ${titleWords[i + 1]} ${titleWords[i + 2]}`
-            if (phrase3.length >= 8 && phrase3.length < 40) {
-              coreTopics.add(phrase3)
-            }
-          }
-        }
-      }
-      
-      // Extract meaningful phrases from H1s
-      if (page.h1Text && page.h1Text.length > 0) {
-        page.h1Text.forEach(h1 => {
-          const h1Words = h1.toLowerCase()
-            .replace(/[^\w\s]/g, ' ')
-            .split(/\s+/)
-            .filter(w => w.length > 2 && !stopWords.has(w) && !genericWords.has(w))
-          
-          // Create 2-3 word phrases from H1
-          for (let i = 0; i < h1Words.length - 1 && i < 4; i++) {
-            const phrase = `${h1Words[i]} ${h1Words[i + 1]}`
-            if (phrase.length >= 5 && phrase.length < 30) {
-              coreTopics.add(phrase)
-            }
-            if (i < h1Words.length - 2) {
-              const phrase3 = `${h1Words[i]} ${h1Words[i + 1]} ${h1Words[i + 2]}`
-              if (phrase3.length >= 8 && phrase3.length < 40) {
-                coreTopics.add(phrase3)
-              }
-            }
-          }
-        })
-      }
-    })
-  }
-  
-  // Generate niche-specific competitor keywords by combining core topics with common SEO patterns
-  // Only use meaningful multi-word topics, not single words
-  const commonPatterns = [
-    'how to',
-    'best practices',
-    'complete guide',
-    'ultimate guide',
-    'getting started',
-    'tutorial',
-    'review',
-    'vs',
-    'alternatives',
-    'comparison',
-    'pricing',
-    'features',
-    'benefits',
-    'pros and cons',
-    'what is',
-    'examples',
-    'tips',
-    'troubleshooting',
-    'advanced',
-    'beginner'
-  ]
-  
-  // Create niche-specific competitor keywords
-  const nicheCompetitorKeywords: string[] = []
-  const coreTopicsArray = Array.from(coreTopics).slice(0, 5) // Use top 5 meaningful topics only
-  
-  // Only generate competitor keywords if we have meaningful core topics
-  if (coreTopicsArray.length > 0) {
-    // Filter out topics that are domain names, generic words, or nonsense
-    const filteredTopics = coreTopicsArray.filter(topic => {
-      const words = topic.split(' ')
-      // Filter out topics that contain generic domain words
-      if (words.some(w => genericWords.has(w))) return false
-      // Filter out topics that are just domain patterns (e.g., "nasa gov", "site com")
-      if (words.length === 2 && (genericWords.has(words[0]) || genericWords.has(words[1]))) return false
-      // Filter out topics with repeated words
-      if (new Set(words).size < words.length) return false
-      // Must be at least 2 words and meaningful
-      return words.length >= 2 && topic.length >= 5 && topic.length < 40
-    })
-    
-    // Combine meaningful topics with patterns
-    filteredTopics.forEach(topic => {
-      // Skip single-word topics that don't make sense
-      if (topic.split(/\s+/).length < 2) return
-      
-      // Only use the first 1-2 words of the topic to avoid creating nonsensical phrases
-      const topicWords = topic.split(/\s+/)
-      const shortTopic = topicWords.slice(0, 2).join(' ') // Use max 2 words from topic
-      
-      // Skip if topic is too generic or already contains pattern words
-      const topicLower = shortTopic.toLowerCase()
-      const hasPatternWord = commonPatterns.some(p => topicLower.includes(p.toLowerCase()))
-      if (hasPatternWord) return // Skip topics that already contain pattern words
-      
-      commonPatterns.slice(0, 8).forEach(pattern => {
-        const patternLower = pattern.toLowerCase()
-        
-        // Skip if pattern is already in the topic
-        if (topicLower.includes(patternLower)) return
-        
-        if (pattern.includes(' ')) {
-          // Multi-word patterns: "how to [topic]", "complete guide to [topic]"
-          // Only add if it creates a meaningful phrase (3-5 words total)
-          const combined = `${pattern} ${shortTopic}`.trim()
-          const wordCount = combined.split(/\s+/).length
-          // Ensure it's a reasonable length and doesn't duplicate the pattern
-          if (wordCount >= 3 && wordCount <= 5 && combined.length < 50 && !combined.includes(`${pattern} ${pattern}`)) {
-            nicheCompetitorKeywords.push(combined)
-          }
-        } else {
-          // Single word patterns: "[topic] tutorial", "[topic] review"
-          if (['tutorial', 'review', 'tips', 'guide', 'examples'].includes(pattern)) {
-            const combined = `${shortTopic} ${pattern}`.trim()
-            const wordCount = combined.split(/\s+/).length
-            if (wordCount >= 2 && wordCount <= 4 && combined.length < 40) {
-              nicheCompetitorKeywords.push(combined)
-            }
-          }
-        }
-      })
-    })
-  }
-  
-  // Combine with some generic high-value keywords that are always relevant
-  const genericHighValue = [
-    'best practices',
-    'how to guide',
-    'step by step',
-    'complete guide',
-    'ultimate guide',
-    'beginner guide',
-    'advanced techniques',
-    'troubleshooting guide',
-    'comparison guide',
-    'getting started guide'
-  ]
-  
-  const allCompetitorKeywords = [
-    ...nicheCompetitorKeywords,
-    ...genericHighValue
-  ]
-  
-  // Remove duplicates, filter out nonsensical combinations, and limit
-  const uniqueCompetitorKeywords = Array.from(new Set(allCompetitorKeywords))
-    .filter(kw => {
-      const kwLower = kw.toLowerCase().trim()
-      // Filter out keywords that are too short or too long
-      if (kwLower.length < 8 || kwLower.length > 50) return false
-      
-      const words = kwLower.split(/\s+/).filter(w => w.length > 0)
-      
-      // Filter out single words
-      if (words.length < 2) return false
-      
-      // Filter out keywords with duplicate patterns (e.g., "how to X how to for X")
-      const patternWords = ['how', 'to', 'for', 'best', 'practices', 'complete', 'guide', 'ultimate', 'getting', 'started']
-      const patternCount = words.filter(w => patternWords.includes(w)).length
-      if (patternCount > words.length / 2) {
-        // Too many pattern words, likely nonsensical
-        return false
-      }
-      
-      // Filter out keywords that repeat the same pattern twice
-      const hasDuplicatePattern = commonPatterns.some(pattern => {
-        const patternWords = pattern.toLowerCase().split(/\s+/)
-        const kwWords = kwLower.split(/\s+/)
-        let patternCount = 0
-        for (let i = 0; i <= kwWords.length - patternWords.length; i++) {
-          const slice = kwWords.slice(i, i + patternWords.length).join(' ')
-          if (slice === pattern.toLowerCase()) {
-            patternCount++
-          }
-        }
-        return patternCount > 1
-      })
-      if (hasDuplicatePattern) return false
-      
-      // Filter out nonsensical patterns like "how to next" or "best docs"
-      const genericSingleWords = ['next', 'docs', 'page', 'site', 'web', 'www', 'com', 'org', 'net']
-      if (words.length === 2 && genericSingleWords.includes(words[words.length - 1])) {
-        return false
-      }
-      
-      // Filter out repetitive word patterns
-      const uniqueWords = new Set(words)
-      if (uniqueWords.size < 2) return false
-      
-      // Filter out keywords where the same word appears more than twice
-      const wordCounts = new Map<string, number>()
-      words.forEach(w => wordCounts.set(w, (wordCounts.get(w) || 0) + 1))
-      for (const count of wordCounts.values()) {
-        if (count > 2) return false
-      }
-      
-      return true
-    })
-    .slice(0, 25) // Limit to 25 competitor keywords
-  
-  // Find keyword gaps (competitor keywords not in site)
-  const keywordGaps = uniqueCompetitorKeywords.filter(kw => {
-    const kwLower = kw.toLowerCase()
-    return !Array.from(siteKeywordSet).some(sk => {
-      const skLower = sk.toLowerCase()
-      // Check for overlap (not exact match, but related)
-      return skLower === kwLower ||
-        skLower.includes(kwLower) ||
-        kwLower.includes(skLower) ||
-        kwLower.split(' ').every(w => skLower.includes(w)) ||
-        skLower.split(' ').every(w => kwLower.includes(w))
-    })
-  })
-  
-  // Find shared keywords (keywords in both site and competitor analysis)
-  const sharedKeywords = uniqueCompetitorKeywords.filter(kw => {
-    const kwLower = kw.toLowerCase()
-    return Array.from(siteKeywordSet).some(sk => {
-      const skLower = sk.toLowerCase()
-      // Check for overlap
-      return skLower === kwLower ||
-        skLower.includes(kwLower) ||
-        kwLower.includes(skLower) ||
-        kwLower.split(' ').some(w => skLower.includes(w)) ||
-        skLower.split(' ').some(w => kwLower.includes(w))
-    })
-  })
-  
-  // Get the main topic for context
-  const mainTopic = coreTopicsArray[0] || 'your industry'
-  
-  return {
-    competitorUrl: `Analysis based on ${mainTopic} industry patterns and competitor research`,
-    competitorKeywords: uniqueCompetitorKeywords.slice(0, 25),
-    keywordGaps: keywordGaps.slice(0, 20),
-    sharedKeywords: sharedKeywords.slice(0, 15)
-  }
+  return generateFallbackKeywordSuggestions(pages, siteKeywords)
 }
 
+// OLD FALLBACK FUNCTION BODY REMOVED (lines 2044-2326)
+// Now using generateFallbackKeywordSuggestions from realCompetitorAnalysis.ts

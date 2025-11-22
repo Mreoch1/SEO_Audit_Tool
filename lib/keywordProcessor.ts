@@ -69,6 +69,20 @@ export function isValidKeyword(keyword: string): boolean {
     return false
   }
   
+  // Check for concatenated words (single word that's too long, like "frontiersread")
+  // If it's a single word without spaces/hyphens and >12 chars, it's likely concatenated
+  if (words.length === 1 && cleaned.length > 12 && !cleaned.includes('-')) {
+    return false
+  }
+  
+  // Check if any individual word is suspiciously long (likely concatenated)
+  for (const word of words) {
+    if (word.length > 15 && !word.includes('-')) {
+      // Word is too long and not hyphenated - likely concatenated
+      return false
+    }
+  }
+  
   // Check minimum length
   if (cleaned.length < 6) {
     return false

@@ -730,20 +730,22 @@ function generateReportHTML(
       </div>
     ` : ''}
     
-    ${result.competitorAnalysis.competitorUrl.startsWith('http') ? `
+    ${result.competitorAnalysis.competitorUrl && result.competitorAnalysis.competitorUrl.startsWith('http') ? `
       <p style="margin-bottom: 20px;"><strong>Competitor Analyzed:</strong> <a href="${result.competitorAnalysis.competitorUrl}" style="color: #3b82f6;">${result.competitorAnalysis.competitorUrl}</a></p>
       <p style="margin-bottom: 20px;">This analysis crawled the competitor site and extracted real keywords from their content, comparing them against your site to identify opportunities.</p>
-    ` : `
+    ` : result.competitorAnalysis.competitorUrl ? `
       <p style="margin-bottom: 20px;">${result.competitorAnalysis.competitorUrl}. This analysis identifies niche-specific keyword opportunities by combining your site's core topics with common SEO patterns used by competitors in your industry.</p>
+    ` : `
+      <p style="margin-bottom: 20px;">Competitor analysis based on industry patterns and common SEO strategies.</p>
     `}
     
     <div style="margin-bottom: 30px;">
       <h2>Keyword Gaps (Opportunities)</h2>
       <p style="color: #666; margin-bottom: 15px;">These keywords are commonly used by competitors but missing from your site:</p>
       <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-        ${result.competitorAnalysis.keywordGaps.map(kw => 
+        ${result.competitorAnalysis.keywordGaps && result.competitorAnalysis.keywordGaps.length > 0 ? result.competitorAnalysis.keywordGaps.map(kw => 
           `<span style="background: #fef2f2; border: 1px solid #fecaca; padding: 6px 12px; border-radius: 4px; font-size: 13px; color: #991b1b;">${escapeHtml(kw)}</span>`
-        ).join('')}
+        ).join('') : '<p style="color: #999; font-style: italic;">No keyword gaps identified</p>'}
       </div>
     </div>
     
@@ -751,9 +753,9 @@ function generateReportHTML(
       <h2>Shared Keywords</h2>
       <p style="color: #666; margin-bottom: 15px;">Keywords you're already targeting that competitors also use:</p>
       <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-        ${result.competitorAnalysis.sharedKeywords.map(kw => 
+        ${result.competitorAnalysis.sharedKeywords && result.competitorAnalysis.sharedKeywords.length > 0 ? result.competitorAnalysis.sharedKeywords.map(kw => 
           `<span style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 6px 12px; border-radius: 4px; font-size: 13px; color: #166534;">${escapeHtml(kw)}</span>`
-        ).join('')}
+        ).join('') : '<p style="color: #999; font-style: italic;">No shared keywords identified</p>'}
       </div>
     </div>
     
@@ -761,9 +763,9 @@ function generateReportHTML(
       <h2>Competitor Keywords Analyzed</h2>
       <p style="color: #666; margin-bottom: 15px;">Common keywords found in competitor analysis:</p>
       <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-        ${result.competitorAnalysis.competitorKeywords.map(kw => 
+        ${result.competitorAnalysis.competitorKeywords && result.competitorAnalysis.competitorKeywords.length > 0 ? result.competitorAnalysis.competitorKeywords.map(kw => 
           `<span style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 4px; font-size: 13px; color: #1e40af;">${escapeHtml(kw)}</span>`
-        ).join('')}
+        ).join('') : '<p style="color: #999; font-style: italic;">No competitor keywords found</p>'}
       </div>
     </div>
     
