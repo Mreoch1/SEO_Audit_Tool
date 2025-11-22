@@ -64,7 +64,7 @@ async function getBrowser(): Promise<Browser> {
   console.log('[Renderer] Launching new browser instance...')
   try {
     browserInstance = await puppeteer.launch({
-      headless: "new",
+      headless: true, // Use old headless mode (more stable on macOS)
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -73,23 +73,13 @@ async function getBrowser(): Promise<Browser> {
         '--disable-gpu',
         '--disable-web-security',
         '--disable-features=IsolateOrigins,site-per-process',
-        '--disable-background-networking',
-        '--disable-background-timer-throttling',
-        '--disable-renderer-backgrounding',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-ipc-flooding-protection',
         '--no-first-run',
         '--no-default-browser-check',
         '--mute-audio',
         '--disable-extensions'
       ],
-      // Increase timeout for browser launch
       timeout: 60000,
-      // Use pipe instead of WebSocket for more stable connection
-      pipe: true,
-      ignoreHTTPSErrors: true,
-      // Explicitly set protocol timeout
-      protocolTimeout: 60000
+      ignoreHTTPSErrors: true
     })
     
     // Verify browser is actually connected and working
