@@ -17,6 +17,7 @@ import { performEnhancedTechnicalCheck, getTechnicalFixInstructions } from './en
 import { analyzeEnhancedOnPage, getOnPageFixInstructions } from './enhancedOnPage'
 import { analyzeEnhancedContent, getContentFixInstructions } from './enhancedContent'
 import { classifyDomain } from './competitorData'
+import { deduplicateKeywords, formatKeywordsForDisplay, findKeywordGaps } from './keywordProcessor'
 
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
@@ -280,24 +281,11 @@ export async function runAudit(
     })
   }
   
-  // Collect keywords from all pages
-  const allKeywords = new Set<string>()
+  // Collect keywords from all pages using improved processor
+  const allKeywords: string[] = []
   pages.forEach(page => {
     if (page.extractedKeywords) {
-      page.extractedKeywords.forEach(kw => {
-        // Only add if it's a valid 2+ word phrase (safety check)
-        const words = kw.split(/\s+/).filter(w => w.trim().length > 0)
-        if (words.length >= 2) {
-          // Ensure each word is meaningful (at least 2 chars after cleaning)
-          const allWordsValid = words.every(w => {
-            const cleanW = w.replace(/[^\w]/g, '')
-            return cleanW.length >= 2
-          })
-          if (allWordsValid) {
-            allKeywords.add(kw.trim())
-          }
-        }
-      })
+      allKeywords.push(...page.extractedKeywords)
     }
   })
   
@@ -306,13 +294,9 @@ export async function runAudit(
   if (opts.addOns?.additionalKeywords) {
     keywordCount += opts.addOns.additionalKeywords
   }
-  const topKeywords = Array.from(allKeywords)
-    .filter(kw => {
-      // Final safety check: ensure it's a 2+ word phrase
-      const words = kw.split(/\s+/).filter(w => w.trim().length > 0)
-      return words.length >= 2
-    })
-    .slice(0, keywordCount)
+  
+  // Use the new keyword processor for clean, deduplicated results
+  const topKeywords = formatKeywordsForDisplay(allKeywords, keywordCount)
   
   // Image Alt Tags Analysis (if add-on is selected)
   let imageAltAnalysis: ImageAltAnalysis[] | undefined
@@ -2146,45 +2130,22 @@ async function generateRealCompetitorAnalysis(
       }
     })
     
-    const competitorKeywordsArray = Array.from(competitorKeywords)
-    const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
+    // Clean and deduplicate competitor keywords
+    const competitorKeywordsArray = deduplicateKeywords(Array.from(competitorKeywords))
     
     console.log(`[Competitor Analysis] Extracted ${competitorKeywordsArray.length} total keywords from ${competitorPages.length} competitor pages`)
     console.log(`[Competitor Analysis] Sample competitor keywords: ${competitorKeywordsArray.slice(0, 10).join(', ')}`)
     
-    // Find keyword gaps (competitor has, site doesn't)
-    const keywordGaps = competitorKeywordsArray.filter(kw => {
-      const kwLower = kw.toLowerCase()
-      return !Array.from(siteKeywordSet).some(sk => {
-        const skLower = sk.toLowerCase()
-        return skLower === kwLower ||
-          skLower.includes(kwLower) ||
-          kwLower.includes(skLower) ||
-          kwLower.split(' ').every(w => skLower.includes(w)) ||
-          skLower.split(' ').every(w => kwLower.includes(w))
-      })
-    })
+    // Use the improved keyword gap finder
+    const { gaps, shared, unique } = findKeywordGaps(siteKeywords, competitorKeywordsArray)
     
-    // Find shared keywords
-    const sharedKeywords = competitorKeywordsArray.filter(kw => {
-      const kwLower = kw.toLowerCase()
-      return Array.from(siteKeywordSet).some(sk => {
-        const skLower = sk.toLowerCase()
-        return skLower === kwLower ||
-          skLower.includes(kwLower) ||
-          kwLower.includes(skLower) ||
-          kwLower.split(' ').some(w => skLower.includes(w)) ||
-          skLower.split(' ').some(w => kwLower.includes(w))
-      })
-    })
-    
-    console.log(`[Competitor Analysis] Found ${keywordGaps.length} keyword gaps and ${sharedKeywords.length} shared keywords`)
+    console.log(`[Competitor Analysis] Found ${gaps.length} keyword gaps, ${shared.length} shared keywords, and ${unique.length} unique client keywords`)
     
     return {
       competitorUrl,
-      competitorKeywords: competitorKeywordsArray.slice(0, 25),
-      keywordGaps: keywordGaps.slice(0, 20),
-      sharedKeywords: sharedKeywords.slice(0, 15)
+      competitorKeywords: formatKeywordsForDisplay(competitorKeywordsArray, 25),
+      keywordGaps: formatKeywordsForDisplay(gaps, 20),
+      sharedKeywords: formatKeywordsForDisplay(shared, 15)
     }
   } catch (error) {
     // If competitor analysis fails, return placeholder
