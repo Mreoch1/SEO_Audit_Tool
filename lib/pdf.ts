@@ -735,6 +735,12 @@ function generateReportHTML(
     ${result.competitorAnalysis.competitorUrl && result.competitorAnalysis.competitorUrl.startsWith('http') ? `
       <p style="margin-bottom: 20px;"><strong>Competitor Analyzed:</strong> <a href="${result.competitorAnalysis.competitorUrl}" style="color: #3b82f6;">${result.competitorAnalysis.competitorUrl}</a></p>
       <p style="margin-bottom: 20px;">This analysis crawled the competitor site and extracted real keywords from their content, comparing them against your site to identify opportunities.</p>
+    ` : result.competitorAnalysis.competitorUrl && result.competitorAnalysis.competitorUrl.includes('required') ? `
+      <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin-bottom: 20px;">
+        <p style="margin: 0; font-weight: bold; color: #dc2626;">⚠️ Agency Tier Requirement: Competitor URLs Required</p>
+        <p style="margin: 8px 0 0 0; color: #666;">Agency tier includes 3 competitor crawls + keyword gap analysis. No competitor URLs were provided for this audit. Please provide competitor URLs for full Agency-tier competitor analysis.</p>
+      </div>
+      <p style="margin-bottom: 20px;">This analysis uses pattern-based keyword suggestions as a fallback. For full Agency-tier competitor analysis, provide competitor URLs when creating the audit.</p>
     ` : result.competitorAnalysis.competitorUrl ? `
       <p style="margin-bottom: 20px;">${result.competitorAnalysis.competitorUrl}. This analysis identifies niche-specific keyword opportunities by combining your site's core topics with common SEO patterns used by competitors in your industry.</p>
     ` : `
@@ -808,10 +814,19 @@ function generateReportHTML(
   ` : ''}
   
   <!-- Crawl Diagnostics (Agency tier) -->
-  ${result.crawlDiagnostics?.crawlMetrics && result.raw.options.tier === 'agency' ? `
+  ${result.crawlDiagnostics && result.raw.options.tier === 'agency' ? `
   <div class="page">
     <h1>Crawl Diagnostics</h1>
-    ${generateCrawlDiagnosticsDisplay(result.crawlDiagnostics)}
+    ${result.crawlDiagnostics.crawlMetrics ? generateCrawlDiagnosticsDisplay(result.crawlDiagnostics) : `
+      <div style="padding: 20px; background: #fef2f2; border-left: 4px solid #f59e0b; border-radius: 8px;">
+        <p style="margin: 0; font-weight: bold; color: #dc2626;">⚠️ Limited Crawl Data</p>
+        <p style="margin: 8px 0 0 0; color: #666;">
+          Crawl diagnostics require at least 5 pages for meaningful metrics. 
+          This audit analyzed ${result.summary.totalPages} page(s). 
+          For full Agency-tier crawl diagnostics, ensure a deeper crawl is performed.
+        </p>
+      </div>
+    `}
   </div>
   ` : ''}
   

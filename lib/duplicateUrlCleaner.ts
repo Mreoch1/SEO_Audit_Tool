@@ -33,12 +33,33 @@ export function analyzeDuplicateUrls(
   const duplicateGroups: DuplicateUrlGroup[] = []
   
   // Group URLs by their normalized form
+  // ENHANCED: Also check for variations (trailing slash, case, params, www, protocol)
   pages.forEach(page => {
     const normalized = normalizeUrl(page.url)
     if (!urlGroups.has(normalized)) {
       urlGroups.set(normalized, [])
     }
     urlGroups.get(normalized)!.push(page.url)
+    
+    // Also check for common variations
+    const variations = [
+      page.url,
+      page.url.replace(/\/$/, ''), // Without trailing slash
+      page.url + '/', // With trailing slash
+      page.url.toLowerCase(), // Lowercase
+      page.url.replace(/^https?:\/\//, 'https://'), // Force HTTPS
+      page.url.replace(/^https?:\/\/(www\.)?/, 'https://'), // Remove www
+      page.url.replace(/^https?:\/\//, 'https://www.'), // Add www
+      page.url.split('?')[0], // Without query params
+    ]
+    
+    variations.forEach(variation => {
+      const varNormalized = normalizeUrl(variation)
+      if (varNormalized === normalized && !urlGroups.get(normalized)!.includes(variation)) {
+        // This is a variation we should track
+        urlGroups.get(normalized)!.push(variation)
+      }
+    })
     
     // Track declared canonicals
     if (page.canonical) {

@@ -58,11 +58,10 @@ export function analyzeCrawl(
   const platform = detectPlatform(pages, startUrl)
   
   // NEW: Calculate crawl metrics (Agency tier)
-  const crawlMetrics = calculateCrawlMetrics(
-    pages,
-    crawlDuration,
-    disallowedPaths || []
-  )
+  // CRITICAL: Mark as limited if < 5 pages
+  const crawlMetrics = pages.length >= 5 
+    ? calculateCrawlMetrics(pages, crawlDuration, disallowedPaths || [])
+    : undefined // Don't show metrics for single-page or very small crawls
   
   // Detect issues
   const issues: CrawlIssue[] = []

@@ -229,7 +229,10 @@ export function calculateTechnicalScore(
     i.category === 'Technical' && i.severity === 'High'
   )
   if (hasHighPriorityIssues) {
-    score = Math.min(score, 85) // Cap at 85 if high priority issues exist
+    // More aggressive cap based on number of high priority issues
+    const highIssueCount = issues.filter(i => i.category === 'Technical' && i.severity === 'High').length
+    const maxScore = Math.max(30, 85 - (highIssueCount * 10)) // Cap lower with more high issues
+    score = Math.min(score, maxScore)
   }
   
   return Math.max(0, Math.round(score))
@@ -364,7 +367,10 @@ export function calculateOnPageScore(
     i.category === 'On-page' && i.severity === 'High'
   )
   if (hasHighPriorityIssues) {
-    score = Math.min(score, 80) // Cap at 80 if high priority issues exist
+    // More aggressive cap - missing title/meta/H1 are critical
+    const highIssueCount = issues.filter(i => i.category === 'On-page' && i.severity === 'High').length
+    const maxScore = Math.max(40, 80 - (highIssueCount * 15)) // Cap lower with more high issues
+    score = Math.min(score, maxScore)
   }
   
   return Math.max(0, Math.round(score))
@@ -469,7 +475,10 @@ export function calculateContentScore(
     i.category === 'Content' && i.severity === 'High'
   )
   if (hasHighPriorityIssues) {
-    score = Math.min(score, 80) // Cap at 80 if high priority issues exist
+    // More aggressive cap - thin content (0 words) is critical
+    const highIssueCount = issues.filter(i => i.category === 'Content' && i.severity === 'High').length
+    const maxScore = Math.max(50, 80 - (highIssueCount * 10)) // Cap lower with more high issues
+    score = Math.min(score, maxScore)
   }
   
   return Math.max(0, Math.round(score))
@@ -668,7 +677,7 @@ function calculateCoreWebVitalsSubscore(pages: PageData[]): number {
 
 /**
  * Calculate Accessibility score
- * CRITICAL FIX: Properly match issues and deduct points
+ * CRITICAL FIX: Viewport missing affects accessibility, prevent 100/100 when High issues exist
  */
 export function calculateAccessibilityScore(
   issues: Issue[],
@@ -686,6 +695,23 @@ export function calculateAccessibilityScore(
     return patterns.some(pattern => 
       type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
     )
+  }
+  
+  // CRITICAL: Viewport meta tag is required for mobile accessibility
+  const viewportIssues = issues.filter(i => 
+    i.category === 'Technical' && matchesIssue(i, ['viewport', 'mobile'])
+  )
+  viewportIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 15 // Major penalty - viewport is critical for accessibility
+    else if (issue.severity === 'Medium') score -= 8
+    else score -= 3
+  })
+  
+  // Also check actual page data for missing viewport
+  const pagesWithoutViewport = pages.filter(p => !p.hasViewport).length
+  if (pagesWithoutViewport > 0) {
+    const missingViewportRate = pagesWithoutViewport / pages.length
+    score -= Math.min(15, missingViewportRate * 15) // Up to 15 points for missing viewport
   }
   
   // Alt text issues (-40 points max) - CRITICAL: High severity
@@ -736,12 +762,15 @@ export function calculateAccessibilityScore(
     else score -= 1
   })
   
-  // CRITICAL: Cannot have perfect score if any High priority issues exist
+  // CRITICAL: Cannot have perfect score if any High priority issues exist (including viewport)
   const hasHighPriorityIssues = issues.some(i => 
-    i.category === 'Accessibility' && i.severity === 'High'
+    (i.category === 'Accessibility' || (i.category === 'Technical' && matchesIssue(i, ['viewport']))) && 
+    i.severity === 'High'
   )
-  if (hasHighPriorityIssues) {
-    score = Math.min(score, 85) // Cap at 85 if high priority issues exist
+  const hasMissingViewport = pages.some(p => !p.hasViewport)
+  
+  if (hasHighPriorityIssues || hasMissingViewport) {
+    score = Math.min(score, 85) // Cap at 85 if high priority issues exist or viewport missing
   }
   
   return Math.max(0, Math.round(score))

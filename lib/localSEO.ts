@@ -550,6 +550,7 @@ function detectGBPIndicators(pages: PageData[]): GBPIndicators {
 
 /**
  * Calculate overall local SEO score (Enhanced for Agency tier)
+ * CRITICAL FIX: NAP consistency must be 0 if phone/address missing
  */
 function calculateLocalSEOScore(
   nap: NAPData,
@@ -562,10 +563,20 @@ function calculateLocalSEOScore(
 ): number {
   let score = 0
   
-  // NAP consistency (25 points) - Enhanced with consistency score
-  if (nap.phone) score += 8
-  if (nap.address) score += 8
-  score += (napConsistency.consistencyScore / 100) * 9 // Weighted by consistency
+  // CRITICAL: NAP consistency (25 points) - Cannot be consistent if missing
+  // If phone OR address is missing, NAP score = 0
+  if (!nap.phone || !nap.address) {
+    // Missing NAP data = 0 points for NAP section
+    score += 0
+  } else {
+    // Both exist - check consistency
+    if (nap.phone) score += 8
+    if (nap.address) score += 8
+    // Only apply consistency score if NAP data exists
+    if (napConsistency.consistencyScore > 0) {
+      score += (napConsistency.consistencyScore / 100) * 9 // Weighted by consistency
+    }
+  }
   
   // Local schema (30 points)
   if (schema.hasLocalBusiness) score += 15
@@ -822,16 +833,21 @@ function analyzeNAPConsistency(pages: PageData[], nap: NAPData): NAPConsistency 
   consistency.addressVariations = Array.from(addressSet)
   
   // Calculate consistency score
-  let deductions = 0
-  
-  if (consistency.phoneVariations.length > 1) {
-    deductions += 20 * (consistency.phoneVariations.length - 1)
+  // CRITICAL: If no phone or address found, consistency = 0
+  if (phoneSet.size === 0 && addressSet.size === 0) {
+    consistency.consistencyScore = 0
+  } else {
+    let deductions = 0
+    
+    if (consistency.phoneVariations.length > 1) {
+      deductions += 20 * (consistency.phoneVariations.length - 1)
+    }
+    if (consistency.addressVariations.length > 1) {
+      deductions += 20 * (consistency.addressVariations.length - 1)
+    }
+    
+    consistency.consistencyScore = Math.max(0, 100 - deductions)
   }
-  if (consistency.addressVariations.length > 1) {
-    deductions += 20 * (consistency.addressVariations.length - 1)
-  }
-  
-  consistency.consistencyScore = Math.max(0, 100 - deductions)
   
   // Find inconsistent pages
   if (consistency.phoneVariations.length > 1 || consistency.addressVariations.length > 1) {

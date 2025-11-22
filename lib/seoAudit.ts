@@ -496,11 +496,20 @@ export async function runAudit(
           opts
         )
       } else {
-        // No competitor URLs provided - use pattern-based for non-Agency, warn for Agency
+        // No competitor URLs provided
         if (opts.tier === 'agency') {
-          console.warn('[Competitor] Agency tier: No competitor URLs provided, using pattern-based analysis')
+          console.warn('[Competitor] ⚠️ Agency tier requires competitor URLs for full analysis. No competitor URLs provided - using pattern-based fallback.')
+          // For Agency tier, still generate analysis but mark it as incomplete
+          competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
+          if (competitorAnalysis) {
+            competitorAnalysis.competitorUrl = 'Competitor URLs required for Agency tier analysis'
+            competitorAnalysis.keywordGaps = []
+            competitorAnalysis.competitorKeywords = []
+            competitorAnalysis.sharedKeywords = []
+          }
+        } else {
+          competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
         }
-        competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
       }
     } else {
       // Auto-detect competitors based on industry classification
