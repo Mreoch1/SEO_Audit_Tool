@@ -323,11 +323,11 @@ export async function runAudit(
   // Competitor Analysis (if add-on is selected)
   let competitorAnalysis: CompetitorAnalysis | undefined
   if (opts.addOns?.competitorAnalysis) {
-    if (options.competitorUrls && options.competitorUrls.length > 0) {
+    if (opts.competitorUrls && opts.competitorUrls.length > 0) {
       // User provided competitor URLs - use them
-      console.log('[Audit] Using user-provided competitor URLs for analysis...')
+      console.log(`[Audit] Using user-provided competitor URLs for analysis: ${opts.competitorUrls.join(', ')}`)
       competitorAnalysis = await generateRealCompetitorAnalysis(
-        options.competitorUrls[0], // Analyze first competitor
+        opts.competitorUrls[0], // Analyze first competitor
         topKeywords,
         opts
       )
