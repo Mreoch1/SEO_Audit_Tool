@@ -206,6 +206,7 @@ export interface AuditAddOns {
   schemaDeepDive?: boolean // Schema deep-dive analysis ($15, Starter tier)
   additionalCompetitors?: number // Additional competitor crawls ($10 each, Agency tier)
   extraCrawlDepth?: boolean // Extra crawl depth (+$15, Agency tier)
+  expedited?: boolean // 24-hour expedited delivery (+$15, all tiers)
 }
 
 export interface AuditOptions {
