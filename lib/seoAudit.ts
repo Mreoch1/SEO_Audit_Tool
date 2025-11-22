@@ -16,6 +16,7 @@ import { checkSocialMediaPresence } from './social'
 import { performEnhancedTechnicalCheck, getTechnicalFixInstructions } from './enhancedTechnical'
 import { analyzeEnhancedOnPage, getOnPageFixInstructions } from './enhancedOnPage'
 import { analyzeEnhancedContent, getContentFixInstructions } from './enhancedContent'
+import { classifyDomain } from './competitorData'
 
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
