@@ -17,23 +17,36 @@ SEO Audit Pro is a comprehensive, self-hosted SEO auditing platform designed to 
 *   **Meta Tag Validation:** Audits titles, descriptions, and viewport settings for length and presence.
 *   **SSL & Security:** Verifies HTTPS implementation and mixed content issues.
 *   **Mobile Friendliness:** Checks viewport configuration and mobile responsiveness.
+*   **Crawl Diagnostics:** Detects crawl failures, identifies platform (Wix, WordPress, Squarespace, Shopify), and provides actionable recommendations.
+*   **404 Page Filtering:** Automatically excludes error pages from SEO analysis to ensure accurate scoring.
+*   **URL Deduplication:** Removes duplicate URLs (www vs non-www, redirects) for clean page-level reporting.
 
 ### 3. On-Page SEO & Content Quality
-*   **Keyword Extraction:** Uses NLP to identify primary and secondary topics from page content.
+*   **Keyword Extraction:** Uses NLP to identify primary and secondary topics from page content. HTML entity decoding ensures clean, readable keywords.
 *   **Content Structure:** Audits Heading (H1-H6) hierarchy for logical flow.
-*   **Readability Scoring:** Calculates Flesch Reading Ease scores to ensure content is accessible to the target audience.
+*   **Readability Scoring:** Calculates Flesch Reading Ease scores to ensure content is accessible to the target audience. Integrated into content quality scoring.
 *   **Thin Content Detection:** Flags pages with low word counts that may provide little value.
 *   **Image Optimization:** Checks for missing Alt text, broken images, and large file sizes.
+*   **Issue Deduplication:** Automatically merges duplicate issues to provide clean, actionable reports.
 
-### 4. 🏆 Automated Competitor Intelligence (New!)
+### 4. 🏆 Automated Competitor Intelligence
 *   **Auto-Detection:** Automatically identifies the industry niche (SaaS, E-commerce, Health, etc.) based on site content.
 *   **Real Competitor Crawling:** Live-crawls top competitors in that niche to extract their actual keyword strategies.
 *   **Keyword Gap Analysis:** Identifies high-value keywords your competitors are using but you are missing.
 *   **Opportunity Discovery:** Highlights "low hanging fruit" keywords to target.
+*   **Graceful Fallback:** Provides pattern-based suggestions if competitor crawling fails, with clear explanations.
 
-### 5. Accessibility & Best Practices
+### 5. 🏢 Local SEO Analysis (New!)
+*   **NAP Consistency:** Extracts and validates Name, Address, Phone data across all pages.
+*   **Local Schema Detection:** Identifies LocalBusiness and Organization schema markup with field validation.
+*   **Service Area Pages:** Detects city-specific and service-area landing pages.
+*   **Local Keywords:** Analyzes location-based and service keywords in content.
+*   **Google Business Profile Indicators:** Detects Google Maps embeds, review widgets, and GBP links.
+*   **Scoring & Recommendations:** Provides 0-100 local SEO score with actionable recommendations.
+
+### 6. Accessibility & Best Practices
 *   **WCAG Checks:** Basic accessibility validation (alt text, contrast ratios).
-*   **Social Signals:** Verifies Open Graph (OG) and Twitter Card tags for social sharing.
+*   **Social Signals:** Verifies Open Graph (OG) and Twitter Card tags for social sharing. Accurately detects social media profiles (filters out favicon URLs).
 *   **Robots & Sitemaps:** Validates `robots.txt` and `sitemap.xml` availability.
 
 ## 📊 Reporting & Deliverables
@@ -44,6 +57,9 @@ SEO Audit Pro is a comprehensive, self-hosted SEO auditing platform designed to 
     *   Priority Action Plan (High/Medium/Low)
     *   Detailed Issue Breakdown with "How to Fix" guides
     *   Visual Scorecards (0-100)
+    *   Local SEO Analysis Section
+    *   Crawl Diagnostics & Platform Detection
+*   **Platform-Specific Instructions:** Automatically detects platform (Wix, WordPress, Squarespace, Shopify) and provides step-by-step fix instructions tailored to each platform.
 *   **Email Delivery:** Send reports directly to clients via SMTP (supports Zoho, Gmail, etc.) with custom branding.
 *   **Branding:** Fully customizable logo, brand name, and color scheme for reports.
 

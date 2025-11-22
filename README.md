@@ -10,7 +10,7 @@ A production-ready web application and CLI tool for performing automated SEO sit
 - **Performance Opportunities**: Shows top optimization opportunities with potential time savings (e.g., "Remove unused CSS - saves 1,234ms")
 - **HTTP/2 & HTTP/3 Detection**: Automatically detects HTTP version (HTTP/1.1, HTTP/2, HTTP/3)
 - **Compression Detection**: Checks for GZIP and Brotli compression support
-- **Social Media Presence**: Detects Open Graph tags, Twitter Cards, social media links, Facebook Pixel, and favicons
+- **Social Media Presence**: Detects Open Graph tags, Twitter Cards, social media links, Facebook Pixel, and favicons. Accurately filters out favicon URLs to prevent false positives.
 - **Advanced Image Detection**: Detects lazy-loaded images, background images, picture elements, and CSS images
 - **Enhanced Link Detection**: Finds JS-generated links, button-based navigation, and dynamically created anchors
 - **Tier-Based Audits**: Three service tiers (Starter, Standard, Advanced) with different page limits and features
@@ -26,6 +26,13 @@ A production-ready web application and CLI tool for performing automated SEO sit
   - **Keyword extraction**: From titles, headings, and meta descriptions
   - **Image alt tag optimization**: Detailed analysis with specific recommendations
   - **Real competitor analysis**: Crawls competitor URLs and extracts real keywords (not generic patterns)
+  - **Local SEO analysis**: NAP consistency, LocalBusiness schema, service area pages, local keywords, GBP indicators
+  - **Crawl diagnostics**: Platform detection (Wix, WordPress, Squarespace, Shopify), crawl status reporting, actionable recommendations
+  - **Platform-specific instructions**: Automatically provides step-by-step fix instructions tailored to detected platform
+  - **Issue deduplication**: Automatically merges duplicate issues for cleaner reports
+  - **URL deduplication**: Removes duplicate URLs (www vs non-www, redirects) for accurate page-level reporting
+  - **404 page filtering**: Excludes error pages from SEO analysis to ensure accurate scoring
+  - **Clean keyword extraction**: HTML entity decoding ensures readable, meaningful keywords
   - **Priority action plan**: Week-by-week recommendations based on severity
   - **Performance issues**: Based on Core Web Vitals thresholds and PageSpeed opportunities
 - **Scheduled Audits**: Set up recurring audits with cron expressions
@@ -242,6 +249,8 @@ The PDF includes a prioritized action plan:
 Every issue in the PDF includes:
 - What's wrong (issue description)
 - How to fix (step-by-step instructions)
+  - **Platform-specific**: Automatically detects platform (Wix, WordPress, Squarespace, Shopify) and provides tailored instructions
+  - **Generic fallback**: Server-level examples (Apache/Nginx) for custom platforms
 - Affected pages (which pages need fixing)
 - Code examples where applicable
 
@@ -326,11 +335,13 @@ Each PDF report includes:
 10. **Image Alt Tags Analysis**: (If add-on purchased) Detailed alt tag recommendations
 11. **Performance Metrics (Core Web Vitals)**: LCP, INP, CLS, FCP, TTFB + **Optimization Opportunities**
 12. **LLM Readability Analysis**: Unique rendering percentage analysis
-13. **Social Media Presence**: Open Graph, Twitter Cards, social links, favicon detection
+13. **Social Media Presence**: Open Graph, Twitter Cards, social links, favicon detection (with accurate filtering)
 14. **Schema Markup Analysis**: Identity Schema detection and validation
-15. **Competitor Keyword Gap**: (If add-on purchased) Real keyword opportunities and gaps
-16. **Page-Level Findings**: Table of all scanned pages with metrics
-17. **Raw Data**: Complete audit data in JSON format
+15. **Local SEO Analysis**: NAP consistency, LocalBusiness schema, service area pages, local keywords, GBP indicators, scoring
+16. **Crawl Diagnostics**: Platform detection, crawl status, recommendations for crawl issues
+17. **Competitor Keyword Gap**: (If add-on purchased) Real keyword opportunities and gaps
+18. **Page-Level Findings**: Table of all scanned pages with metrics (no duplicates)
+19. **Raw Data**: Complete audit data in JSON format
 
 ## Customization
 

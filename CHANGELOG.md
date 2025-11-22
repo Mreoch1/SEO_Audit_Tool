@@ -1,6 +1,71 @@
 # Changelog
 
-## [Unreleased] - Latest Features (2025-01-XX)
+## [Unreleased] - Major Updates (2025-11-22)
+
+### Latest: Production-Ready Improvements (Sprint 1-3 Complete)
+
+#### Added
+- **Crawl Diagnostics Module** (`lib/crawlDiagnostics.ts`)
+  - Detects crawl status (success/partial/failed)
+  - Platform detection (Wix, WordPress, Squarespace, Shopify, custom)
+  - Identifies specific issues (404s, parking pages, robots.txt blocking, JS-heavy sites)
+  - Generates actionable recommendations
+  - Provides user-friendly status messages
+
+- **Local SEO Analysis Module** (`lib/localSEO.ts`)
+  - NAP (Name, Address, Phone) extraction and consistency checking
+  - Local schema markup analysis (LocalBusiness, Organization)
+  - Service area / city landing page detection
+  - Local keyword analysis (location + service keywords)
+  - Google Business Profile indicators (maps, reviews, links)
+  - Weighted scoring algorithm (0-100)
+  - 8+ issue types with detailed fixes
+  - Comprehensive recommendations
+
+- **Platform-Specific Instructions** (`lib/platformInstructions.ts`)
+  - Wix-specific fix instructions (10+ issue types)
+  - WordPress-specific fix instructions (10+ issue types)
+  - Squarespace-specific fix instructions (10+ issue types)
+  - Shopify-specific fix instructions (10+ issue types)
+  - Generic fallback for custom platforms
+  - Automatic platform detection and instruction selection
+  - Replaces generic "consult web server docs" messages
+
+#### Changed
+- **404 Page Filtering**: Error pages (4xx/5xx) are now excluded from SEO analysis
+- **URL Deduplication**: Duplicate URLs (www vs non-www, redirects) are automatically removed
+- **Keyword Extraction**: HTML entity decoding ensures clean, readable keywords (no more "tconne cted" garbage)
+- **Social Media Detection**: Accurately filters out favicon URLs to prevent false positives
+- **Issue Deduplication**: Automatically merges duplicate issues for cleaner reports
+- **Competitor Analysis**: Better logging and graceful fallback when crawling fails
+- **Fix Instructions**: All issues now include platform-specific step-by-step instructions
+
+#### Fixed
+- Fixed favicon URLs being detected as social media profiles (e.g., `https://x.com/favicon`)
+- Fixed duplicate issues appearing in reports (e.g., "Title too short" appearing twice)
+- Fixed duplicate URLs in page-level table
+- Fixed garbage keywords from HTML entities
+- Fixed 404 pages being audited for SEO issues
+- Fixed empty competitor analysis sections without explanation
+- Fixed generic "consult web server docs" instructions
+
+#### Technical Improvements
+- **Modular Architecture**: Separated concerns into dedicated modules
+  - `lib/crawlDiagnostics.ts` - Crawl analysis
+  - `lib/localSEO.ts` - Local SEO analysis
+  - `lib/platformInstructions.ts` - Platform-specific instructions
+  - `lib/urlNormalizer.ts` - URL handling
+  - `lib/titleMetaExtractor.ts` - Title/meta extraction
+  - `lib/performanceValidator.ts` - Performance validation
+  - `lib/scoring.ts` - Scoring logic
+  - `lib/realCompetitorAnalysis.ts` - Competitor analysis
+- **Type Safety**: Full TypeScript support throughout
+- **Error Handling**: Comprehensive error handling and logging
+- **Code Quality**: 0 linter errors, clean architecture
+
+---
+
+## [Previous] - Latest Features (2025-01-XX)
 
 ### Latest: PageSpeed Insights & Social Media Integration
 
