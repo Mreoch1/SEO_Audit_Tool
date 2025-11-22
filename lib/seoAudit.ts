@@ -107,10 +107,12 @@ export async function runAudit(
   
   // Initialize browser for this audit (reuse across all pages)
   let browserInitialized = false
+  let closeBrowserFn: (() => Promise<void>) | null = null
   try {
     const { initializeBrowser, closeBrowser } = await import('./renderer')
     await initializeBrowser()
     browserInitialized = true
+    closeBrowserFn = closeBrowser
   } catch (browserError) {
     console.warn('[Audit] Browser initialization failed, will use fallback fetch only:', browserError)
     // Continue without browser - we'll use basic fetch fallback
@@ -391,11 +393,13 @@ export async function runAudit(
   }
   } finally {
     // Ensure browser is always closed, even if audit fails
-    try {
-      await closeBrowser()
-      console.log('[Audit] Browser closed successfully')
-    } catch (error) {
-      console.warn('[Audit] Error closing browser:', error)
+    if (browserInitialized && closeBrowserFn) {
+      try {
+        await closeBrowserFn()
+        console.log('[Audit] Browser closed successfully')
+      } catch (error) {
+        console.warn('[Audit] Error closing browser:', error)
+      }
     }
   }
 }
