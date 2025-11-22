@@ -127,12 +127,50 @@ async function fetchPageSpeedForStrategy(
     const audits = data.lighthouseResult?.audits || {}
     const lighthouseResult = data.lighthouseResult
 
-    // Extract metrics
-    const lcp = audits['largest-contentful-paint']?.numericValue || 0
-    const fcp = audits['first-contentful-paint']?.numericValue || 0
-    const cls = audits['cumulative-layout-shift']?.numericValue || 0
-    const inp = audits['interaction-to-next-paint']?.numericValue || 0
-    const ttfb = audits['server-response-time']?.numericValue || 0
+    // Extract metrics with validation
+    // PageSpeed API returns values in milliseconds for timing metrics
+    // LCP: Good < 2500ms, Needs Improvement < 4000ms, Poor >= 4000ms
+    // FCP: Good < 1800ms, Needs Improvement < 3000ms, Poor >= 3000ms
+    // CLS: Good < 0.1, Needs Improvement < 0.25, Poor >= 0.25
+    // INP: Good < 200ms, Needs Improvement < 500ms, Poor >= 500ms
+    // TTFB: Good < 800ms, Needs Improvement < 1800ms, Poor >= 1800ms
+    
+    let lcp = audits['largest-contentful-paint']?.numericValue || 0
+    let fcp = audits['first-contentful-paint']?.numericValue || 0
+    let cls = audits['cumulative-layout-shift']?.numericValue || 0
+    let inp = audits['interaction-to-next-paint']?.numericValue || 0
+    let ttfb = audits['server-response-time']?.numericValue || 0
+    
+    // Validate and cap unrealistic values
+    // LCP > 30s is almost always a measurement error or test artifact
+    if (lcp > 30000) {
+      console.warn(`[PageSpeed] Unrealistic LCP value detected (${lcp}ms), capping at 30000ms`)
+      lcp = 30000
+    }
+    
+    // FCP > 10s is unrealistic for real-world scenarios
+    if (fcp > 10000) {
+      console.warn(`[PageSpeed] Unrealistic FCP value detected (${fcp}ms), capping at 10000ms`)
+      fcp = 10000
+    }
+    
+    // CLS > 1.0 is extremely rare
+    if (cls > 1.0) {
+      console.warn(`[PageSpeed] Unrealistic CLS value detected (${cls}), capping at 1.0`)
+      cls = 1.0
+    }
+    
+    // INP > 2000ms is unrealistic
+    if (inp > 2000) {
+      console.warn(`[PageSpeed] Unrealistic INP value detected (${inp}ms), capping at 2000ms`)
+      inp = 2000
+    }
+    
+    // TTFB > 5000ms is unrealistic for most sites
+    if (ttfb > 5000) {
+      console.warn(`[PageSpeed] Unrealistic TTFB value detected (${ttfb}ms), capping at 5000ms`)
+      ttfb = 5000
+    }
 
     // Extract optimization opportunities
     const opportunities: PageSpeedOpportunity[] = []

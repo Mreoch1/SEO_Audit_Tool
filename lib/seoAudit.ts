@@ -18,6 +18,7 @@ import { analyzeEnhancedOnPage, getOnPageFixInstructions } from './enhancedOnPag
 import { analyzeEnhancedContent, getContentFixInstructions } from './enhancedContent'
 import { classifyDomain } from './competitorData'
 import { deduplicateKeywords, formatKeywordsForDisplay, findKeywordGaps } from './keywordProcessor'
+import { consolidateIssue } from './issueProcessor'
 
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
@@ -1083,13 +1084,53 @@ function parseHtml(
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
   
-  // Extract title
-  const titleMatch = cleanHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
-  const title = titleMatch ? titleMatch[1].trim() : undefined
+  // Extract title - use the LAST <title> tag found (in case there are multiple from templates)
+  // This ensures we get the JS-rendered title, not a template shell
+  const titleMatches = html.match(/<title[^>]*>([\s\S]*?)<\/title>/gi)
+  let title: string | undefined
+  if (titleMatches && titleMatches.length > 0) {
+    // Get the last title tag (most likely to be the final rendered one)
+    const lastTitleMatch = titleMatches[titleMatches.length - 1]
+    const titleContent = lastTitleMatch.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+    if (titleContent) {
+      title = titleContent[1]
+        .replace(/<[^>]+>/g, '') // Remove any nested tags
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim()
+    }
+  }
   
-  // Extract meta description
-  const metaDescMatch = cleanHtml.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
-  const metaDescription = metaDescMatch ? metaDescMatch[1].trim() : undefined
+  // Extract meta description - try multiple patterns and use the last one found
+  let metaDescription: string | undefined
+  const metaDescPatterns = [
+    /<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/gi,
+    /<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/gi
+  ]
+  
+  for (const pattern of metaDescPatterns) {
+    const matches = html.match(pattern)
+    if (matches && matches.length > 0) {
+      // Get the last match (most likely to be the final rendered one)
+      const lastMatch = matches[matches.length - 1]
+      const contentMatch = lastMatch.match(/content=["']([^"']+)["']/i)
+      if (contentMatch) {
+        metaDescription = contentMatch[1]
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/\s+/g, ' ')
+          .trim()
+        break
+      }
+    }
+  }
   
   // Extract canonical
   const canonicalMatch = cleanHtml.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)
@@ -1347,24 +1388,7 @@ function parseHtml(
 /**
  * Consolidate issues by message and details, grouping affected pages
  */
-function consolidateIssue(issueMap: Map<string, Issue>, newIssue: Issue): void {
-  const key = `${newIssue.category}|${newIssue.severity}|${newIssue.message}|${newIssue.details || ''}`
-  
-  if (issueMap.has(key)) {
-    const existing = issueMap.get(key)!
-    // Merge affected pages
-    if (newIssue.affectedPages) {
-      existing.affectedPages = [...(existing.affectedPages || []), ...newIssue.affectedPages]
-    }
-  } else {
-    // Generate unique ID for the issue
-    const issueId = `${newIssue.category}-${newIssue.severity}-${newIssue.message}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    issueMap.set(key, { 
-      ...newIssue,
-      id: issueId
-    })
-  }
-}
+// consolidateIssue is now imported from ./issueProcessor
 
 /**
  * Analyze site-wide issues
@@ -1824,13 +1848,16 @@ function calculateEnhancedScores(
   onPageScore = Math.max(0, Math.min(100, Math.round(onPageScore)))
   
   // Enhanced Content score (0-100)
+  // Factors: word count, readability, content quality issues
   let contentScore = 100
   const thinPages = pages.filter(p => p.wordCount < 300).length
   const goodContentPages = pages.filter(p => p.wordCount >= 1000).length
   
+  // Word count penalties and bonuses
   contentScore -= Math.min((thinPages / pages.length) * 45, 45)
   contentScore += Math.min((goodContentPages / pages.length) * 15, 15) // Bonus for comprehensive content
   
+  // Content issues penalties
   const contentIssues = issues.filter(i => i.category === 'Content')
   contentScore -= Math.min(contentIssues.filter(i => i.severity === 'High').length * 12, 40)
   contentScore -= Math.min(contentIssues.filter(i => i.severity === 'Medium').length * 6, 25)
@@ -1842,6 +1869,44 @@ function calculateEnhancedScores(
     contentScore += 5 // Bonus for comprehensive content
   } else if (avgWordCount < 300) {
     contentScore -= 10 // Penalty for thin content
+  }
+  
+  // **NEW: Readability penalty** (Flesch Reading Ease)
+  // Extract readability scores from content issues
+  const readabilityIssues = contentIssues.filter(i => 
+    i.message.toLowerCase().includes('readability') || 
+    i.message.toLowerCase().includes('flesch') ||
+    i.message.toLowerCase().includes('reading ease')
+  )
+  
+  if (readabilityIssues.length > 0) {
+    // If readability is mentioned in issues, it's a problem
+    // Severe readability issues (Flesch < 30) should significantly impact score
+    const severeReadabilityIssues = readabilityIssues.filter(i => 
+      i.details && /flesch.*?(\d+)/i.test(i.details) && parseInt(i.details.match(/flesch.*?(\d+)/i)![1]) < 30
+    )
+    
+    if (severeReadabilityIssues.length > 0) {
+      // Very difficult to read (Flesch < 30) = major penalty
+      contentScore -= 25
+    } else if (readabilityIssues.some(i => i.severity === 'High')) {
+      // Difficult to read (Flesch 30-50) = moderate penalty
+      contentScore -= 15
+    } else {
+      // Somewhat difficult to read (Flesch 50-60) = minor penalty
+      contentScore -= 8
+    }
+  }
+  
+  // **NEW: Sentence length penalty**
+  const longSentenceIssues = contentIssues.filter(i => 
+    i.message.toLowerCase().includes('sentence') && 
+    i.message.toLowerCase().includes('long')
+  )
+  
+  if (longSentenceIssues.length > 0) {
+    // Sentences averaging > 50 words = readability problem
+    contentScore -= 10
   }
   
   contentScore = Math.max(0, Math.min(100, Math.round(contentScore)))

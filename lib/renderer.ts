@@ -430,19 +430,23 @@ export async function analyzeImages(page: Page, baseUrl: string): Promise<{
     const images: any[] = []
     const baseHost = new URL(base).hostname
     
-    // Regular img tags
+    // Regular img tags (these NEED alt attributes)
+    const imgElements: any[] = []
     document.querySelectorAll('img').forEach(img => {
-      images.push({
+      const imageData = {
         src: img.src || img.getAttribute('src') || '',
         alt: img.alt || img.getAttribute('alt') || undefined,
         isLazy: img.loading === 'lazy' || 
                 img.hasAttribute('data-src') || 
                 img.hasAttribute('data-lazy'),
         isBackground: false
-      })
+      }
+      imgElements.push(imageData)
+      images.push(imageData)
     })
     
-    // Picture elements
+    // Picture elements (these don't need alt - the <img> inside does)
+    // We'll track them but not count them for alt text purposes
     document.querySelectorAll('picture source').forEach(source => {
       const srcset = (source as HTMLSourceElement).srcset || source.getAttribute('srcset')
       if (srcset) {
@@ -450,12 +454,13 @@ export async function analyzeImages(page: Page, baseUrl: string): Promise<{
           src: srcset,
           alt: undefined,
           isLazy: false,
-          isBackground: false
+          isBackground: false,
+          isPictureSource: true // Mark as picture source
         })
       }
     })
     
-    // Background images (CSS)
+    // Background images (CSS) - these don't need alt attributes
     document.querySelectorAll('*').forEach(el => {
       const style = window.getComputedStyle(el)
       const bgImage = style.backgroundImage
@@ -478,12 +483,17 @@ export async function analyzeImages(page: Page, baseUrl: string): Promise<{
                   el.getAttribute('data-lazy-src') || 
                   el.getAttribute('data-bg')
       if (src) {
-        images.push({
+        const imageData = {
           src,
           alt: el.getAttribute('alt') || undefined,
           isLazy: true,
           isBackground: el.hasAttribute('data-bg')
-        })
+        }
+        // Only count as img element if it's not a background image
+        if (!el.hasAttribute('data-bg')) {
+          imgElements.push(imageData)
+        }
+        images.push(imageData)
       }
     })
     
@@ -492,10 +502,20 @@ export async function analyzeImages(page: Page, baseUrl: string): Promise<{
       new Map(images.map(img => [img.src, img])).values()
     )
     
+    // Remove duplicates from img elements only (for alt counting)
+    const uniqueImgElements = Array.from(
+      new Map(imgElements.map(img => [img.src, img])).values()
+    )
+    
+    // Count missing alt ONLY for <img> elements (not background images or picture sources)
+    const missingAltCount = uniqueImgElements.filter(img => 
+      !img.alt || img.alt.trim() === '' || img.alt === 'undefined'
+    ).length
+    
     return {
-      imageCount: uniqueImages.length,
-      missingAltCount: uniqueImages.filter(img => !img.alt || img.alt.trim() === '').length,
-      images: uniqueImages
+      imageCount: uniqueImgElements.length, // Only count <img> elements for alt text purposes
+      missingAltCount: missingAltCount,
+      images: uniqueImages // Return all images for reference
     }
   }, baseUrl)
 }
