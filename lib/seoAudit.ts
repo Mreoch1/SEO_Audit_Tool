@@ -474,11 +474,28 @@ export async function runAudit(
     if (opts.competitorUrls && opts.competitorUrls.length > 0) {
       // User provided competitor URLs - use them
       console.log(`[Audit] Using user-provided competitor URLs for analysis: ${opts.competitorUrls.join(', ')}`)
-      competitorAnalysis = await generateRealCompetitorAnalysis(
-        opts.competitorUrls[0], // Analyze first competitor
-        topKeywords,
-        opts
-      )
+      
+      // Agency tier: Analyze up to 3 competitors
+      const maxCompetitors = opts.tier === 'agency' ? 3 : 1
+      const competitorsToAnalyze = opts.competitorUrls.slice(0, maxCompetitors)
+      
+      if (opts.tier === 'agency' && competitorsToAnalyze.length > 1) {
+        // Agency tier: Full multi-competitor crawl
+        console.log(`[Competitor] Agency tier: Analyzing ${competitorsToAnalyze.length} competitors`)
+        competitorAnalysis = await generateMultiCompetitorAnalysis(
+          competitorsToAnalyze,
+          topKeywords,
+          opts,
+          validPages
+        )
+      } else {
+        // Standard/Professional: Single competitor
+        competitorAnalysis = await generateRealCompetitorAnalysis(
+          competitorsToAnalyze[0],
+          topKeywords,
+          opts
+        )
+      }
     } else {
       // Auto-detect competitors based on industry classification
       console.log('[Audit] Auto-detecting competitors based on site content...')
@@ -647,6 +664,90 @@ export async function runAudit(
   // Categorize issues
   const categorizedIssues = categorizeIssues(allIssues)
   
+  // NEW: Agency tier - Internal link graph and duplicate URL analysis
+  let internalLinkGraph: import('./internalLinkGraph').InternalLinkGraph | undefined
+  let duplicateUrlAnalysis: import('./duplicateUrlCleaner').DuplicateUrlAnalysis | undefined
+  
+  if (opts.tier === 'agency') {
+    console.log('[Audit] Agency tier: Running internal link graph analysis...')
+    try {
+      const { buildInternalLinkGraph } = await import('./internalLinkGraph')
+      internalLinkGraph = buildInternalLinkGraph(validPages, uniquePages)
+      console.log(`[Audit] Internal link graph: ${internalLinkGraph.orphanPages.length} orphan pages, ${internalLinkGraph.isolatedPages.length} isolated pages`)
+      
+      // Add orphan page issues
+      if (internalLinkGraph.orphanPages.length > 0) {
+        allIssues.push({
+          type: 'orphan-pages',
+          severity: 'Medium',
+          category: 'Technical',
+          title: 'Orphan Pages Detected',
+          message: `Found ${internalLinkGraph.orphanPages.length} orphan pages with no incoming internal links`,
+          description: `Orphan pages are pages that have no internal links pointing to them, making them hard for search engines and users to discover.`,
+          affectedPages: internalLinkGraph.orphanPages.slice(0, 10), // Limit to first 10
+          fixInstructions: `Add internal links from high-authority pages (homepage, main category pages) to these orphan pages. Consider adding them to your main navigation or creating a sitemap page.`,
+          priority: 6
+        })
+      }
+      
+      // Add isolated page issues
+      if (internalLinkGraph.isolatedPages.length > 0) {
+        allIssues.push({
+          type: 'isolated-pages',
+          severity: 'Medium',
+          category: 'Technical',
+          title: 'Isolated Pages Detected',
+          message: `Found ${internalLinkGraph.isolatedPages.length} isolated pages with no internal links`,
+          description: `Isolated pages have no internal links (incoming or outgoing), making them completely disconnected from your site structure.`,
+          affectedPages: internalLinkGraph.isolatedPages.slice(0, 10),
+          fixInstructions: `Add internal links to and from these pages to connect them to your site structure.`,
+          priority: 5
+        })
+      }
+    } catch (error) {
+      console.warn('[Audit] Internal link graph analysis failed:', error)
+    }
+    
+    console.log('[Audit] Agency tier: Running duplicate URL analysis...')
+    try {
+      const { analyzeDuplicateUrls } = await import('./duplicateUrlCleaner')
+      duplicateUrlAnalysis = analyzeDuplicateUrls(uniquePages)
+      console.log(`[Audit] Duplicate URL analysis: ${duplicateUrlAnalysis.totalDuplicates} duplicates, ${duplicateUrlAnalysis.canonicalConflicts} conflicts`)
+      
+      // Add duplicate URL issues
+      if (duplicateUrlAnalysis.duplicateGroups.length > 0) {
+        allIssues.push({
+          type: 'duplicate-urls',
+          severity: 'High',
+          category: 'Technical',
+          title: 'Duplicate URL Variations Detected',
+          message: `Found ${duplicateUrlAnalysis.totalDuplicates} duplicate URL variations across ${duplicateUrlAnalysis.duplicateGroups.length} groups`,
+          description: `Multiple URL variations point to the same content. This can cause duplicate content issues and dilute SEO value.`,
+          affectedPages: duplicateUrlAnalysis.duplicateGroups.flatMap(g => g.duplicates).slice(0, 20),
+          fixInstructions: `Consolidate duplicate URLs using 301 redirects and canonical tags. Choose one preferred URL format (HTTPS, with/without www, with/without trailing slash) and redirect all variations to it.`,
+          priority: 9
+        })
+      }
+      
+      // Add canonical conflict issues
+      if (duplicateUrlAnalysis.canonicalConflicts > 0) {
+        allIssues.push({
+          type: 'canonical-conflicts',
+          severity: 'High',
+          category: 'Technical',
+          title: 'Canonical Tag Conflicts',
+          message: `Found ${duplicateUrlAnalysis.canonicalConflicts} canonical tag conflicts`,
+          description: `Some pages have canonical tags that conflict with the recommended canonical URL, which can confuse search engines.`,
+          affectedPages: [],
+          fixInstructions: `Review and update canonical tags to match the recommended canonical URLs. Ensure all variations of a URL point to the same canonical.`,
+          priority: 8
+        })
+      }
+    } catch (error) {
+      console.warn('[Audit] Duplicate URL analysis failed:', error)
+    }
+  }
+  
   const endTime = Date.now()
   
   // SPRINT 1: Return with crawl diagnostics and valid pages only
@@ -673,6 +774,8 @@ export async function runAudit(
     competitorAnalysis,
     crawlDiagnostics, // NEW: Crawl diagnostics
     localSEO, // NEW: Local SEO analysis (Sprint 2)
+    internalLinkGraph, // NEW: Agency tier - Internal link graph
+    duplicateUrlAnalysis, // NEW: Agency tier - Duplicate URL analysis
     raw: {
       startTime,
       endTime,
@@ -2275,7 +2378,19 @@ async function generateRealCompetitorAnalysis(
   try {
     const result = await analyzeCompetitors([competitorUrl], siteKeywords, options.userAgent)
     console.log(`[Competitor] Real analysis succeeded`)
-    return result
+    
+    // Convert to CompetitorAnalysis format
+    const allKeywords = result.competitorData.flatMap(c => c.keywords)
+    const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
+    const shared = allKeywords.filter(k => siteKeywordSet.has(k.toLowerCase()))
+    const gaps = result.keywordGaps.map(g => g.keyword)
+    
+    return {
+      competitorUrl,
+      competitorKeywords: allKeywords,
+      keywordGaps: gaps,
+      sharedKeywords: shared
+    }
   } catch (error) {
     console.warn(`[Competitor] Real analysis failed:`, error)
     console.log(`[Competitor] Falling back to pattern-based suggestions`)
@@ -2284,6 +2399,87 @@ async function generateRealCompetitorAnalysis(
       sharedKeywords: [],
       keywordGaps: generateFallbackKeywordSuggestions(siteKeywords),
       competitorKeywords: []
+    }
+  }
+}
+
+/**
+ * Generate multi-competitor analysis for Agency tier
+ * Crawls up to 3 competitors and provides comprehensive comparison
+ */
+async function generateMultiCompetitorAnalysis(
+  competitorUrls: string[],
+  siteKeywords: string[],
+  options: Required<AuditOptions>,
+  sitePages: PageData[]
+): Promise<CompetitorAnalysis> {
+  console.log(`[Competitor] Agency tier: Starting multi-competitor analysis for ${competitorUrls.length} competitors`)
+  
+  try {
+    // Analyze all competitors
+    const result = await analyzeCompetitors(competitorUrls, siteKeywords, options.userAgent)
+    
+    // Build competitor crawl data
+    const competitorCrawls = result.competitorData.map(comp => ({
+      url: comp.url,
+      keywords: comp.keywords,
+      title: comp.title,
+      metaDescription: comp.metaDescription,
+      pageCount: 1, // Single page crawl for now (can be enhanced later)
+      authoritySignals: undefined // Can be enhanced with backlink data later
+    }))
+    
+    // Calculate site structure comparison
+    const siteAvgWordCount = sitePages.length > 0
+      ? sitePages.reduce((sum, p) => sum + p.wordCount, 0) / sitePages.length
+      : 0
+    
+    const crawlSummary = {
+      totalCompetitorsAnalyzed: competitorCrawls.length,
+      totalPagesCrawled: competitorCrawls.length, // Single page per competitor for now
+      averagePageCount: 1,
+      siteStructureComparison: competitorCrawls.map(comp => ({
+        competitor: comp.url,
+        pageCount: comp.pageCount || 1,
+        avgWordCount: 0, // Can be enhanced with full crawl
+        schemaTypes: [] // Can be enhanced with schema detection
+      }))
+    }
+    
+    // Find shared keywords and gaps
+    const allCompetitorKeywords = new Set<string>()
+    result.competitorData.forEach(comp => {
+      comp.keywords.forEach(k => allCompetitorKeywords.add(k.toLowerCase()))
+    })
+    
+    const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
+    const sharedKeywords = Array.from(allCompetitorKeywords).filter(k => siteKeywordSet.has(k))
+    const keywordGaps = result.keywordGaps.map(g => g.keyword)
+    
+    // Combine all competitor keywords
+    const allKeywords = result.competitorData.flatMap(c => c.keywords)
+    
+    console.log(`[Competitor] Agency tier: Analysis complete - ${competitorCrawls.length} competitors, ${keywordGaps.length} gaps, ${sharedKeywords.length} shared`)
+    
+    return {
+      competitorUrl: competitorUrls[0], // Primary competitor for backward compatibility
+      competitorKeywords: allKeywords,
+      keywordGaps,
+      sharedKeywords,
+      competitorCrawls,
+      crawlSummary
+    }
+  } catch (error) {
+    console.warn(`[Competitor] Multi-competitor analysis failed:`, error)
+    // Fallback to single competitor analysis
+    if (competitorUrls.length > 0) {
+      return await generateRealCompetitorAnalysis(competitorUrls[0], siteKeywords, options)
+    }
+    return {
+      competitorUrl: 'Analysis failed',
+      competitorKeywords: [],
+      keywordGaps: generateFallbackKeywordSuggestions(siteKeywords),
+      sharedKeywords: []
     }
   }
 }

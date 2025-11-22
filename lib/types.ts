@@ -100,14 +100,40 @@ export interface ImageAltAnalysis {
   issue?: 'missing' | 'too-short' | 'too-long' | 'generic' | 'good'
 }
 
+export interface CompetitorData {
+  url: string
+  keywords: string[]
+  title?: string
+  metaDescription?: string
+  pageCount?: number
+  authoritySignals?: {
+    backlinks?: number
+    domainAge?: number
+    socialShares?: number
+  }
+}
+
 export interface CompetitorAnalysis {
-  competitorUrl: string
+  competitorUrl: string // Primary competitor (for backward compatibility)
   competitorKeywords: string[]
   keywordGaps: string[]
   sharedKeywords: string[]
   detectedIndustry?: string // Auto-detected industry category
   industryConfidence?: number // Confidence score (0-1)
   allCompetitors?: string[] // All detected competitors (not just the one analyzed)
+  // NEW: Agency tier - multiple competitor crawls
+  competitorCrawls?: CompetitorData[] // Full data for all crawled competitors (up to 3 for Agency)
+  crawlSummary?: {
+    totalCompetitorsAnalyzed: number
+    totalPagesCrawled: number
+    averagePageCount: number
+    siteStructureComparison?: {
+      competitor: string
+      pageCount: number
+      avgWordCount: number
+      schemaTypes: string[]
+    }[]
+  }
 }
 
 // Import CrawlDiagnostics and LocalSEOAnalysis types
@@ -141,6 +167,9 @@ export interface AuditResult {
   competitorAnalysis?: CompetitorAnalysis
   crawlDiagnostics?: CrawlDiagnostics // NEW: Crawl diagnostics
   localSEO?: LocalSEOAnalysis // NEW: Local SEO analysis
+  // NEW: Agency tier - Internal link graph and duplicate URL analysis
+  internalLinkGraph?: import('./internalLinkGraph').InternalLinkGraph
+  duplicateUrlAnalysis?: import('./duplicateUrlCleaner').DuplicateUrlAnalysis
   raw: {
     startTime: number
     endTime: number
