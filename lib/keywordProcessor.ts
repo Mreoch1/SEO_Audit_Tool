@@ -5,6 +5,9 @@
  * for SEO audits and competitor analysis.
  */
 
+// Import HTML entity decoder
+import { decode } from 'html-entities'
+
 /**
  * Stop words to filter out from keyword extraction
  */
@@ -47,12 +50,16 @@ const NONSENSE_PATTERNS = [
 
 /**
  * Clean and normalize a keyword phrase
+ * Sprint 1.4: Added HTML entity decoding to fix garbage text
  */
 export function cleanKeyword(keyword: string): string {
-  return keyword
+  // First decode HTML entities (e.g., &nbsp; → space, &amp; → &)
+  let decoded = decode(keyword)
+  
+  return decoded
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/\s+/g, ' ') // Normalize whitespace (including decoded &nbsp;)
     .replace(/[^\w\s-]/g, '') // Remove special chars except hyphens
     .replace(/\s*-\s*/g, '-') // Normalize hyphens
 }

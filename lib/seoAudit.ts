@@ -55,6 +55,9 @@ import {
   generateFallbackKeywordSuggestions
 } from './realCompetitorAnalysis'
 
+// Import crawl diagnostics
+import { analyzeCrawl, CrawlDiagnostics, getStatusMessage, isCrawlSufficient } from './crawlDiagnostics'
+
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
   maxDepth: 3,
@@ -77,6 +80,53 @@ export function getTierLimits(tier?: AuditTier): { maxPages: number; maxDepth: n
     default:
       return { maxPages: 50, maxDepth: 3 }
   }
+}
+
+/**
+ * Filter valid pages from error pages
+ * Sprint 1.2: Don't audit 404 pages for SEO issues
+ */
+function filterValidPages(pages: PageData[]): {
+  validPages: PageData[]
+  errorPages: PageData[]
+} {
+  const validPages = pages.filter(p => p.statusCode >= 200 && p.statusCode < 400)
+  const errorPages = pages.filter(p => p.statusCode >= 400 || p.statusCode === 0)
+  
+  console.log(`[Filter] Total pages: ${pages.length}, Valid: ${validPages.length}, Errors: ${errorPages.length}`)
+  
+  return { validPages, errorPages }
+}
+
+/**
+ * Deduplicate pages by normalized URL
+ * Sprint 1.3: No duplicate URLs in page table
+ */
+function deduplicatePages(pages: PageData[]): PageData[] {
+  const seen = new Map<string, PageData>()
+  
+  for (const page of pages) {
+    const normalizedUrl = normalizeUrlNew(page.url)
+    
+    if (seen.has(normalizedUrl)) {
+      const existing = seen.get(normalizedUrl)!
+      
+      // Keep the entry with more data (higher word count, non-zero status, or successful status)
+      if (page.wordCount > existing.wordCount || 
+          (existing.statusCode === 0 && page.statusCode > 0) ||
+          (existing.statusCode >= 400 && page.statusCode < 400)) {
+        console.log(`[Dedup] Replacing ${normalizedUrl}: ${existing.statusCode} (${existing.wordCount}w) → ${page.statusCode} (${page.wordCount}w)`)
+        seen.set(normalizedUrl, page)
+      }
+    } else {
+      seen.set(normalizedUrl, page)
+    }
+  }
+  
+  const uniquePages = Array.from(seen.values())
+  console.log(`[Dedup] Deduplicated ${pages.length} pages → ${uniquePages.length} unique pages`)
+  
+  return uniquePages
 }
 
 /**
@@ -1188,12 +1238,16 @@ function parseHtml(
   const schemaTypes = schemaAnalysis.schemaTypes
   
   // Extract keywords from title, H1, H2, and meta description
+  // Sprint 1.4: Don't extract keywords from error pages
   const extractedKeywords: string[] = []
   const keywordSources: string[] = []
   
-  if (title) keywordSources.push(title)
-  if (h1Text && h1Text.length > 0) keywordSources.push(...h1Text)
-  if (metaDescription) keywordSources.push(metaDescription)
+  // Only extract keywords if page is successful (not 404, 500, etc.)
+  if (statusCode >= 200 && statusCode < 400) {
+    if (title) keywordSources.push(title)
+    if (h1Text && h1Text.length > 0) keywordSources.push(...h1Text)
+    if (metaDescription) keywordSources.push(metaDescription)
+  }
   
   // Extract H2 tags (for both counting and text extraction)
   const h2Matches = cleanHtml.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || []
@@ -2022,23 +2076,53 @@ async function analyzeImageAltTags(pages: PageData[]): Promise<ImageAltAnalysis[
  * Generate real competitor analysis by crawling competitor site
  */
 // NEW: Using improved competitor analysis from realCompetitorAnalysis.ts
+/**
+ * Generate real competitor analysis by crawling competitor URLs
+ * Sprint 1.6: Added logging and better error handling
+ */
 async function generateRealCompetitorAnalysis(
   competitorUrl: string,
   siteKeywords: string[],
   options: Required<AuditOptions>
 ): Promise<CompetitorAnalysis> {
-  return analyzeCompetitors([competitorUrl], siteKeywords, options.userAgent)
+  console.log(`[Competitor] Starting real competitor analysis for: ${competitorUrl}`)
+  console.log(`[Competitor] Site has ${siteKeywords.length} keywords to compare`)
+  
+  try {
+    const result = await analyzeCompetitors([competitorUrl], siteKeywords, options.userAgent)
+    console.log(`[Competitor] Real analysis succeeded`)
+    return result
+  } catch (error) {
+    console.warn(`[Competitor] Real analysis failed:`, error)
+    console.log(`[Competitor] Falling back to pattern-based suggestions`)
+    return {
+      competitorUrl: `Unable to analyze ${competitorUrl} - using pattern-based suggestions`,
+      sharedKeywords: [],
+      keywordGaps: generateFallbackKeywordSuggestions(siteKeywords),
+      competitorKeywords: []
+    }
+  }
 }
 
 /**
  * Generate competitor keyword gap analysis (fallback - pattern-based)
- * NEW: Using generateFallbackKeywordSuggestions from realCompetitorAnalysis.ts
+ * Sprint 1.6: Improved fallback with industry-specific suggestions
  */
 async function generateCompetitorAnalysis(
   pages: PageData[],
   siteKeywords: string[]
 ): Promise<CompetitorAnalysis> {
-  return generateFallbackKeywordSuggestions(pages, siteKeywords)
+  console.log(`[Competitor] Using fallback pattern-based analysis`)
+  console.log(`[Competitor] Generating suggestions for ${siteKeywords.length} site keywords`)
+  
+  const suggestions = generateFallbackKeywordSuggestions(siteKeywords)
+  
+  return {
+    competitorUrl: 'Pattern-based keyword suggestions (no competitor URL provided)',
+    sharedKeywords: [],
+    keywordGaps: suggestions,
+    competitorKeywords: []
+  }
 }
 
 // OLD FALLBACK FUNCTION BODY REMOVED (lines 2044-2326)
