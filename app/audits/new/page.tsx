@@ -310,7 +310,7 @@ export default function NewAuditPage() {
           maxPages: tierData.maxPages,
           maxDepth: tierData.maxDepth,
           addOns: Object.keys(addOns).length > 0 ? addOns : undefined,
-          competitorUrls: addOns.competitorAnalysis 
+          competitorUrls: (addOns.competitorAnalysis || selectedTier === 'agency')
             ? competitorUrls.filter(url => url && url.trim().length > 0) // Only send non-empty URLs
             : undefined
         })
@@ -444,8 +444,27 @@ export default function NewAuditPage() {
                 <div className="space-y-3 border-t pt-4">
                   <Label>Optional Add-Ons</Label>
                   <div className="grid grid-cols-1 gap-3">
-                    {/* Blank Report (Unbranded) - Free for Agency */}
-                    {selectedTier !== 'agency' && (
+                    {/* Blank Report (Unbranded) - Free for Agency, paid for others */}
+                    {selectedTier === 'agency' ? (
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-green-50 border-green-200">
+                        <div>
+                          <div className="font-medium">{addOnInfo.blankReport.name} (Included)</div>
+                          <div className="text-sm text-gray-500">Unbranded white-label PDF report (free with Agency tier)</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-green-600">Free</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="default"
+                            onClick={() => toggleAddOn('blankReport')}
+                            disabled={loading}
+                          >
+                            {addOns.blankReport ? 'Included' : 'Include'}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
                       <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.blankReport ? 'bg-blue-50 border-blue-200' : ''}`}>
                         <div>
                           <div className="font-medium">{addOnInfo.blankReport.name}</div>
@@ -466,27 +485,40 @@ export default function NewAuditPage() {
                       </div>
                     )}
 
-                    {/* Additional Pages (per 50) */}
-                    <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.additionalPages && (addOns.additionalPages as number) > 0 ? 'bg-blue-50 border-blue-200' : ''}`}>
-                      <div>
-                        <div className="font-medium">{addOnInfo.additionalPages.name}</div>
-                        <div className="text-sm text-gray-500">{addOnInfo.additionalPages.description}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.additionalPages.price}.00/{addOnInfo.additionalPages.unit}</span>
+                    {/* Additional Pages (per 50) - NOT available for Agency tier */}
+                    {selectedTier !== 'agency' && (
+                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.additionalPages && (addOns.additionalPages as number) > 0 ? 'bg-blue-50 border-blue-200' : ''}`}>
+                        <div>
+                          <div className="font-medium">{addOnInfo.additionalPages.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.additionalPages.description}</div>
+                        </div>
                         <div className="flex items-center gap-2">
-                          {addOns.additionalPages && (addOns.additionalPages as number) > 0 ? (
-                            <>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => removeAddOn('additionalPages')}
-                                disabled={loading}
-                              >
-                                <Minus className="h-3 w-3" />
-                              </Button>
-                              <span className="text-sm font-semibold w-8 text-center">{addOns.additionalPages}</span>
+                          <span className="text-sm font-medium">+${addOnInfo.additionalPages.price}.00/{addOnInfo.additionalPages.unit}</span>
+                          <div className="flex items-center gap-2">
+                            {addOns.additionalPages && (addOns.additionalPages as number) > 0 ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => removeAddOn('additionalPages')}
+                                  disabled={loading}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="text-sm font-semibold w-8 text-center">{addOns.additionalPages}</span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => toggleAddOn('additionalPages', true)}
+                                  disabled={loading}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                                <span className="text-xs text-gray-600">(+${addOnInfo.additionalPages.price * (addOns.additionalPages as number)}.00)</span>
+                              </>
+                            ) : (
                               <Button
                                 type="button"
                                 size="sm"
@@ -494,47 +526,49 @@ export default function NewAuditPage() {
                                 onClick={() => toggleAddOn('additionalPages', true)}
                                 disabled={loading}
                               >
-                                <Plus className="h-3 w-3" />
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add
                               </Button>
-                              <span className="text-xs text-gray-600">(+${addOnInfo.additionalPages.price * (addOns.additionalPages as number)}.00)</span>
-                            </>
-                          ) : (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => toggleAddOn('additionalPages', true)}
-                              disabled={loading}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add
-                            </Button>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
-                    {/* Additional Keyword Researched */}
-                    <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.additionalKeywords && (addOns.additionalKeywords as number) > 0 ? 'bg-blue-50 border-blue-200' : ''}`}>
-                      <div>
-                        <div className="font-medium">{addOnInfo.additionalKeywords.name}</div>
-                        <div className="text-sm text-gray-500">{addOnInfo.additionalKeywords.description}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.additionalKeywords.price}.00/{addOnInfo.additionalKeywords.unit}</span>
+                    {/* Extra Keywords - NOT available for Agency tier */}
+                    {selectedTier !== 'agency' && (
+                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.additionalKeywords && (addOns.additionalKeywords as number) > 0 ? 'bg-blue-50 border-blue-200' : ''}`}>
+                        <div>
+                          <div className="font-medium">{addOnInfo.additionalKeywords.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.additionalKeywords.description}</div>
+                        </div>
                         <div className="flex items-center gap-2">
-                          {addOns.additionalKeywords && (addOns.additionalKeywords as number) > 0 ? (
-                            <>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => removeAddOn('additionalKeywords')}
-                                disabled={loading}
-                              >
-                                <Minus className="h-3 w-3" />
-                              </Button>
-                              <span className="text-sm font-semibold w-8 text-center">{addOns.additionalKeywords}</span>
+                          <span className="text-sm font-medium">+${addOnInfo.additionalKeywords.price}.00/{addOnInfo.additionalKeywords.unit}</span>
+                          <div className="flex items-center gap-2">
+                            {addOns.additionalKeywords && (addOns.additionalKeywords as number) > 0 ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => removeAddOn('additionalKeywords')}
+                                  disabled={loading}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="text-sm font-semibold w-8 text-center">{addOns.additionalKeywords}</span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => toggleAddOn('additionalKeywords', true)}
+                                  disabled={loading}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                                <span className="text-xs text-gray-600">(+${addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)}.00)</span>
+                              </>
+                            ) : (
                               <Button
                                 type="button"
                                 size="sm"
@@ -542,25 +576,14 @@ export default function NewAuditPage() {
                                 onClick={() => toggleAddOn('additionalKeywords', true)}
                                 disabled={loading}
                               >
-                                <Plus className="h-3 w-3" />
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add
                               </Button>
-                              <span className="text-xs text-gray-600">(+${addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)}.00)</span>
-                            </>
-                          ) : (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => toggleAddOn('additionalKeywords', true)}
-                              disabled={loading}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add
-                            </Button>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Schema Deep-Dive (Starter tier only) */}
                     {selectedTier === 'starter' && (
@@ -584,44 +607,36 @@ export default function NewAuditPage() {
                       </div>
                     )}
 
-                    {/* Competitor Keyword Gap Report */}
-                    <div className={`flex flex-col p-3 border rounded-lg ${addOns.competitorAnalysis ? 'bg-blue-50 border-blue-200' : ''}`}>
-                      <div className="flex items-center justify-between w-full mb-2">
-                        <div>
-                          <div className="font-medium">{addOnInfo.competitorAnalysis.name}</div>
-                          <div className="text-sm text-gray-500">{addOnInfo.competitorAnalysis.description}</div>
+                    {/* Competitor Keyword Gap Report - Only for Starter/Standard tiers */}
+                    {selectedTier !== 'professional' && selectedTier !== 'agency' && (
+                      <div className={`flex flex-col p-3 border rounded-lg ${addOns.competitorAnalysis ? 'bg-blue-50 border-blue-200' : ''}`}>
+                        <div className="flex items-center justify-between w-full mb-2">
+                          <div>
+                            <div className="font-medium">{addOnInfo.competitorAnalysis.name}</div>
+                            <div className="text-sm text-gray-500">{addOnInfo.competitorAnalysis.description}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">+${addOnInfo.competitorAnalysis.price}.00</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={addOns.competitorAnalysis ? "default" : "outline"}
+                              onClick={() => toggleAddOn('competitorAnalysis')}
+                              disabled={loading}
+                            >
+                              {addOns.competitorAnalysis ? 'Added' : 'Add'}
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">+${addOnInfo.competitorAnalysis.price}.00</span>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={addOns.competitorAnalysis ? "default" : "outline"}
-                            onClick={() => toggleAddOn('competitorAnalysis')}
-                            disabled={loading}
-                          >
-                            {addOns.competitorAnalysis ? 'Added' : 'Add'}
-                          </Button>
-                        </div>
-                      </div>
-                      
-                      {/* Competitor URL Inputs */}
-                      {addOns.competitorAnalysis && (() => {
-                        const maxSlots = getMaxCompetitorSlots()
-                        const slotsToShow = Math.max(3, maxSlots) // Show at least 3, up to maxSlots
                         
-                        return (
+                        {/* Competitor URL Inputs for Starter/Standard */}
+                        {addOns.competitorAnalysis && (
                           <div className="mt-3 pl-2 border-l-2 border-blue-200 space-y-3">
                             <Label className="text-xs text-gray-600">
                               Optional: Add specific competitor URLs (leave empty to auto-detect)
-                              {selectedTier === 'agency' && (
-                                <span className="text-gray-500 ml-1">
-                                  ({maxSlots} {maxSlots === 1 ? 'slot' : 'slots'} available)
-                                </span>
-                              )}
                             </Label>
                             <div className="space-y-2">
-                              {Array.from({ length: slotsToShow }).map((_, index) => {
+                              {Array.from({ length: 3 }).map((_, index) => {
                                 const urlValue = getCompetitorUrlValue(index)
                                 return (
                                   <div key={index} className="flex items-center gap-2">
@@ -666,14 +681,87 @@ export default function NewAuditPage() {
                               })}
                             </div>
                             <p className="text-xs text-gray-500 mt-1">
-                              {selectedTier === 'agency' 
-                                ? `Agency tier includes ${maxSlots} competitor crawls. Leave empty to auto-detect.`
-                                : 'Leave empty to auto-detect competitors based on your industry.'}
+                              Leave empty to auto-detect competitors based on your industry.
                             </p>
                           </div>
-                        )
-                      })()}
-                    </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Agency Tier: Competitor URLs (included, always shown) */}
+                    {selectedTier === 'agency' && (
+                      <div className="flex flex-col p-3 border rounded-lg bg-blue-50 border-blue-200">
+                        <div className="flex items-center justify-between w-full mb-2">
+                          <div>
+                            <div className="font-medium">Competitor Analysis (Included)</div>
+                            <div className="text-sm text-gray-500">3 competitor crawls + keyword gap analysis (included with Agency tier)</div>
+                          </div>
+                        </div>
+                        
+                        {/* Competitor URL Inputs for Agency tier */}
+                        <div className="mt-3 pl-2 border-l-2 border-blue-200 space-y-3">
+                          <Label className="text-xs text-gray-600">
+                            Add competitor URLs (leave empty to auto-detect)
+                            {(() => {
+                              const maxSlots = getMaxCompetitorSlots()
+                              return (
+                                <span className="text-gray-500 ml-1">
+                                  ({maxSlots} {maxSlots === 1 ? 'slot' : 'slots'} available)
+                                </span>
+                              )
+                            })()}
+                          </Label>
+                          <div className="space-y-2">
+                            {Array.from({ length: getMaxCompetitorSlots() }).map((_, index) => {
+                              const urlValue = getCompetitorUrlValue(index)
+                              return (
+                                <div key={index} className="flex items-center gap-2">
+                                  <Input
+                                    placeholder={`Competitor ${index + 1} URL (optional)`}
+                                    value={urlValue}
+                                    onChange={(e) => updateCompetitorUrl(index, e.target.value)}
+                                    onBlur={(e) => {
+                                      // Auto-format URL on blur
+                                      if (e.target.value.trim()) {
+                                        try {
+                                          const formatted = formatUrl(e.target.value)
+                                          new URL(formatted)
+                                          updateCompetitorUrl(index, formatted)
+                                        } catch {
+                                          // Invalid URL, show error toast
+                                          toast({
+                                            title: 'Invalid URL',
+                                            description: 'Please enter a valid URL (e.g., example.com or https://example.com)',
+                                            variant: 'destructive'
+                                          })
+                                        }
+                                      }
+                                    }}
+                                    className="bg-white h-9 text-sm flex-1"
+                                    disabled={loading}
+                                  />
+                                  {urlValue && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      onClick={() => updateCompetitorUrl(index, '')}
+                                      disabled={loading}
+                                    >
+                                      <Minus className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Agency tier includes {getMaxCompetitorSlots()} competitor crawls. Leave empty to auto-detect.
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Additional Competitors (Agency tier only) */}
                     {selectedTier === 'agency' && (
@@ -757,7 +845,15 @@ export default function NewAuditPage() {
                       {addOns.blankReport && selectedTier && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">{addOnInfo.blankReport.name}</span>
-                          <span className="font-medium">+${addOnInfo.blankReport.getPrice(selectedTier)}.00</span>
+                          <span className="font-medium">
+                            {selectedTier === 'agency' ? 'Free' : `+$${addOnInfo.blankReport.getPrice(selectedTier)}.00`}
+                          </span>
+                        </div>
+                      )}
+                      {selectedTier === 'agency' && !addOns.blankReport && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.blankReport.name}</span>
+                          <span className="font-medium text-green-600">Included (Free)</span>
                         </div>
                       )}
                       {addOns.additionalPages && (addOns.additionalPages as number) > 0 && (
@@ -772,10 +868,16 @@ export default function NewAuditPage() {
                           <span className="font-medium">+${addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)}.00</span>
                         </div>
                       )}
-                      {addOns.competitorAnalysis && (
+                      {(addOns.competitorAnalysis || selectedTier === 'agency') && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">{addOnInfo.competitorAnalysis.name}</span>
-                          <span className="font-medium">+${addOnInfo.competitorAnalysis.price}.00</span>
+                          <span className="text-gray-600">
+                            {selectedTier === 'agency' 
+                              ? 'Competitor Analysis (Included)' 
+                              : addOnInfo.competitorAnalysis.name}
+                          </span>
+                          <span className="font-medium">
+                            {selectedTier === 'agency' ? 'Included' : `+$${addOnInfo.competitorAnalysis.price}.00`}
+                          </span>
                         </div>
                       )}
                       {addOns.schemaDeepDive && (
