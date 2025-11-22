@@ -784,10 +784,42 @@ function generateReportHTML(
   ` : ''}
   
   <!-- Internal Link Graph (Agency tier) -->
-  ${result.internalLinkGraph && result.raw.options.tier === 'agency' ? `
+  ${result.internalLinkGraph && result.raw.options.tier === 'agency' && result.summary.totalPages >= 10 ? `
   <div class="page">
     <h1>Internal Link Graph Analysis</h1>
     ${generateInternalLinkGraphVisualization(result)}
+  </div>
+  ` : ''}
+  
+  <!-- Duplicate URL Cleaning (Agency tier) -->
+  ${result.duplicateUrlReport && result.raw.options.tier === 'agency' ? `
+  <div class="page">
+    <h1>Duplicate URL Analysis</h1>
+    ${generateDuplicateUrlReport(result.duplicateUrlReport)}
+  </div>
+  ` : ''}
+  
+  <!-- JS Rendering Diagnostics (Agency tier) -->
+  ${result.pages.some(p => p.llmReadability?.hydrationIssues || p.llmReadability?.scriptBundleAnalysis) && result.raw.options.tier === 'agency' ? `
+  <div class="page">
+    <h1>JS Rendering Diagnostics</h1>
+    ${generateJSRenderingDiagnostics(result.pages)}
+  </div>
+  ` : ''}
+  
+  <!-- Crawl Diagnostics (Agency tier) -->
+  ${result.crawlDiagnostics?.crawlMetrics && result.raw.options.tier === 'agency' ? `
+  <div class="page">
+    <h1>Crawl Diagnostics</h1>
+    ${generateCrawlDiagnosticsDisplay(result.crawlDiagnostics)}
+  </div>
+  ` : ''}
+  
+  <!-- Enhanced Local SEO (Agency tier) -->
+  ${result.localSEO && result.raw.options.tier === 'agency' ? `
+  <div class="page">
+    <h1>Local SEO Analysis</h1>
+    ${generateEnhancedLocalSEODisplay(result.localSEO)}
   </div>
   ` : ''}
   
@@ -1551,6 +1583,233 @@ function generateInternalLinkGraphVisualization(result: AuditResult): string {
             ${graph.orphanPages.slice(0, 5).map(url => escapeHtml(url)).join('<br>')}
             ${graph.orphanPages.length > 5 ? `<br>... and ${graph.orphanPages.length - 5} more` : ''}
           </p>
+        </div>
+      ` : ''}
+    </div>
+  `
+}
+
+/**
+ * Generate duplicate URL report (Agency tier)
+ */
+function generateDuplicateUrlReport(duplicateReport: any): string {
+  if (!duplicateReport) return ''
+  
+  return `
+    <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 15px; color: #333;">Duplicate URL Analysis</h3>
+      
+      ${duplicateReport.duplicates && duplicateReport.duplicates.length > 0 ? `
+        <div style="margin-bottom: 20px;">
+          <h4 style="color: #ef4444; margin-bottom: 10px;">Duplicate URL Groups: ${duplicateReport.duplicates.length}</h4>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #ef4444; color: white;">
+                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Canonical URL</th>
+                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Duplicate Variations</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${duplicateReport.duplicates.slice(0, 10).map((dup: any) => `
+                <tr>
+                  <td style="padding: 8px; border: 1px solid #ddd; font-size: 12px;">${escapeHtml(dup.canonical)}</td>
+                  <td style="padding: 8px; border: 1px solid #ddd; font-size: 12px;">
+                    ${dup.variations.slice(0, 3).map((v: string) => escapeHtml(v)).join('<br>')}
+                    ${dup.variations.length > 3 ? `<br>... and ${dup.variations.length - 3} more` : ''}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : '<p style="color: #10b981;">✓ No duplicate URLs detected</p>'}
+      
+      ${duplicateReport.canonicalConflicts && duplicateReport.canonicalConflicts.length > 0 ? `
+        <div>
+          <h4 style="color: #f59e0b; margin-bottom: 10px;">Canonical Conflicts: ${duplicateReport.canonicalConflicts.length}</h4>
+          <ul style="padding-left: 20px;">
+            ${duplicateReport.canonicalConflicts.slice(0, 10).map((conflict: any) => `
+              <li style="margin-bottom: 8px; font-size: 12px;">
+                <strong>${escapeHtml(conflict.affectedPages?.[0] || 'Unknown')}:</strong> 
+                ${escapeHtml(conflict.details || conflict.message || '')}
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      ` : ''}
+    </div>
+  `
+}
+
+/**
+ * Generate JS rendering diagnostics (Agency tier)
+ */
+function generateJSRenderingDiagnostics(pages: any[]): string {
+  const pagesWithDiagnostics = pages.filter(p => p.llmReadability?.hydrationIssues || p.llmReadability?.scriptBundleAnalysis)
+  
+  if (pagesWithDiagnostics.length === 0) {
+    return '<p>No JS rendering diagnostics available.</p>'
+  }
+  
+  return `
+    <div style="margin-top: 30px;">
+      ${pagesWithDiagnostics.slice(0, 5).map(page => {
+        const llm = page.llmReadability
+        const hydration = llm?.hydrationIssues
+        const scripts = llm?.scriptBundleAnalysis
+        const shadow = llm?.shadowDOMAnalysis
+        
+        return `
+          <div style="margin-bottom: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+            <h3 style="margin-bottom: 15px; color: #333;">${escapeHtml(page.url)}</h3>
+            
+            ${hydration ? `
+              <div style="margin-bottom: 15px;">
+                <h4 style="color: #3b82f6; margin-bottom: 8px;">Hydration Analysis</h4>
+                <ul style="padding-left: 20px; font-size: 12px;">
+                  <li>Hydration Mismatch: ${hydration.hasHydrationMismatch ? '⚠️ Yes' : '✓ No'}</li>
+                  <li>Missing Content (JS Disabled): ${hydration.missingContentWithJSDisabled ? '⚠️ Yes' : '✓ No'}</li>
+                  ${hydration.criticalContentMissing && hydration.criticalContentMissing.length > 0 ? `
+                    <li>Critical Missing: ${hydration.criticalContentMissing.join(', ')}</li>
+                  ` : ''}
+                </ul>
+              </div>
+            ` : ''}
+            
+            ${scripts ? `
+              <div style="margin-bottom: 15px;">
+                <h4 style="color: #3b82f6; margin-bottom: 8px;">Script Bundle Analysis</h4>
+                <ul style="padding-left: 20px; font-size: 12px;">
+                  <li>Total Script Size: ${(scripts.totalScriptSize / 1024).toFixed(2)} KB</li>
+                  <li>Large Bundles: ${scripts.largeBundles?.length || 0}</li>
+                  <li>Render-Blocking Scripts: ${scripts.renderBlockingScripts || 0}</li>
+                  ${scripts.recommendations && scripts.recommendations.length > 0 ? `
+                    <li>Recommendations: ${scripts.recommendations.join('; ')}</li>
+                  ` : ''}
+                </ul>
+              </div>
+            ` : ''}
+            
+            ${shadow ? `
+              <div style="margin-bottom: 15px;">
+                <h4 style="color: #3b82f6; margin-bottom: 8px;">Shadow DOM Analysis</h4>
+                <ul style="padding-left: 20px; font-size: 12px;">
+                  <li>Has Shadow DOM: ${shadow.hasShadowDOM ? '⚠️ Yes' : '✓ No'}</li>
+                  <li>Shadow Roots: ${shadow.shadowRootCount || 0}</li>
+                  ${shadow.recommendations && shadow.recommendations.length > 0 ? `
+                    <li>Recommendations: ${shadow.recommendations.join('; ')}</li>
+                  ` : ''}
+                </ul>
+              </div>
+            ` : ''}
+          </div>
+        `
+      }).join('')}
+    </div>
+  `
+}
+
+/**
+ * Generate crawl diagnostics display (Agency tier)
+ */
+function generateCrawlDiagnosticsDisplay(diagnostics: any): string {
+  if (!diagnostics.crawlMetrics) {
+    return '<p>No crawl metrics available.</p>'
+  }
+  
+  const metrics = diagnostics.crawlMetrics
+  
+  return `
+    <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 15px; color: #333;">Crawl Performance Metrics</h3>
+      
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px;">
+        <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #3b82f6;">
+          <div style="font-size: 18px; font-weight: bold; color: #3b82f6;">${(metrics.timeToCrawl / 1000).toFixed(1)}s</div>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">Total Crawl Time</div>
+        </div>
+        <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #10b981;">
+          <div style="font-size: 18px; font-weight: bold; color: #10b981;">${metrics.pagesPerSecond.toFixed(2)}</div>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">Pages/Second</div>
+        </div>
+        <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #f59e0b;">
+          <div style="font-size: 18px; font-weight: bold; color: #f59e0b;">${metrics.averagePageLoadTime}ms</div>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">Avg Page Load Time</div>
+        </div>
+        <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid ${metrics.queueHealth === 'healthy' ? '#10b981' : metrics.queueHealth === 'degraded' ? '#f59e0b' : '#ef4444'};">
+          <div style="font-size: 18px; font-weight: bold; color: ${metrics.queueHealth === 'healthy' ? '#10b981' : metrics.queueHealth === 'degraded' ? '#f59e0b' : '#ef4444'};">
+            ${metrics.queueHealth.charAt(0).toUpperCase() + metrics.queueHealth.slice(1)}
+          </div>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">Queue Health</div>
+        </div>
+      </div>
+      
+      <div style="margin-top: 20px; padding: 15px; background: white; border-radius: 6px;">
+        <h4 style="margin-bottom: 10px; color: #333;">Crawl Efficiency: ${metrics.crawlEfficiency}%</h4>
+        <div style="width: 100%; height: 20px; background: #e5e7eb; border-radius: 10px; overflow: hidden;">
+          <div style="width: ${metrics.crawlEfficiency}%; height: 100%; background: ${metrics.crawlEfficiency >= 70 ? '#10b981' : metrics.crawlEfficiency >= 40 ? '#f59e0b' : '#ef4444'}; transition: width 0.3s;"></div>
+        </div>
+      </div>
+      
+      ${metrics.disallowedPaths && metrics.disallowedPaths.length > 0 ? `
+        <div style="margin-top: 20px;">
+          <h4 style="margin-bottom: 10px; color: #333;">Disallowed Paths (robots.txt):</h4>
+          <ul style="padding-left: 20px; font-size: 12px;">
+            ${metrics.disallowedPaths.slice(0, 10).map((path: string) => `<li>${escapeHtml(path)}</li>`).join('')}
+          </ul>
+        </div>
+      ` : ''}
+    </div>
+  `
+}
+
+/**
+ * Generate enhanced local SEO display (Agency tier)
+ */
+function generateEnhancedLocalSEODisplay(localSEO: any): string {
+  if (!localSEO) return ''
+  
+  return `
+    <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 15px; color: #333;">Local SEO Score: ${localSEO.overallScore}/100</h3>
+      
+      ${localSEO.napConsistency ? `
+        <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 6px;">
+          <h4 style="color: #3b82f6; margin-bottom: 10px;">NAP Consistency</h4>
+          <p style="font-size: 12px; margin-bottom: 5px;"><strong>Consistency Score:</strong> ${localSEO.napConsistency.consistencyScore}/100</p>
+          <p style="font-size: 12px; margin-bottom: 5px;"><strong>Phone Variations:</strong> ${localSEO.napConsistency.phoneVariations?.length || 0}</p>
+          <p style="font-size: 12px; margin-bottom: 5px;"><strong>Address Variations:</strong> ${localSEO.napConsistency.addressVariations?.length || 0}</p>
+          ${localSEO.napConsistency.inconsistentPages && localSEO.napConsistency.inconsistentPages.length > 0 ? `
+            <p style="font-size: 12px; color: #ef4444; margin-top: 10px;">
+              <strong>Inconsistent Pages:</strong> ${localSEO.napConsistency.inconsistentPages.slice(0, 5).map((url: string) => escapeHtml(url)).join(', ')}
+            </p>
+          ` : ''}
+        </div>
+      ` : ''}
+      
+      ${localSEO.citations && localSEO.citations.length > 0 ? `
+        <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 6px;">
+          <h4 style="color: #3b82f6; margin-bottom: 10px;">Local Citations</h4>
+          <ul style="padding-left: 20px; font-size: 12px;">
+            ${localSEO.citations.map((citation: any) => `
+              <li>
+                <strong>${citation.platform}:</strong> 
+                ${citation.isConsistent ? '✓ Consistent' : '⚠️ Inconsistent'}
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      ` : ''}
+      
+      ${localSEO.gbpIndicators ? `
+        <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 6px;">
+          <h4 style="color: #3b82f6; margin-bottom: 10px;">Google Business Profile Indicators</h4>
+          <ul style="padding-left: 20px; font-size: 12px;">
+            <li>Google Maps Embed: ${localSEO.gbpIndicators.hasGoogleMapsEmbed ? '✓ Yes' : '✗ No'}</li>
+            <li>Google Reviews Widget: ${localSEO.gbpIndicators.hasGoogleReviewsWidget ? '✓ Yes' : '✗ No'}</li>
+            <li>GBP Link: ${localSEO.gbpIndicators.hasGBPLink ? '✓ Yes' : '✗ No'}</li>
+            <li>Opening Hours: ${localSEO.gbpIndicators.hasOpeningHours ? '✓ Yes' : '✗ No'}</li>
+          </ul>
         </div>
       ` : ''}
     </div>

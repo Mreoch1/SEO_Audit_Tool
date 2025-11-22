@@ -488,13 +488,19 @@ export async function runAudit(
           opts,
           validPages
         )
-      } else {
-        // Standard/Professional: Single competitor
+      } else if (competitorsToAnalyze.length > 0) {
+        // Standard/Professional: Single competitor, or Agency with only 1 URL
         competitorAnalysis = await generateRealCompetitorAnalysis(
           competitorsToAnalyze[0],
           topKeywords,
           opts
         )
+      } else {
+        // No competitor URLs provided - use pattern-based for non-Agency, warn for Agency
+        if (opts.tier === 'agency') {
+          console.warn('[Competitor] Agency tier: No competitor URLs provided, using pattern-based analysis')
+        }
+        competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
       }
     } else {
       // Auto-detect competitors based on industry classification
@@ -673,11 +679,13 @@ export async function runAudit(
   let duplicateUrlAnalysis: import('./duplicateUrlCleaner').DuplicateUrlAnalysis | undefined
   
   if (opts.tier === 'agency') {
-    console.log('[Audit] Agency tier: Running internal link graph analysis...')
-    try {
-      const { buildInternalLinkGraph } = await import('./internalLinkGraph')
-      internalLinkGraph = buildInternalLinkGraph(validPages, uniquePages)
-      console.log(`[Audit] Internal link graph: ${internalLinkGraph.orphanPages.length} orphan pages, ${internalLinkGraph.isolatedPages.length} isolated pages`)
+    // Only build internal link graph if we have enough pages (minimum 10)
+    if (validPages.length >= 10) {
+      console.log('[Audit] Agency tier: Running internal link graph analysis...')
+      try {
+        const { buildInternalLinkGraph } = await import('./internalLinkGraph')
+        internalLinkGraph = buildInternalLinkGraph(validPages, uniquePages)
+        console.log(`[Audit] Internal link graph: ${internalLinkGraph.orphanPages.length} orphan pages, ${internalLinkGraph.isolatedPages.length} isolated pages`)
       
       // Add orphan page issues
       if (internalLinkGraph.orphanPages.length > 0) {
@@ -708,8 +716,11 @@ export async function runAudit(
           priority: 5
         })
       }
-    } catch (error) {
-      console.warn('[Audit] Internal link graph analysis failed:', error)
+      } catch (error) {
+        console.warn('[Audit] Internal link graph analysis failed:', error)
+      }
+    } else {
+      console.log(`[Audit] Agency tier: Skipping internal link graph (only ${validPages.length} pages, need 10+)`)
     }
     
     console.log('[Audit] Agency tier: Running duplicate URL analysis...')

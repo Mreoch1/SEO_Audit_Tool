@@ -117,6 +117,7 @@ const SEVERITY_DEDUCTIONS = {
 
 /**
  * Calculate Technical score
+ * CRITICAL FIX: Properly match issues and deduct points
  */
 export function calculateTechnicalScore(
   issues: Issue[],
@@ -126,53 +127,116 @@ export function calculateTechnicalScore(
 ): number {
   let score = 100
   
+  // Helper to check if issue matches pattern
+  const matchesIssue = (issue: Issue, patterns: string[]): boolean => {
+    const type = (issue.type || '').toLowerCase()
+    const message = (issue.message || '').toLowerCase()
+    const title = (issue.title || '').toLowerCase()
+    return patterns.some(pattern => 
+      type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
+    )
+  }
+  
   // Security headers (-20 points max)
   const securityIssues = issues.filter(i => 
-    i.category === 'technical' && 
-    (i.type.includes('header') || i.type.includes('csp') || i.type.includes('security'))
+    i.category === 'Technical' && matchesIssue(i, ['header', 'csp', 'security', 'x-frame', 'referrer'])
   )
-  score -= Math.min(weights.securityHeaders, securityIssues.length * 4)
+  securityIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
   
   // HTTPS/redirects (-15 points max)
   const httpsIssues = issues.filter(i => 
-    i.category === 'technical' && 
-    (i.type.includes('https') || i.type.includes('redirect'))
+    i.category === 'Technical' && matchesIssue(i, ['https', 'redirect', 'http version'])
   )
-  score -= Math.min(weights.httpsRedirects, httpsIssues.length * 5)
+  httpsIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
   
-  // Mixed content (-20 points max)
+  // Mixed content (-20 points max) - CRITICAL: High severity
   const mixedContentIssues = issues.filter(i => 
-    i.category === 'technical' && i.type.includes('mixed-content')
+    i.category === 'Technical' && matchesIssue(i, ['mixed content', 'mixed-content', 'http resource'])
   )
-  score -= Math.min(weights.mixedContent, mixedContentIssues.length * 10)
+  mixedContentIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 10
+    else if (issue.severity === 'Medium') score -= 5
+    else score -= 2
+  })
+  
+  // Broken pages - CRITICAL: High severity
+  const brokenPageIssues = issues.filter(i => 
+    i.category === 'Technical' && matchesIssue(i, ['broken', 'error', '404', '500', 'status code'])
+  )
+  brokenPageIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 15 // Major deduction for broken pages
+    else if (issue.severity === 'Medium') score -= 5
+    else score -= 2
+  })
   
   // Robots.txt (-10 points if missing or unreachable)
-  if (!siteWide.robotsTxtExists) {
+  const robotsIssues = issues.filter(i => 
+    i.category === 'Technical' && matchesIssue(i, ['robots.txt', 'robots'])
+  )
+  if (!siteWide.robotsTxtExists || robotsIssues.length > 0) {
     score -= weights.robotsTxt
   }
   
   // Sitemap (-10 points if missing)
-  if (!siteWide.sitemapExists) {
+  const sitemapIssues = issues.filter(i => 
+    i.category === 'Technical' && matchesIssue(i, ['sitemap', 'sitemap.xml'])
+  )
+  if (!siteWide.sitemapExists || sitemapIssues.length > 0) {
     score -= weights.sitemap
   }
   
-  // Schema issues (-15 points max)
+  // Schema issues (-15 points max) - CRITICAL: Missing schema is important
   const schemaIssues = issues.filter(i => 
-    i.category === 'technical' && i.type.includes('schema')
+    i.category === 'Technical' && matchesIssue(i, ['schema', 'structured data', 'json-ld'])
   )
-  score -= Math.min(weights.schema, schemaIssues.length * 3)
+  schemaIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 8
+    else if (issue.severity === 'Medium') score -= 3
+    else score -= 1
+  })
+  
+  // Viewport meta tag - CRITICAL: High severity
+  const viewportIssues = issues.filter(i => 
+    i.category === 'Technical' && matchesIssue(i, ['viewport', 'mobile'])
+  )
+  viewportIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 10
+    else if (issue.severity === 'Medium') score -= 3
+    else score -= 1
+  })
   
   // Canonical issues (-10 points max)
   const canonicalIssues = issues.filter(i => 
-    i.category === 'technical' && i.type.includes('canonical')
+    i.category === 'Technical' && matchesIssue(i, ['canonical'])
   )
-  score -= Math.min(weights.canonicals, canonicalIssues.length * 5)
+  canonicalIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
+  
+  // CRITICAL: Cannot have perfect score if any High priority issues exist
+  const hasHighPriorityIssues = issues.some(i => 
+    i.category === 'Technical' && i.severity === 'High'
+  )
+  if (hasHighPriorityIssues) {
+    score = Math.min(score, 85) // Cap at 85 if high priority issues exist
+  }
   
   return Math.max(0, Math.round(score))
 }
 
 /**
  * Calculate On-Page score
+ * CRITICAL FIX: Properly match issues and deduct points based on severity
  */
 export function calculateOnPageScore(
   issues: Issue[],
@@ -181,57 +245,133 @@ export function calculateOnPageScore(
 ): number {
   let score = 100
   
-  // Title issues (-25 points max)
+  // Helper to check if issue matches pattern (checks both type and message)
+  const matchesIssue = (issue: Issue, patterns: string[]): boolean => {
+    const type = (issue.type || '').toLowerCase()
+    const message = (issue.message || '').toLowerCase()
+    const title = (issue.title || '').toLowerCase()
+    return patterns.some(pattern => 
+      type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
+    )
+  }
+  
+  // Title issues (-25 points max) - CRITICAL: Missing title is HIGH severity
   const titleIssues = issues.filter(i => 
-    i.category === 'on-page' && i.type.includes('title')
+    i.category === 'On-page' && matchesIssue(i, ['title', 'missing page title', 'missing title tag'])
   )
   titleIssues.forEach(issue => {
-    if (issue.severity === 'high') score -= 5
-    else if (issue.severity === 'medium') score -= 2
-    else score -= 1
+    if (issue.severity === 'High') {
+      score -= 10 // Major deduction for missing title
+    } else if (issue.severity === 'Medium') {
+      score -= 4
+    } else {
+      score -= 2
+    }
   })
-  score = Math.max(score, 100 - weights.titleQuality)
   
-  // Meta description issues (-20 points max)
+  // Also check actual page data for missing titles
+  const pagesWithoutTitle = pages.filter(p => !p.title || p.title.trim().length === 0).length
+  if (pagesWithoutTitle > 0) {
+    const missingTitleRate = pagesWithoutTitle / pages.length
+    score -= Math.min(weights.titleQuality, missingTitleRate * weights.titleQuality)
+  }
+  
+  // Meta description issues (-20 points max) - CRITICAL: Missing meta is HIGH severity
   const metaIssues = issues.filter(i => 
-    i.category === 'on-page' && i.type.includes('meta')
+    i.category === 'On-page' && matchesIssue(i, ['meta description', 'missing meta', 'missing description'])
   )
   metaIssues.forEach(issue => {
-    if (issue.severity === 'high') score -= 4
-    else if (issue.severity === 'medium') score -= 2
-    else score -= 1
+    if (issue.severity === 'High') {
+      score -= 8 // Major deduction for missing meta
+    } else if (issue.severity === 'Medium') {
+      score -= 3
+    } else {
+      score -= 1
+    }
   })
-  score = Math.max(score, 100 - weights.titleQuality - weights.metaDescription)
   
-  // Heading structure issues (-15 points max)
+  // Also check actual page data for missing meta descriptions
+  const pagesWithoutMeta = pages.filter(p => !p.metaDescription || p.metaDescription.trim().length === 0).length
+  if (pagesWithoutMeta > 0) {
+    const missingMetaRate = pagesWithoutMeta / pages.length
+    score -= Math.min(weights.metaDescription, missingMetaRate * weights.metaDescription)
+  }
+  
+  // Heading structure issues (-15 points max) - CRITICAL: Missing H1 is HIGH severity
   const headingIssues = issues.filter(i => 
-    i.category === 'on-page' && (i.type.includes('h1') || i.type.includes('heading'))
+    i.category === 'On-page' && matchesIssue(i, ['h1', 'heading', 'missing h1', 'no h1'])
   )
-  score -= Math.min(weights.headingStructure, headingIssues.length * 3)
+  headingIssues.forEach(issue => {
+    if (issue.severity === 'High') {
+      score -= 8 // Major deduction for missing H1
+    } else if (issue.severity === 'Medium') {
+      score -= 3
+    } else {
+      score -= 1
+    }
+  })
+  
+  // Also check actual page data for missing H1
+  const pagesWithoutH1 = pages.filter(p => !p.h1Count || p.h1Count === 0).length
+  if (pagesWithoutH1 > 0) {
+    const missingH1Rate = pagesWithoutH1 / pages.length
+    score -= Math.min(weights.headingStructure, missingH1Rate * weights.headingStructure)
+  }
   
   // Internal linking issues (-15 points max)
   const linkIssues = issues.filter(i => 
-    i.category === 'on-page' && i.type.includes('internal-link')
+    i.category === 'On-page' && matchesIssue(i, ['internal link', 'no internal link', 'internal linking'])
   )
-  score -= Math.min(weights.internalLinking, linkIssues.length * 2)
+  linkIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
   
   // Duplicate content (-15 points max)
   const duplicateIssues = issues.filter(i => 
-    i.category === 'on-page' && i.type.includes('duplicate')
+    i.category === 'On-page' && matchesIssue(i, ['duplicate', 'duplicate title', 'duplicate meta'])
   )
-  score -= Math.min(weights.duplicateContent, duplicateIssues.length * 5)
+  duplicateIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
+  
+  // Canonical issues
+  const canonicalIssues = issues.filter(i => 
+    i.category === 'On-page' && matchesIssue(i, ['canonical', 'missing canonical'])
+  )
+  canonicalIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
   
   // URL structure (-10 points max)
   const urlIssues = issues.filter(i => 
-    i.category === 'on-page' && i.type.includes('url')
+    i.category === 'On-page' && matchesIssue(i, ['url', 'url structure'])
   )
-  score -= Math.min(weights.urlStructure, urlIssues.length * 2)
+  urlIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 3
+    else if (issue.severity === 'Medium') score -= 1
+    else score -= 0.5
+  })
+  
+  // CRITICAL: Cannot have perfect score if any High priority issues exist
+  const hasHighPriorityIssues = issues.some(i => 
+    i.category === 'On-page' && i.severity === 'High'
+  )
+  if (hasHighPriorityIssues) {
+    score = Math.min(score, 80) // Cap at 80 if high priority issues exist
+  }
   
   return Math.max(0, Math.round(score))
 }
 
 /**
  * Calculate Content score with readability integration
+ * CRITICAL FIX: Properly match issues and deduct points
  */
 export function calculateContentScore(
   issues: Issue[],
@@ -239,6 +379,16 @@ export function calculateContentScore(
   weights = DEFAULT_WEIGHTS.content
 ): number {
   let score = 100
+  
+  // Helper to check if issue matches pattern
+  const matchesIssue = (issue: Issue, patterns: string[]): boolean => {
+    const type = (issue.type || '').toLowerCase()
+    const message = (issue.message || '').toLowerCase()
+    const title = (issue.title || '').toLowerCase()
+    return patterns.some(pattern => 
+      type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
+    )
+  }
   
   // Content depth subscore (0-25 points)
   const depthSubscore = calculateDepthSubscore(pages)
@@ -250,20 +400,68 @@ export function calculateContentScore(
   const readabilityPenalty = weights.readability * (1 - readabilitySubscore / 100)
   score -= readabilityPenalty
   
-  // Thin content penalty (-20 points max)
+  // Thin content penalty (-20 points max) - CRITICAL: High severity for 0 words
   const thinContentIssues = issues.filter(i => 
-    i.category === 'content' && i.type.includes('thin-content')
+    i.category === 'Content' && matchesIssue(i, ['thin content', 'thin-content', 'word count', '0 words'])
   )
-  score -= Math.min(weights.thinContent, thinContentIssues.length * 4)
+  thinContentIssues.forEach(issue => {
+    // Check if it's 0 words (critical) or just low word count
+    const isZeroWords = (issue.details || '').includes('0 words') || 
+                       (issue.message || '').includes('0 words')
+    if (isZeroWords) {
+      score -= 15 // Major penalty for 0 words
+    } else if (issue.severity === 'High') {
+      score -= 8
+    } else if (issue.severity === 'Medium') {
+      score -= 4
+    } else {
+      score -= 2
+    }
+  })
   
-  // Freshness (if we can detect dates) - currently neutral
-  // Could integrate publication dates if available
+  // Also check actual page data for thin content
+  const thinPages = pages.filter(p => !p.wordCount || p.wordCount < 300).length
+  if (thinPages > 0) {
+    const thinContentRate = thinPages / pages.length
+    score -= Math.min(weights.thinContent, thinContentRate * weights.thinContent)
+  }
+  
+  // Readability issues (Flesch score, sentence length)
+  const readabilityIssues = issues.filter(i => 
+    i.category === 'Content' && matchesIssue(i, ['readability', 'flesch', 'reading ease', 'sentence', 'difficult to read'])
+  )
+  readabilityIssues.forEach(issue => {
+    // Check for very difficult readability (Flesch < 30 or 0)
+    const isVeryDifficult = (issue.details || '').includes('Flesch') && 
+                           ((issue.details || '').match(/Flesch.*?(\d+)/i)?.[1] || '100') < '30')
+    if (isVeryDifficult) {
+      score -= 10 // Major penalty for very difficult readability
+    } else if (issue.severity === 'High') {
+      score -= 6
+    } else if (issue.severity === 'Medium') {
+      score -= 3
+    } else {
+      score -= 1
+    }
+  })
   
   // Keyword usage
   const keywordIssues = issues.filter(i => 
-    i.category === 'content' && i.type.includes('keyword')
+    i.category === 'Content' && matchesIssue(i, ['keyword'])
   )
-  score -= Math.min(weights.keywordUsage, keywordIssues.length * 2)
+  keywordIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 3
+    else if (issue.severity === 'Medium') score -= 1
+    else score -= 0.5
+  })
+  
+  // CRITICAL: Cannot have perfect score if any High priority issues exist
+  const hasHighPriorityIssues = issues.some(i => 
+    i.category === 'Content' && i.severity === 'High'
+  )
+  if (hasHighPriorityIssues) {
+    score = Math.min(score, 80) // Cap at 80 if high priority issues exist
+  }
   
   return Math.max(0, Math.round(score))
 }
@@ -461,6 +659,7 @@ function calculateCoreWebVitalsSubscore(pages: PageData[]): number {
 
 /**
  * Calculate Accessibility score
+ * CRITICAL FIX: Properly match issues and deduct points
  */
 export function calculateAccessibilityScore(
   issues: Issue[],
@@ -469,29 +668,71 @@ export function calculateAccessibilityScore(
 ): number {
   let score = 100
   
-  // Alt text issues (-40 points max)
+  // Helper to check if issue matches pattern
+  const matchesIssue = (issue: Issue, patterns: string[]): boolean => {
+    const type = (issue.type || '').toLowerCase()
+    const message = (issue.message || '').toLowerCase()
+    const title = (issue.title || '').toLowerCase()
+    return patterns.some(pattern => 
+      type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
+    )
+  }
+  
+  // Alt text issues (-40 points max) - CRITICAL: High severity
   const altIssues = issues.filter(i => 
-    i.category === 'accessibility' && i.type.includes('alt')
+    i.category === 'Accessibility' && matchesIssue(i, ['alt', 'alt text', 'missing alt', 'image alt'])
   )
-  score -= Math.min(weights.altText, altIssues.length * 8)
+  altIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 10
+    else if (issue.severity === 'Medium') score -= 4
+    else score -= 1
+  })
+  
+  // Also check actual page data for missing alt text
+  const totalImages = pages.reduce((sum, p) => sum + (p.imageCount || 0), 0)
+  const totalMissingAlt = pages.reduce((sum, p) => sum + (p.missingAltCount || 0), 0)
+  if (totalImages > 0) {
+    const missingAltRate = totalMissingAlt / totalImages
+    score -= Math.min(weights.altText, missingAltRate * weights.altText)
+  }
   
   // ARIA label issues (-20 points max)
   const ariaIssues = issues.filter(i => 
-    i.category === 'accessibility' && i.type.includes('aria')
+    i.category === 'Accessibility' && matchesIssue(i, ['aria', 'aria label'])
   )
-  score -= Math.min(weights.ariaLabels, ariaIssues.length * 5)
+  ariaIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
   
   // Color contrast issues (-20 points max)
   const contrastIssues = issues.filter(i => 
-    i.category === 'accessibility' && i.type.includes('contrast')
+    i.category === 'Accessibility' && matchesIssue(i, ['contrast', 'color contrast'])
   )
-  score -= Math.min(weights.colorContrast, contrastIssues.length * 10)
+  contrastIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
   
   // Keyboard navigation issues (-20 points max)
   const keyboardIssues = issues.filter(i => 
-    i.category === 'accessibility' && i.type.includes('keyboard')
+    i.category === 'Accessibility' && matchesIssue(i, ['keyboard', 'keyboard navigation'])
   )
-  score -= Math.min(weights.keyboardNav, keyboardIssues.length * 10)
+  keyboardIssues.forEach(issue => {
+    if (issue.severity === 'High') score -= 5
+    else if (issue.severity === 'Medium') score -= 2
+    else score -= 1
+  })
+  
+  // CRITICAL: Cannot have perfect score if any High priority issues exist
+  const hasHighPriorityIssues = issues.some(i => 
+    i.category === 'Accessibility' && i.severity === 'High'
+  )
+  if (hasHighPriorityIssues) {
+    score = Math.min(score, 85) // Cap at 85 if high priority issues exist
+  }
   
   return Math.max(0, Math.round(score))
 }
@@ -548,26 +789,17 @@ export function calculateOverallScore(categoryScores: CategoryScores): number {
 
 /**
  * Apply diminishing returns to prevent extreme scores
- * Maps 0-100 to approximately 10-90 range to avoid 0/100 extremes
+ * REMOVED: This was causing perfect scores when issues exist
+ * Now only applies minimal compression to avoid true 0/100 extremes
  */
 function applyDiminishingReturns(score: number): number {
-  if (score <= 0) return 10 // Minimum floor
-  if (score >= 100) return 90 // Maximum ceiling
+  // Only apply minimal floor/ceiling to avoid true extremes
+  // Don't compress valid scores - if there are issues, scores should reflect that
+  if (score <= 0) return 5 // Minimum floor (only for true 0)
+  if (score >= 100) return 100 // Allow 100 if truly perfect (no issues)
   
-  // Use a sigmoid-like curve to compress extremes
-  // Maps 0-100 to approximately 10-90
-  const normalized = score / 100
-  const compressed = 10 + (normalized * 80) // Scale to 10-90 range
-  
-  // Add slight curve to further compress extremes
-  if (normalized < 0.2) {
-    // Very low scores get slight boost
-    return Math.max(10, compressed * 1.1)
-  } else if (normalized > 0.8) {
-    // Very high scores get slight reduction
-    return Math.min(90, compressed * 0.95)
-  }
-  
-  return compressed
+  // No compression for scores in the middle range
+  // The scoring functions now properly deduct points, so we don't need artificial compression
+  return score
 }
 
