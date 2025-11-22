@@ -484,12 +484,30 @@ export async function runAudit(
     let industryConfidence = 0
     
     try {
+      // Extract keywords and schema types for AI-assisted detection
+      const topKeywords = pages
+        .flatMap(p => p.extractedKeywords || [])
+        .slice(0, 30)
+      
+      const schemaTypes = pages
+        .flatMap(p => {
+          const schemas: string[] = []
+          if (p.hasLocalBusinessSchema) schemas.push('LocalBusiness')
+          if (p.hasOrganizationSchema) schemas.push('Organization')
+          if (p.hasArticleSchema) schemas.push('Article')
+          if (p.hasProductSchema) schemas.push('Product')
+          return schemas
+        })
+        .filter((v, i, a) => a.indexOf(v) === i) // Unique
+      
       const autoFillResult = await autoFillCompetitorUrls(
         rootUrl,
         providedUrls,
         firstPageHtml,
         opts.userAgent,
-        opts.tier
+        opts.tier,
+        topKeywords,
+        schemaTypes
       )
       
       finalCompetitorUrls = autoFillResult.finalUrls

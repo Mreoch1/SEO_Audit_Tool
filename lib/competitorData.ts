@@ -496,19 +496,24 @@ export async function classifyDomain(
  * - If 3+ URLs provided → use those (no auto-fill needed)
  * 
  * For Agency tier, ensures minimum 3 competitors
+ * 
+ * Uses AI-assisted detection when industry classification finds insufficient competitors
  */
 export async function autoFillCompetitorUrls(
   targetUrl: string,
   providedUrls: string[],
   html: string,
   userAgent: string,
-  tier: 'starter' | 'standard' | 'professional' | 'agency' = 'standard'
+  tier: 'starter' | 'standard' | 'professional' | 'agency' = 'standard',
+  keywords: string[] = [],
+  schemaTypes: string[] = []
 ): Promise<{
   finalUrls: string[]
   autoDetected: string[]
   provided: string[]
   industry: string
   confidence: number
+  aiAssisted: boolean
 }> {
   const provided = providedUrls.filter(url => url && url.trim().length > 0)
   const targetDomain = new URL(targetUrl).hostname.replace(/^www\./, '')
@@ -525,7 +530,8 @@ export async function autoFillCompetitorUrls(
       autoDetected: [],
       provided: provided.slice(0, maxCompetitors),
       industry: 'Unknown',
-      confidence: 0
+      confidence: 0,
+      aiAssisted: false
     }
   }
   
@@ -560,6 +566,64 @@ export async function autoFillCompetitorUrls(
     })
     .slice(0, needed) // Take only what we need
   
+  // If we still don't have enough competitors, try AI-assisted detection
+  let aiAssisted = false
+  if (availableCompetitors.length < needed && keywords.length > 0) {
+    try {
+      console.log(`[Competitor] Industry classification found ${availableCompetitors.length} competitors, need ${needed}. Trying AI-assisted detection...`)
+      
+      // Dynamically import AI assistant (optional dependency)
+      const { detectCompetitorsWithAI } = await import('./aiAssistant')
+      
+      // Extract topics from keywords
+      const topics = keywords.slice(0, 10)
+      
+      // Extract business type from schema or keywords
+      const businessType = schemaTypes.length > 0 
+        ? schemaTypes[0].replace('Schema', '').trim()
+        : classification.industry
+      
+      const aiResult = await detectCompetitorsWithAI({
+        keywords: keywords.slice(0, 20),
+        topics,
+        businessType,
+        schemaTypes,
+        siteUrl: targetUrl
+      })
+      
+      // Convert AI-detected competitors to full URLs
+      const aiCompetitors = aiResult.competitors
+        .filter(c => c.domain && c.domain.length > 0)
+        .map(c => {
+          const domain = c.domain.replace(/^https?:\/\//, '').replace(/\/$/, '')
+          // Try to construct full URL
+          if (domain.includes('.')) {
+            return domain.startsWith('http') ? domain : `https://${domain}`
+          }
+          return null
+        })
+        .filter((url): url is string => url !== null && url.length > 0)
+        .filter(url => {
+          try {
+            const domain = new URL(url).hostname.replace(/^www\./, '')
+            return domain !== targetDomain && !providedDomains.has(domain)
+          } catch {
+            return false
+          }
+        })
+        .slice(0, needed - availableCompetitors.length) // Only take what we still need
+      
+      if (aiCompetitors.length > 0) {
+        console.log(`[Competitor] AI-assisted detection found ${aiCompetitors.length} additional competitor(s)`)
+        availableCompetitors = [...availableCompetitors, ...aiCompetitors]
+        aiAssisted = true
+      }
+    } catch (error) {
+      console.warn('[Competitor] AI-assisted detection failed, using industry classification only:', error)
+      // Continue with industry classification results only
+    }
+  }
+  
   // Combine provided + auto-detected
   const finalUrls = [...provided, ...availableCompetitors].slice(0, maxCompetitors)
   
@@ -568,7 +632,8 @@ export async function autoFillCompetitorUrls(
     autoDetected: availableCompetitors,
     provided,
     industry: classification.industry,
-    confidence: classification.confidence
+    confidence: classification.confidence,
+    aiAssisted
   }
 }
 

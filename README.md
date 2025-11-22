@@ -26,6 +26,7 @@ A production-ready web application and CLI tool for performing automated SEO sit
   - **Keyword extraction**: From titles, headings, and meta descriptions
   - **Image alt tag optimization**: Detailed analysis with specific recommendations
   - **Real competitor analysis**: Crawls competitor URLs and extracts real keywords (not generic patterns)
+  - **AI-Assisted Competitor Detection**: Automatically finds relevant competitors using industry classification and AI when URLs aren't provided
   - **Local SEO analysis**: NAP consistency, LocalBusiness schema, service area pages, local keywords, GBP indicators
   - **Crawl diagnostics**: Platform detection (Wix, WordPress, Squarespace, Shopify), crawl status reporting, actionable recommendations
   - **Platform-specific instructions**: Automatically provides step-by-step fix instructions tailored to detected platform
@@ -48,6 +49,7 @@ A production-ready web application and CLI tool for performing automated SEO sit
 - **PDF Generation**: Puppeteer
 - **Page Rendering**: Puppeteer (for JavaScript execution and Core Web Vitals)
 - **Email**: Nodemailer
+- **AI Assistant**: DeepSeek API (optional, for enhanced competitor detection and insights)
 - **Auth**: NextAuth.js (Credentials provider)
 
 ## Setup
@@ -77,6 +79,11 @@ Optional variables:
   - See `PAGESPEED_API_SETUP.md` for setup instructions
   - Free tier: 25,000 requests/day
   - Test with: `npm run test-pagespeed`
+- `DEEPSEEK_API_KEY`: DeepSeek API key (enables AI-assisted competitor detection)
+  - Get your API key at: https://platform.deepseek.com/
+  - Used for automatic competitor detection when URLs aren't provided
+  - Falls back to industry classification if not configured
+  - Alternative: `OPENAI_API_KEY` (uses GPT-4o-mini if DeepSeek not available)
 
 ### 3. Set Up Database
 
