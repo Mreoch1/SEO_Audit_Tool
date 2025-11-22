@@ -58,10 +58,25 @@ export async function GET(
     return NextResponse.json({
       ...audit,
       rawJson,
-      issues: audit.issues.map(issue => ({
-        ...issue,
-        affectedPages: JSON.parse(issue.affectedPagesJson)
-      }))
+      issues: audit.issues.map(issue => {
+        let affectedPages: string[] = []
+        try {
+          if (issue.affectedPagesJson) {
+            affectedPages = JSON.parse(issue.affectedPagesJson)
+            // Ensure it's an array
+            if (!Array.isArray(affectedPages)) {
+              affectedPages = []
+            }
+          }
+        } catch (parseError) {
+          console.warn(`[GET /api/audits/${auditId}] Failed to parse affectedPagesJson for issue ${issue.id}:`, parseError)
+          affectedPages = []
+        }
+        return {
+          ...issue,
+          affectedPages
+        }
+      })
     })
   } catch (error) {
     console.error('[GET /api/audits/[id]] Error:', error)
