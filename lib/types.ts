@@ -105,6 +105,9 @@ export interface CompetitorAnalysis {
   competitorKeywords: string[]
   keywordGaps: string[]
   sharedKeywords: string[]
+  detectedIndustry?: string // Auto-detected industry category
+  industryConfidence?: number // Confidence score (0-1)
+  allCompetitors?: string[] // All detected competitors (not just the one analyzed)
 }
 
 export interface AuditResult {

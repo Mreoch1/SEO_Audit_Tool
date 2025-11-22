@@ -322,15 +322,45 @@ export async function runAudit(
   
   // Competitor Analysis (if add-on is selected)
   let competitorAnalysis: CompetitorAnalysis | undefined
-  if (opts.addOns?.competitorAnalysis && options.competitorUrls && options.competitorUrls.length > 0) {
-    competitorAnalysis = await generateRealCompetitorAnalysis(
-      options.competitorUrls[0], // Analyze first competitor
-      topKeywords,
-      opts
-    )
-  } else if (opts.addOns?.competitorAnalysis) {
-    // Fallback to pattern-based analysis if no competitor URLs provided
-    competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
+  if (opts.addOns?.competitorAnalysis) {
+    if (options.competitorUrls && options.competitorUrls.length > 0) {
+      // User provided competitor URLs - use them
+      console.log('[Audit] Using user-provided competitor URLs for analysis...')
+      competitorAnalysis = await generateRealCompetitorAnalysis(
+        options.competitorUrls[0], // Analyze first competitor
+        topKeywords,
+        opts
+      )
+    } else {
+      // Auto-detect competitors based on industry classification
+      console.log('[Audit] Auto-detecting competitors based on site content...')
+      try {
+        const detectedIndustry = await classifyDomain(rootUrl, pages[0]?.html || '', opts.userAgent)
+        console.log(`[Audit] Detected industry: ${detectedIndustry.industry} (confidence: ${detectedIndustry.confidence})`)
+        
+        if (detectedIndustry.competitors.length > 0) {
+          console.log(`[Audit] Found ${detectedIndustry.competitors.length} competitors: ${detectedIndustry.competitors.join(', ')}`)
+          // Use the first detected competitor
+          competitorAnalysis = await generateRealCompetitorAnalysis(
+            detectedIndustry.competitors[0],
+            topKeywords,
+            opts
+          )
+          // Add industry info to the analysis
+          if (competitorAnalysis) {
+            competitorAnalysis.detectedIndustry = detectedIndustry.industry
+            competitorAnalysis.industryConfidence = detectedIndustry.confidence
+            competitorAnalysis.allCompetitors = detectedIndustry.competitors
+          }
+        } else {
+          console.log('[Audit] No competitors detected, falling back to pattern-based analysis')
+          competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
+        }
+      } catch (error) {
+        console.warn('[Audit] Competitor auto-detection failed, falling back to pattern-based analysis:', error)
+        competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
+      }
+    }
   }
   
   // Add fix instructions to existing issues that don't have them

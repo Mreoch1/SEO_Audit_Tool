@@ -88,12 +88,33 @@ export const INDUSTRY_DATA: Record<string, IndustryDefinition> = {
   }
 }
 
-export function classifyDomain(
-  content: string, 
-  title: string, 
-  description: string
-): IndustryDefinition | null {
-  const text = `${title} ${description} ${content}`.toLowerCase()
+export interface IndustryClassification {
+  industry: string
+  confidence: number
+  competitors: string[]
+}
+
+export async function classifyDomain(
+  url: string,
+  html: string,
+  userAgent: string
+): Promise<IndustryClassification> {
+  // Extract title and description from HTML
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+  const title = titleMatch ? titleMatch[1] : ''
+  
+  const descMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i)
+  const description = descMatch ? descMatch[1] : ''
+  
+  // Extract visible text content (simplified - just get text between tags)
+  const textContent = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                          .replace(/<[^>]+>/g, ' ')
+                          .replace(/\s+/g, ' ')
+                          .trim()
+                          .substring(0, 5000) // Limit to first 5000 chars for performance
+  
+  const text = `${title} ${description} ${textContent}`.toLowerCase()
   
   let bestMatch: IndustryDefinition | null = null
   let maxScore = 0
@@ -123,7 +144,23 @@ export function classifyDomain(
     }
   }
 
-  // Return match only if we have a decent signal
-  return maxScore > 2 ? bestMatch : null
+  // Calculate confidence (0-1 scale)
+  const confidence = maxScore > 0 ? Math.min(maxScore / 20, 1) : 0
+
+  // Return classification
+  if (bestMatch && maxScore > 2) {
+    return {
+      industry: bestMatch.name,
+      confidence,
+      competitors: bestMatch.competitors
+    }
+  }
+
+  // Default fallback
+  return {
+    industry: 'General',
+    confidence: 0,
+    competitors: []
+  }
 }
 

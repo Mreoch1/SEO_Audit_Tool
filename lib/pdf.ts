@@ -718,6 +718,17 @@ function generateReportHTML(
   ${result.competitorAnalysis ? `
   <div class="page">
     <h1>Competitor Keyword Gap Analysis</h1>
+    
+    ${result.competitorAnalysis.detectedIndustry ? `
+      <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 15px; margin-bottom: 20px;">
+        <p style="margin: 0 0 8px 0;"><strong>🎯 Detected Industry:</strong> ${result.competitorAnalysis.detectedIndustry}</p>
+        <p style="margin: 0 0 8px 0;"><strong>📊 Confidence:</strong> ${Math.round((result.competitorAnalysis.industryConfidence || 0) * 100)}%</p>
+        ${result.competitorAnalysis.allCompetitors && result.competitorAnalysis.allCompetitors.length > 0 ? `
+          <p style="margin: 0;"><strong>🏢 Competitors Identified:</strong> ${result.competitorAnalysis.allCompetitors.slice(0, 3).map(c => `<a href="${c}" style="color: #3b82f6;">${c.replace(/^https?:\/\/(www\.)?/, '')}</a>`).join(', ')}${result.competitorAnalysis.allCompetitors.length > 3 ? ` and ${result.competitorAnalysis.allCompetitors.length - 3} more` : ''}</p>
+        ` : ''}
+      </div>
+    ` : ''}
+    
     ${result.competitorAnalysis.competitorUrl.startsWith('http') ? `
       <p style="margin-bottom: 20px;"><strong>Competitor Analyzed:</strong> <a href="${result.competitorAnalysis.competitorUrl}" style="color: #3b82f6;">${result.competitorAnalysis.competitorUrl}</a></p>
       <p style="margin-bottom: 20px;">This analysis crawled the competitor site and extracted real keywords from their content, comparing them against your site to identify opportunities.</p>
