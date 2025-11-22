@@ -252,8 +252,8 @@ export async function runAudit(
             affectedPages: [page.url]
           })
         }
-      } else if (!page.hasSchemaMarkup && !page.schemaAnalysis?.hasSchema) {
-        // Only flag as missing if both hasSchemaMarkup and schemaAnalysis confirm no schema
+      } else if (!page.hasSchemaMarkup) {
+        // Only flag as missing if hasSchemaMarkup is false
         consolidateIssue(schemaIssueMap, {
           category: 'Technical',
           severity: 'Medium',
@@ -351,14 +351,6 @@ export async function runAudit(
   
   const endTime = Date.now()
   
-  // Clean up browser instance after audit completes
-  try {
-    await closeBrowser()
-    console.log('[Audit] Browser closed successfully')
-  } catch (error) {
-    console.warn('[Audit] Error closing browser:', error)
-  }
-  
   return {
     summary: {
       totalPages: pages.length,
@@ -388,6 +380,15 @@ export async function runAudit(
         tier: opts.tier,
         addOns: opts.addOns
       }
+    }
+  }
+  } finally {
+    // Ensure browser is always closed, even if audit fails
+    try {
+      await closeBrowser()
+      console.log('[Audit] Browser closed successfully')
+    } catch (error) {
+      console.warn('[Audit] Error closing browser:', error)
     }
   }
 }
