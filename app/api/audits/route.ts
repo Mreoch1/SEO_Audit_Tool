@@ -191,7 +191,7 @@ async function processAuditInBackground(
   options: {
     maxPages?: number
     maxDepth?: number
-    tier?: 'starter' | 'standard' | 'advanced'
+    tier?: 'starter' | 'standard' | 'professional' | 'agency'
     addOns?: any
     competitorUrls?: string[]
   }

@@ -74,15 +74,22 @@ const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competit
 
 /**
  * Get tier-based limits
+ * Updated pricing tiers (Nov 2025):
+ * - Starter: $19, up to 50 pages
+ * - Standard: $39, up to 200 pages
+ * - Professional: $59, up to 500 pages
+ * - Agency: $99, unlimited pages
  */
 export function getTierLimits(tier?: AuditTier): { maxPages: number; maxDepth: number } {
   switch (tier) {
     case 'starter':
-      return { maxPages: 3, maxDepth: 2 }
+      return { maxPages: 50, maxDepth: 2 }
     case 'standard':
-      return { maxPages: 20, maxDepth: 3 }
-    case 'advanced':
-      return { maxPages: 50, maxDepth: 5 }
+      return { maxPages: 200, maxDepth: 3 }
+    case 'professional':
+      return { maxPages: 500, maxDepth: 5 }
+    case 'agency':
+      return { maxPages: 10000, maxDepth: 10 } // Effectively unlimited
     default:
       return { maxPages: 50, maxDepth: 3 }
   }
@@ -212,7 +219,7 @@ export async function runAudit(
     maxPages: finalMaxPages,
     maxDepth: options.maxDepth ?? tierLimits.maxDepth ?? DEFAULT_OPTIONS.maxDepth,
     userAgent: options.userAgent ?? DEFAULT_OPTIONS.userAgent,
-    tier: options.tier ?? 'advanced', // Default tier if not specified
+    tier: options.tier ?? 'starter', // Default tier if not specified
     // Preserve add-ons
     addOns: options.addOns ?? {},
     competitorUrls: options.competitorUrls ?? []
@@ -393,8 +400,8 @@ export async function runAudit(
   }
   
   // Enhanced schema issues (includes Identity Schema checks)
-  // Only check for Standard/Advanced tiers or if schema add-on is selected
-  if (opts.tier === 'standard' || opts.tier === 'advanced' || opts.addOns?.schemaMarkup) {
+  // Check for Standard/Professional/Agency tiers or if schema add-on is selected
+  if (opts.tier === 'standard' || opts.tier === 'professional' || opts.tier === 'agency' || opts.addOns?.schemaDeepDive || opts.addOns?.schemaMarkup) {
     const schemaIssueMap = new Map<string, Issue>()
     
     pages.forEach(page => {
@@ -446,7 +453,8 @@ export async function runAudit(
   })
   
   // Calculate keyword count based on tier and add-ons
-  let keywordCount = opts.tier === 'advanced' ? 10 : opts.tier === 'standard' ? 5 : 0
+  // Starter: 0, Standard: 5, Professional: 10, Agency: unlimited (use all extracted)
+  let keywordCount = opts.tier === 'agency' ? 1000 : opts.tier === 'professional' ? 10 : opts.tier === 'standard' ? 5 : 0
   if (opts.addOns?.additionalKeywords) {
     keywordCount += opts.addOns.additionalKeywords
   }

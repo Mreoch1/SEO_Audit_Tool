@@ -303,15 +303,13 @@ function generateReportHTML(
     <div style="margin-bottom: 20px;">
       <h2>Service Tier</h2>
       <p><strong>${result.raw.options.tier.charAt(0).toUpperCase() + result.raw.options.tier.slice(1)}</strong> - ${getTierDescription(result.raw.options.tier)}</p>
-      ${result.raw.options.addOns?.fastDelivery || result.raw.options.addOns?.additionalPages ? (() => {
+      ${result.raw.options.addOns?.blankReport ? (() => {
         const tier = result.raw.options.tier
-        if (tier === 'standard' || tier === 'advanced') {
-          const days = result.raw.options.addOns?.additionalPages || 1
-          // Escape to prevent LaTeX interpretation
-          const daysText = escapeHtml(`${days}-day delivery enabled`)
-          return `<p style="color: #f59e0b; font-weight: bold; margin-top: 10px;">⚡ Fast Delivery: ${daysText}</p>`
+        if (tier === 'agency') {
+          return `<p style="color: #10b981; font-weight: bold; margin-top: 10px;">✓ Blank Report (Unbranded) - Included</p>`
+        } else {
+          return `<p style="color: #f59e0b; font-weight: bold; margin-top: 10px;">+ Blank Report (Unbranded) - +$10.00</p>`
         }
-        return ''
       })() : ''}
     </div>
     ` : ''}
@@ -1232,11 +1230,13 @@ function generatePriorityActionPlan(result: AuditResult): string {
 function getTierDescription(tier: string): string {
   switch (tier) {
     case 'starter':
-      return 'Quick scan of 1–3 pages with key SEO issues and fixes.'
+      return 'Deep crawl (up to 50 pages), JavaScript rendering, Core Web Vitals, Technical SEO, On-Page SEO, Content Quality, Accessibility, Local SEO signals, Schema detection, Broken links, Internal linking overview.'
     case 'standard':
-      return 'Full site audit with technical, on-page, and performance checks.'
-    case 'advanced':
-      return 'Complete audit plus competitor analysis and action plan.'
+      return 'Everything in Starter + Larger crawl (up to 200 pages), Advanced Local SEO, Full Schema Validation, Mobile Responsiveness, Thin Content Detection, Keyword Extraction (NLP), Readability Diagnostics, Security Checks, Platform Detection, Automated Fix Recommendations.'
+    case 'professional':
+      return 'Everything in Standard + Deep crawl (up to 500 pages), Multi-level Internal Link Mapping, Crawl Diagnostics, Enhanced Accessibility, Full Keyword Opportunity Mapping, Content Structure Map, JS/CSS Payload Analysis, Core Web Vitals Opportunity Report, Priority Fix Action Plan.'
+    case 'agency':
+      return 'Everything in Professional + Unlimited pages, 3 Competitor Crawls + Keyword Gap Analysis, Full Local SEO Suite, Social Signals Audit, JS Rendering Diagnostics, Full Internal Link Graph, Crawl Error Exclusion, Duplicate URL Cleaning, Blank Report included (free).'
     default:
       return ''
   }
@@ -1250,10 +1250,11 @@ function getAddOnsList(addOns: any, tier?: string): string {
   
   // New add-ons structure
   if (addOns.additionalDays && typeof addOns.additionalDays === 'number' && addOns.additionalDays > 0) {
-    // Fast Delivery (Additional Days) pricing: $10 for Standard, $15 for Advanced
+    // Legacy Fast Delivery support (backward compatibility only)
     let pricePerDay = 0
     if (tier === 'standard') pricePerDay = 10
-    else if (tier === 'advanced') pricePerDay = 15
+    else if (tier === 'professional') pricePerDay = 15
+    else if (tier === 'agency') pricePerDay = 20
     // Only show if price is available (not for Starter tier)
     if (pricePerDay > 0) {
       const totalPrice = pricePerDay * addOns.additionalDays
@@ -1267,12 +1268,33 @@ function getAddOnsList(addOns: any, tier?: string): string {
     items.push('Competitor Keyword Gap Report - +&#36;15.00')
   }
   
+  // New add-ons
+  if (addOns.blankReport) {
+    const tier = result.raw.options.tier
+    if (tier === 'agency') {
+      items.push('Blank Report (Unbranded) - Included')
+    } else {
+      items.push('Blank Report (Unbranded) - +&#36;10.00')
+    }
+  }
+  if (addOns.schemaDeepDive) {
+    items.push('Schema Deep-Dive Analysis - +&#36;15.00')
+  }
+  if (addOns.additionalCompetitors && typeof addOns.additionalCompetitors === 'number' && addOns.additionalCompetitors > 0) {
+    const totalPrice = 10 * addOns.additionalCompetitors
+    items.push(`Additional Competitors (${addOns.additionalCompetitors} ${addOns.additionalCompetitors === 1 ? 'competitor' : 'competitors'}) - +&#36;${totalPrice}.00`)
+  }
+  if (addOns.extraCrawlDepth) {
+    items.push('Extra Crawl Depth - +&#36;15.00')
+  }
+  
   // Legacy add-ons (for backward compatibility with old audits)
   if (addOns.fastDelivery) {
-    // Fast Delivery pricing: $10 for Standard, $15 for Advanced
+    // Legacy Fast Delivery pricing (backward compatibility only)
     let price = 0
     if (tier === 'standard') price = 10
-    else if (tier === 'advanced') price = 15
+    else if (tier === 'professional') price = 15
+    else if (tier === 'agency') price = 20
     if (price > 0) {
       items.push(`Fast Delivery - +&#36;${price}.00`)
     } else {
@@ -1281,7 +1303,7 @@ function getAddOnsList(addOns: any, tier?: string): string {
   }
   if (addOns.additionalPages && typeof addOns.additionalPages === 'number' && addOns.additionalPages > 0) {
     const totalPrice = 5 * addOns.additionalPages
-    items.push(`Additional Pages (${addOns.additionalPages} ${addOns.additionalPages === 1 ? 'page' : 'pages'}) - +&#36;${totalPrice}.00`)
+    items.push(`Additional Pages (${addOns.additionalPages} ${addOns.additionalPages === 1 ? '50-page block' : '50-page blocks'}) - +&#36;${totalPrice}.00`)
   }
   if (addOns.additionalKeywords && typeof addOns.additionalKeywords === 'number' && addOns.additionalKeywords > 0) {
     const totalPrice = 1 * addOns.additionalKeywords

@@ -155,21 +155,25 @@ export interface AuditResult {
   }
 }
 
-export type AuditTier = 'starter' | 'standard' | 'advanced'
+export type AuditTier = 'starter' | 'standard' | 'professional' | 'agency'
 
 export type AuditAddOn = 
-  | 'fastDelivery'
-  | 'additionalPages'
-  | 'additionalKeywords'
-  | 'schemaMarkup'
-  | 'competitorAnalysis'
+  | 'blankReport' // Unbranded/white-label report
+  | 'additionalPages' // Additional pages (per 50)
+  | 'additionalKeywords' // Extra keywords (per keyword)
+  | 'competitorAnalysis' // Competitor gap analysis
+  | 'schemaDeepDive' // Schema deep-dive analysis
+  | 'additionalCompetitors' // Additional competitor crawls (Agency tier)
+  | 'extraCrawlDepth' // Extra crawl depth (Agency tier)
 
 export interface AuditAddOns {
-  fastDelivery?: boolean // Fast delivery option (tier-based pricing)
-  additionalPages?: number // Number of additional pages
-  additionalKeywords?: number // Number of additional keywords
-  schemaMarkup?: boolean // Schema markup analysis
-  competitorAnalysis?: boolean // Competitor keyword gap analysis
+  blankReport?: boolean // Unbranded/white-label report ($10, free for Agency)
+  additionalPages?: number // Number of additional pages (per 50 pages, $5 per 50)
+  additionalKeywords?: number // Number of additional keywords ($1 each)
+  competitorAnalysis?: boolean // Competitor keyword gap analysis ($15)
+  schemaDeepDive?: boolean // Schema deep-dive analysis ($15, Starter tier)
+  additionalCompetitors?: number // Additional competitor crawls ($10 each, Agency tier)
+  extraCrawlDepth?: boolean // Extra crawl depth (+$15, Agency tier)
 }
 
 export interface AuditOptions {

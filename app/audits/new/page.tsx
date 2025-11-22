@@ -24,11 +24,11 @@ export default function NewAuditPage() {
   
   const tierInfo = {
     starter: { 
-      maxPages: 3, 
+      maxPages: 50, 
       maxDepth: 2, 
       price: '$19', 
-      name: 'Starter: Mini SEO Audit', 
-      description: 'Quick scan of 1–3 pages with key SEO issues and fixes.',
+      name: 'Starter', 
+      description: 'Deep crawl (up to 50 pages), JavaScript rendering, Core Web Vitals, Technical SEO, On-Page SEO, Content Quality, Accessibility, Local SEO signals, Schema detection, Broken links, Internal linking overview.',
       deliveryDays: 1,
       keywords: 0,
       includes: {
@@ -36,16 +36,16 @@ export default function NewAuditPage() {
         h1H2H3Tags: true,
         metaDescription: true,
         imageAltTags: true,
-        schemaMarkup: false,
-        pageAudit: false
+        schemaMarkup: true,
+        pageAudit: true
       }
     },
     standard: { 
-      maxPages: 20, 
+      maxPages: 200, 
       maxDepth: 3, 
-      price: '$29', 
-      name: 'Standard: Full SEO Audit', 
-      description: 'Full site audit with technical, on-page, and performance checks.',
+      price: '$39', 
+      name: 'Standard', 
+      description: 'Everything in Starter + Larger crawl (up to 200 pages), Advanced Local SEO, Full Schema Validation, Mobile Responsiveness, Thin Content Detection, Keyword Extraction (NLP), Readability Diagnostics, Security Checks, Platform Detection, Automated Fix Recommendations.',
       deliveryDays: 2,
       keywords: 5,
       includes: {
@@ -57,14 +57,31 @@ export default function NewAuditPage() {
         pageAudit: true
       }
     },
-    advanced: { 
-      maxPages: 50, 
+    professional: { 
+      maxPages: 500, 
       maxDepth: 5, 
-      price: '$39', 
-      name: 'Advanced: SEO Audit+Competitor', 
-      description: 'Complete audit plus competitor analysis and action plan.',
+      price: '$59', 
+      name: 'Professional', 
+      description: 'Everything in Standard + Deep crawl (up to 500 pages), Multi-level Internal Link Mapping, Crawl Diagnostics, Enhanced Accessibility, Full Keyword Opportunity Mapping, Content Structure Map, JS/CSS Payload Analysis, Core Web Vitals Opportunity Report, Priority Fix Action Plan.',
       deliveryDays: 2,
       keywords: 10,
+      includes: {
+        titleOptimization: true,
+        h1H2H3Tags: true,
+        metaDescription: true,
+        imageAltTags: true,
+        schemaMarkup: true,
+        pageAudit: true
+      }
+    },
+    agency: { 
+      maxPages: 10000, 
+      maxDepth: 10, 
+      price: '$99', 
+      name: 'Agency / Enterprise', 
+      description: 'Everything in Professional + Unlimited pages, 3 Competitor Crawls + Keyword Gap Analysis, Full Local SEO Suite, Social Signals Audit, JS Rendering Diagnostics, Full Internal Link Graph, Crawl Error Exclusion, Duplicate URL Cleaning, Blank Report included (free).',
+      deliveryDays: 2,
+      keywords: 1000, // Effectively unlimited
       includes: {
         titleOptimization: true,
         h1H2H3Tags: true,
@@ -86,37 +103,46 @@ export default function NewAuditPage() {
   ]
   
   const addOnInfo = {
-    fastDelivery: {
-      name: 'Fast Delivery',
+    blankReport: {
+      name: 'Blank Report (Unbranded)',
       getPrice: (tier: AuditTier | null) => {
-        if (tier === 'standard') return 10
-        if (tier === 'advanced') return 15
-        return 0 // Not available for starter
+        if (tier === 'agency') return 0 // Free for Agency tier
+        return 10
       },
-      getDays: () => 1,
-      description: 'Faster delivery'
+      description: 'Unbranded white-label PDF report (free for Agency tier)'
     },
     additionalPages: {
-      name: 'Additional Page Optimized',
+      name: 'Additional Pages',
       price: 5,
-      description: 'Per page',
-      unit: 'pages'
+      description: 'Per 50 pages',
+      unit: '50-page blocks'
     },
     additionalKeywords: {
-      name: 'Additional Keyword Researched',
+      name: 'Extra Keywords',
       price: 1,
       description: 'Per keyword',
       unit: 'keywords'
     },
-    schemaMarkup: {
-      name: 'Schema Markup',
-      price: 15,
-      description: 'Schema markup analysis'
-    },
     competitorAnalysis: { 
-      name: 'Competitor Keyword Gap Report', 
+      name: 'Competitor Gap Analysis', 
       price: 15, 
-      description: 'Full keyword gap analysis for your top competitors.' 
+      description: 'Keyword gap analysis comparing your site to competitors.' 
+    },
+    schemaDeepDive: {
+      name: 'Schema Deep-Dive',
+      price: 15,
+      description: 'Deep-dive schema markup analysis (Starter tier add-on)'
+    },
+    additionalCompetitors: {
+      name: 'Additional Competitors',
+      price: 10,
+      description: 'Per additional competitor crawl (Agency tier)',
+      unit: 'competitors'
+    },
+    extraCrawlDepth: {
+      name: 'Extra Crawl Depth',
+      price: 15,
+      description: 'Increased crawl depth for deeper site analysis (Agency tier)'
     }
   }
   
@@ -205,17 +231,42 @@ export default function NewAuditPage() {
   
   const calculateTotal = () => {
     let total = selectedTier ? parseInt(tierInfo[selectedTier].price.replace('$', '')) : 0
-    if (addOns.fastDelivery && selectedTier) {
-      total += addOnInfo.fastDelivery.getPrice(selectedTier)
+    
+    // Blank Report (free for Agency tier)
+    if (addOns.blankReport && selectedTier) {
+      total += addOnInfo.blankReport.getPrice(selectedTier)
     }
+    
+    // Additional Pages (per 50 pages)
     if (addOns.additionalPages) {
       total += addOnInfo.additionalPages.price * (addOns.additionalPages as number)
     }
+    
+    // Additional Keywords (per keyword)
     if (addOns.additionalKeywords) {
       total += addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)
     }
-    if (addOns.schemaMarkup) total += addOnInfo.schemaMarkup.price
-    if (addOns.competitorAnalysis) total += addOnInfo.competitorAnalysis.price
+    
+    // Competitor Analysis
+    if (addOns.competitorAnalysis) {
+      total += addOnInfo.competitorAnalysis.price
+    }
+    
+    // Schema Deep-Dive
+    if (addOns.schemaDeepDive) {
+      total += addOnInfo.schemaDeepDive.price
+    }
+    
+    // Additional Competitors (Agency tier)
+    if (addOns.additionalCompetitors) {
+      total += addOnInfo.additionalCompetitors.price * (addOns.additionalCompetitors as number)
+    }
+    
+    // Extra Crawl Depth (Agency tier)
+    if (addOns.extraCrawlDepth) {
+      total += addOnInfo.extraCrawlDepth.price
+    }
+    
     return total
   }
 
@@ -226,7 +277,7 @@ export default function NewAuditPage() {
     if (!auditTier) {
       toast({
         title: 'Select a tier',
-        description: 'Please select an audit tier (Starter, Standard, or Advanced)',
+        description: 'Please select an audit tier (Starter, Standard, Professional, or Agency)',
         variant: 'destructive'
       })
       return
@@ -329,8 +380,8 @@ export default function NewAuditPage() {
 
               <div className="space-y-3">
                 <Label>Select Audit Tier</Label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {(['starter', 'standard', 'advanced'] as AuditTier[]).map((tier) => {
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {(['starter', 'standard', 'professional', 'agency'] as AuditTier[]).map((tier) => {
                     const info = tierInfo[tier]
                     const isSelected = selectedTier === tier
                     return (
@@ -384,29 +435,29 @@ export default function NewAuditPage() {
                 <div className="space-y-3 border-t pt-4">
                   <Label>Optional Add-Ons</Label>
                   <div className="grid grid-cols-1 gap-3">
-                    {/* Fast Delivery */}
-                    {selectedTier !== 'starter' && (
-                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.fastDelivery ? 'bg-blue-50 border-blue-200' : ''}`}>
+                    {/* Blank Report (Unbranded) - Free for Agency */}
+                    {selectedTier !== 'agency' && (
+                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.blankReport ? 'bg-blue-50 border-blue-200' : ''}`}>
                         <div>
-                          <div className="font-medium">{addOnInfo.fastDelivery.name}</div>
-                          <div className="text-sm text-gray-500">{addOnInfo.fastDelivery.description} ({addOnInfo.fastDelivery.getDays()} delivery day)</div>
+                          <div className="font-medium">{addOnInfo.blankReport.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.blankReport.description}</div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">+${addOnInfo.fastDelivery.getPrice(selectedTier)}.00</span>
+                          <span className="text-sm font-medium">+${addOnInfo.blankReport.getPrice(selectedTier)}.00</span>
                           <Button
                             type="button"
                             size="sm"
-                            variant={addOns.fastDelivery ? "default" : "outline"}
-                            onClick={() => toggleAddOn('fastDelivery')}
+                            variant={addOns.blankReport ? "default" : "outline"}
+                            onClick={() => toggleAddOn('blankReport')}
                             disabled={loading}
                           >
-                            {addOns.fastDelivery ? 'Added' : 'Add'}
+                            {addOns.blankReport ? 'Added' : 'Add'}
                           </Button>
                         </div>
                       </div>
                     )}
 
-                    {/* Additional Page Optimized */}
+                    {/* Additional Pages (per 50) */}
                     <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.additionalPages && (addOns.additionalPages as number) > 0 ? 'bg-blue-50 border-blue-200' : ''}`}>
                       <div>
                         <div className="font-medium">{addOnInfo.additionalPages.name}</div>
@@ -502,25 +553,27 @@ export default function NewAuditPage() {
                       </div>
                     </div>
 
-                    {/* Schema Markup */}
-                    <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.schemaMarkup ? 'bg-blue-50 border-blue-200' : ''}`}>
-                      <div>
-                        <div className="font-medium">{addOnInfo.schemaMarkup.name}</div>
-                        <div className="text-sm text-gray-500">{addOnInfo.schemaMarkup.description}</div>
+                    {/* Schema Deep-Dive (Starter tier only) */}
+                    {selectedTier === 'starter' && (
+                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.schemaDeepDive ? 'bg-blue-50 border-blue-200' : ''}`}>
+                        <div>
+                          <div className="font-medium">{addOnInfo.schemaDeepDive.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.schemaDeepDive.description}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">+${addOnInfo.schemaDeepDive.price}.00</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={addOns.schemaDeepDive ? "default" : "outline"}
+                            onClick={() => toggleAddOn('schemaDeepDive')}
+                            disabled={loading}
+                          >
+                            {addOns.schemaDeepDive ? 'Added' : 'Add'}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.schemaMarkup.price}.00</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={addOns.schemaMarkup ? "default" : "outline"}
-                          onClick={() => toggleAddOn('schemaMarkup')}
-                          disabled={loading}
-                        >
-                          {addOns.schemaMarkup ? 'Added' : 'Add'}
-                        </Button>
-                      </div>
-                    </div>
+                    )}
 
                     {/* Competitor Keyword Gap Report */}
                     <div className={`flex flex-col p-3 border rounded-lg ${addOns.competitorAnalysis ? 'bg-blue-50 border-blue-200' : ''}`}>
@@ -592,6 +645,78 @@ export default function NewAuditPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Additional Competitors (Agency tier only) */}
+                    {selectedTier === 'agency' && (
+                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.additionalCompetitors && (addOns.additionalCompetitors as number) > 0 ? 'bg-blue-50 border-blue-200' : ''}`}>
+                        <div>
+                          <div className="font-medium">{addOnInfo.additionalCompetitors.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.additionalCompetitors.description}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">+${addOnInfo.additionalCompetitors.price}.00/{addOnInfo.additionalCompetitors.unit}</span>
+                          <div className="flex items-center gap-2">
+                            {addOns.additionalCompetitors && (addOns.additionalCompetitors as number) > 0 ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => removeAddOn('additionalCompetitors')}
+                                  disabled={loading}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="text-sm font-semibold w-8 text-center">{addOns.additionalCompetitors}</span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => toggleAddOn('additionalCompetitors', true)}
+                                  disabled={loading}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                                <span className="text-xs text-gray-600">(+${addOnInfo.additionalCompetitors.price * (addOns.additionalCompetitors as number)}.00)</span>
+                              </>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => toggleAddOn('additionalCompetitors', true)}
+                                disabled={loading}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Extra Crawl Depth (Agency tier only) */}
+                    {selectedTier === 'agency' && (
+                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.extraCrawlDepth ? 'bg-blue-50 border-blue-200' : ''}`}>
+                        <div>
+                          <div className="font-medium">{addOnInfo.extraCrawlDepth.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.extraCrawlDepth.description}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">+${addOnInfo.extraCrawlDepth.price}.00</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={addOns.extraCrawlDepth ? "default" : "outline"}
+                            onClick={() => toggleAddOn('extraCrawlDepth')}
+                            disabled={loading}
+                          >
+                            {addOns.extraCrawlDepth ? 'Added' : 'Add'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="pt-4 border-t">
@@ -600,15 +725,15 @@ export default function NewAuditPage() {
                         <span className="text-gray-600">{selectedTier ? tierInfo[selectedTier].name : ''} Audit</span>
                         <span className="font-medium">${selectedTier ? parseInt(tierInfo[selectedTier].price.replace('$', '')) : 0}.00</span>
                       </div>
-                      {addOns.fastDelivery && selectedTier && (
+                      {addOns.blankReport && selectedTier && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">{addOnInfo.fastDelivery.name}</span>
-                          <span className="font-medium">+${addOnInfo.fastDelivery.getPrice(selectedTier)}.00</span>
+                          <span className="text-gray-600">{addOnInfo.blankReport.name}</span>
+                          <span className="font-medium">+${addOnInfo.blankReport.getPrice(selectedTier)}.00</span>
                         </div>
                       )}
                       {addOns.additionalPages && (addOns.additionalPages as number) > 0 && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">{addOnInfo.additionalPages.name} ({(addOns.additionalPages as number)} {addOns.additionalPages === 1 ? 'page' : 'pages'})</span>
+                          <span className="text-gray-600">{addOnInfo.additionalPages.name} ({(addOns.additionalPages as number)} {addOnInfo.additionalPages.unit})</span>
                           <span className="font-medium">+${addOnInfo.additionalPages.price * (addOns.additionalPages as number)}.00</span>
                         </div>
                       )}
@@ -618,16 +743,28 @@ export default function NewAuditPage() {
                           <span className="font-medium">+${addOnInfo.additionalKeywords.price * (addOns.additionalKeywords as number)}.00</span>
                         </div>
                       )}
-                      {addOns.schemaMarkup && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">{addOnInfo.schemaMarkup.name}</span>
-                          <span className="font-medium">+${addOnInfo.schemaMarkup.price}.00</span>
-                        </div>
-                      )}
                       {addOns.competitorAnalysis && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">{addOnInfo.competitorAnalysis.name}</span>
                           <span className="font-medium">+${addOnInfo.competitorAnalysis.price}.00</span>
+                        </div>
+                      )}
+                      {addOns.schemaDeepDive && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.schemaDeepDive.name}</span>
+                          <span className="font-medium">+${addOnInfo.schemaDeepDive.price}.00</span>
+                        </div>
+                      )}
+                      {addOns.additionalCompetitors && (addOns.additionalCompetitors as number) > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.additionalCompetitors.name} ({(addOns.additionalCompetitors as number)} {addOns.additionalCompetitors === 1 ? 'competitor' : 'competitors'})</span>
+                          <span className="font-medium">+${addOnInfo.additionalCompetitors.price * (addOns.additionalCompetitors as number)}.00</span>
+                        </div>
+                      )}
+                      {addOns.extraCrawlDepth && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.extraCrawlDepth.name}</span>
+                          <span className="font-medium">+${addOnInfo.extraCrawlDepth.price}.00</span>
                         </div>
                       )}
                       <div className="border-t pt-2 mt-2 flex justify-between items-center">
