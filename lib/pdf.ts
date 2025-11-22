@@ -26,15 +26,14 @@ export async function generatePDF(
   const html = generateReportHTML(auditResult, branding, url)
   
   const browser = await puppeteer.launch({
-    headless: 'new',
+    headless: true, // Use old headless mode (more stable on macOS)
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu'
     ],
-    timeout: 60000,
-    pipe: true // Use pipe connection for stability
+    timeout: 60000
   })
   
   try {
