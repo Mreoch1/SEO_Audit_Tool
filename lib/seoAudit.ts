@@ -61,6 +61,9 @@ import { analyzeCrawl, CrawlDiagnostics, getStatusMessage, isCrawlSufficient } f
 // Import Local SEO analysis (Sprint 2)
 import { analyzeLocalSEO } from './localSEO'
 
+// Import Platform-specific instructions (Sprint 2.2)
+import { getPlatformInstructions, Platform } from './platformInstructions'
+
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
   maxDepth: 3,
@@ -499,6 +502,60 @@ export async function runAudit(
   // Step 3: Run crawl diagnostics
   const crawlDiagnostics = analyzeCrawl(uniquePages, url)
   console.log(`[Audit] Crawl diagnostics: ${getStatusMessage(crawlDiagnostics)}`)
+  
+  // SPRINT 2.2: Update fix instructions with platform-specific instructions
+  const platform: Platform = crawlDiagnostics.platform || 'custom'
+  console.log(`[Audit] Detected platform: ${platform}, updating fix instructions...`)
+  
+  allIssues.forEach(issue => {
+    // Map issue types to platform instruction types
+    let issueType = issue.type || ''
+    
+    // If no type, try to infer from message/title
+    if (!issueType) {
+      const title = (issue.title || '').toLowerCase()
+      const message = (issue.message || '').toLowerCase()
+      
+      if (title.includes('meta description') || message.includes('meta description')) {
+        issueType = 'missing-meta-description'
+      } else if (title.includes('title') || message.includes('title')) {
+        issueType = 'missing-page-title'
+      } else if (title.includes('h1') || message.includes('h1')) {
+        issueType = 'missing-h1'
+      } else if (title.includes('canonical') || message.includes('canonical')) {
+        issueType = 'missing-canonical'
+      } else if (title.includes('cache') || message.includes('cache')) {
+        issueType = 'missing-cache-control'
+      } else if (title.includes('security') || message.includes('security') || title.includes('header')) {
+        issueType = 'missing-security-headers'
+      } else if (title.includes('schema') || message.includes('schema')) {
+        issueType = 'missing-schema'
+      } else if (title.includes('open graph') || title.includes('twitter card') || message.includes('social')) {
+        issueType = 'missing-open-graph'
+      } else if (title.includes('viewport') || message.includes('viewport')) {
+        issueType = 'missing-viewport'
+      } else if (title.includes('mixed content') || message.includes('mixed content')) {
+        issueType = 'mixed-content'
+      }
+    }
+    
+    // Get platform-specific instructions if we have an issue type
+    if (issueType) {
+      const platformInstructions = getPlatformInstructions(platform, issueType, {
+        url: issue.affectedPages?.[0],
+        severity: issue.severity
+      })
+      
+      // Replace generic instructions with platform-specific ones
+      if (platformInstructions.instructions) {
+        issue.fixInstructions = platformInstructions.instructions
+        if (platformInstructions.additionalNotes) {
+          issue.fixInstructions += '\n\n' + platformInstructions.additionalNotes
+        }
+        issue.howToFix = issue.fixInstructions // Also update howToFix for consistency
+      }
+    }
+  })
   
   // Step 4: Add broken pages issue if any error pages found
   if (errorPages.length > 0) {
