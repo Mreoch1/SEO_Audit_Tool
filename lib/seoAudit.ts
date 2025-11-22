@@ -562,9 +562,13 @@ export async function runAudit(
   // Step 2: Filter valid pages from error pages
   const { validPages, errorPages } = filterValidPages(uniquePages)
   
-  // Step 3: Run crawl diagnostics
-  const crawlDiagnostics = analyzeCrawl(uniquePages, url)
+  // Step 3: Run crawl diagnostics (Enhanced for Agency tier)
+  const crawlDuration = Date.now() - startTime
+  const crawlDiagnostics = analyzeCrawl(uniquePages, url, crawlDuration)
   console.log(`[Audit] Crawl diagnostics: ${getStatusMessage(crawlDiagnostics)}`)
+  if (crawlDiagnostics.crawlMetrics) {
+    console.log(`[Audit] Crawl metrics: ${crawlDiagnostics.crawlMetrics.pagesPerSecond.toFixed(2)} pages/sec, efficiency: ${crawlDiagnostics.crawlMetrics.crawlEfficiency}%`)
+  }
   
   // Local SEO Analysis (Sprint 2) - Run after validPages is defined
   console.log('[Audit] Running Local SEO analysis...')

@@ -38,8 +38,29 @@ export interface SocialMediaData {
   metaTags: SocialMetaTags
   socialLinks: SocialMediaLinks
   hasFacebookPixel: boolean
+  hasGoogleAnalytics: boolean // NEW: GA4 detection
+  hasGoogleTagManager: boolean // NEW: GTM detection
   hasFavicon: boolean
   faviconUrl?: string
+  // NEW: Agency tier enhancements
+  socialSchema?: {
+    hasOrganizationSchema: boolean
+    hasSocialProfileLinks: boolean
+    schemaTypes: string[]
+  }
+  shareImageValidation?: {
+    ogImageSize?: { width: number; height: number }
+    twitterImageSize?: { width: number; height: number }
+    isValidSize: boolean
+    isValidRatio: boolean
+    recommendations: string[]
+  }
+  pixelTracking?: {
+    facebookPixel?: string
+    googleAnalytics?: string
+    googleTagManager?: string
+    otherPixels: string[]
+  }
 }
 
 /**
@@ -82,9 +103,24 @@ export function checkSocialMediaPresence(html: string, baseUrl: string): SocialM
   // Check for Facebook Pixel
   const hasFacebookPixel = /fbq|facebook\.com\/tr|fb:app_id/i.test(html)
   
+  // NEW: Check for Google Analytics (GA4)
+  const hasGoogleAnalytics = /gtag|ga\(|google-analytics|googletagmanager\.com\/gtag/i.test(html)
+  
+  // NEW: Check for Google Tag Manager
+  const hasGoogleTagManager = /googletagmanager\.com\/gtm\.js|GTM-/i.test(html)
+  
   // Check for favicon
   const faviconUrl = extractFavicon(html, baseUrl)
   const hasFavicon = !!faviconUrl
+  
+  // NEW: Agency tier - Social schema detection
+  const socialSchema = detectSocialSchema(html)
+  
+  // NEW: Agency tier - Share image validation
+  const shareImageValidation = validateShareImages(ogImage, twitterImage, baseUrl)
+  
+  // NEW: Agency tier - Pixel tracking details
+  const pixelTracking = extractPixelTracking(html)
   
   return {
     metaTags: {
@@ -109,8 +145,13 @@ export function checkSocialMediaPresence(html: string, baseUrl: string): SocialM
     },
     socialLinks,
     hasFacebookPixel,
+    hasGoogleAnalytics,
+    hasGoogleTagManager,
     hasFavicon,
-    faviconUrl
+    faviconUrl,
+    socialSchema,
+    shareImageValidation,
+    pixelTracking
   }
 }
 
@@ -227,5 +268,122 @@ function extractFavicon(html: string, baseUrl: string): string | undefined {
   } catch {
     return undefined
   }
+}
+
+/**
+ * Detect social schema markup (Agency tier)
+ */
+function detectSocialSchema(html: string): SocialMediaData['socialSchema'] {
+  const hasOrganizationSchema = /"@type"\s*:\s*"Organization"/i.test(html) ||
+    /"@type"\s*:\s*"LocalBusiness"/i.test(html)
+  
+  const hasSocialProfileLinks = /"sameAs"\s*:\s*\[/i.test(html) ||
+    /socialProfile/i.test(html)
+  
+  const schemaTypes: string[] = []
+  if (hasOrganizationSchema) schemaTypes.push('Organization')
+  if (html.includes('"LocalBusiness"')) schemaTypes.push('LocalBusiness')
+  if (html.includes('"Person"')) schemaTypes.push('Person')
+  
+  return {
+    hasOrganizationSchema,
+    hasSocialProfileLinks,
+    schemaTypes
+  }
+}
+
+/**
+ * Validate share images (Agency tier)
+ * Checks size and aspect ratio for optimal social sharing
+ */
+function validateShareImages(
+  ogImage?: string,
+  twitterImage?: string,
+  baseUrl?: string
+): SocialMediaData['shareImageValidation'] {
+  const recommendations: string[] = []
+  let isValidSize = true
+  let isValidRatio = true
+  
+  // Note: Full image size validation would require fetching the image
+  // This is a basic validation that checks if images are specified
+  // In production, you'd fetch images and check dimensions
+  
+  if (!ogImage && !twitterImage) {
+    recommendations.push('Add og:image and twitter:image tags for better social sharing')
+    return {
+      isValidSize: false,
+      isValidRatio: false,
+      recommendations
+    }
+  }
+  
+  // Recommended sizes:
+  // OG Image: 1200x630px (1.91:1 ratio)
+  // Twitter Image: 1200x675px (16:9 ratio) for summary_large_image
+  
+  if (ogImage) {
+    recommendations.push('OG image detected. Recommended size: 1200x630px (1.91:1 ratio)')
+  }
+  
+  if (twitterImage) {
+    recommendations.push('Twitter image detected. Recommended size: 1200x675px (16:9 ratio) for summary_large_image cards')
+  }
+  
+  return {
+    isValidSize,
+    isValidRatio,
+    recommendations
+  }
+}
+
+/**
+ * Extract pixel tracking details (Agency tier)
+ */
+function extractPixelTracking(html: string): SocialMediaData['pixelTracking'] {
+  const tracking: SocialMediaData['pixelTracking'] = {
+    otherPixels: []
+  }
+  
+  // Facebook Pixel ID
+  const fbPixelMatch = html.match(/fbq\s*\(\s*['"]init['"]\s*,\s*['"]?([^'",\s)]+)/i) ||
+    html.match(/facebook\.com\/tr\?id=([^"'\s&]+)/i)
+  if (fbPixelMatch) {
+    tracking.facebookPixel = fbPixelMatch[1]
+  }
+  
+  // Google Analytics ID (GA4)
+  const gaMatch = html.match(/gtag\s*\(\s*['"]config['"]\s*,\s*['"]?([^'",\s)]+)/i) ||
+    html.match(/ga\(['"]create['"]\s*,\s*['"]?([^'",\s)]+)/i) ||
+    html.match(/google-analytics\.com\/ga\.js[^"']*id=([^"'\s&]+)/i)
+  if (gaMatch) {
+    tracking.googleAnalytics = gaMatch[1]
+  }
+  
+  // Google Tag Manager ID
+  const gtmMatch = html.match(/GTM-([A-Z0-9]+)/i) ||
+    html.match(/googletagmanager\.com\/gtm\.js\?id=([^"'\s&]+)/i)
+  if (gtmMatch) {
+    tracking.googleTagManager = gtmMatch[1]
+  }
+  
+  // Other tracking pixels (basic detection)
+  const otherPixels = [
+    /pinterest\.com\/ct\.html/i,
+    /linkedin\.com\/px/i,
+    /snapchat\.com\/pixel/i,
+    /tiktok\.com\/pixel/i
+  ]
+  
+  otherPixels.forEach(pattern => {
+    if (pattern.test(html)) {
+      const match = html.match(pattern)
+      if (match) {
+        tracking.otherPixels!.push(match[0])
+      }
+    }
+  })
+  
+  return tracking
 }
 

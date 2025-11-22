@@ -13,6 +13,16 @@ export interface CrawlDiagnostics {
   platform: 'wix' | 'wordpress' | 'squarespace' | 'shopify' | 'custom' | 'unknown'
   issues: CrawlIssue[]
   recommendations: string[]
+  // NEW: Agency tier - Enhanced crawl diagnostics
+  crawlMetrics?: {
+    timeToCrawl: number // milliseconds
+    pagesPerSecond: number
+    averagePageLoadTime: number
+    queueHealth: 'healthy' | 'degraded' | 'poor'
+    disallowedPaths: string[] // From robots.txt
+    pagesSkipped: number
+    crawlEfficiency: number // 0-100
+  }
 }
 
 export interface CrawlIssue {
@@ -32,15 +42,27 @@ export interface PageData {
 }
 
 /**
- * Analyze crawl results and generate diagnostics
+ * Analyze crawl results and generate diagnostics (Enhanced for Agency tier)
  */
-export function analyzeCrawl(pages: PageData[], startUrl: string): CrawlDiagnostics {
+export function analyzeCrawl(
+  pages: PageData[], 
+  startUrl: string,
+  crawlDuration?: number, // NEW: Time taken to crawl
+  disallowedPaths?: string[] // NEW: Paths disallowed by robots.txt
+): CrawlDiagnostics {
   const pagesFound = pages.length
   const pagesSuccessful = pages.filter(p => p.statusCode >= 200 && p.statusCode < 400).length
   const pagesFailed = pages.filter(p => p.statusCode >= 400 || p.statusCode === 0).length
   
   // Detect platform
   const platform = detectPlatform(pages, startUrl)
+  
+  // NEW: Calculate crawl metrics (Agency tier)
+  const crawlMetrics = calculateCrawlMetrics(
+    pages,
+    crawlDuration,
+    disallowedPaths || []
+  )
   
   // Detect issues
   const issues: CrawlIssue[] = []
@@ -113,7 +135,60 @@ export function analyzeCrawl(pages: PageData[], startUrl: string): CrawlDiagnost
     pagesFailed,
     platform,
     issues,
-    recommendations
+    recommendations,
+    crawlMetrics
+  }
+}
+
+/**
+ * Calculate crawl metrics (Agency tier)
+ */
+function calculateCrawlMetrics(
+  pages: PageData[],
+  crawlDuration?: number,
+  disallowedPaths: string[] = []
+): CrawlDiagnostics['crawlMetrics'] {
+  if (!crawlDuration || pages.length === 0) {
+    return undefined
+  }
+  
+  const pagesSuccessful = pages.filter(p => p.statusCode >= 200 && p.statusCode < 400).length
+  const pagesPerSecond = pages.length / (crawlDuration / 1000)
+  
+  // Calculate average page load time
+  const loadTimes = pages
+    .filter(p => p.loadTime && p.loadTime > 0)
+    .map(p => p.loadTime!)
+  
+  const averagePageLoadTime = loadTimes.length > 0
+    ? loadTimes.reduce((sum, time) => sum + time, 0) / loadTimes.length
+    : 0
+  
+  // Determine queue health
+  let queueHealth: 'healthy' | 'degraded' | 'poor' = 'healthy'
+  if (pagesPerSecond < 0.1) {
+    queueHealth = 'poor'
+  } else if (pagesPerSecond < 0.5) {
+    queueHealth = 'degraded'
+  }
+  
+  // Calculate crawl efficiency (0-100)
+  // Based on success rate, speed, and coverage
+  const successRate = pages.length > 0 ? pagesSuccessful / pages.length : 0
+  const speedScore = pagesPerSecond > 1 ? 100 : pagesPerSecond * 100
+  const efficiency = (successRate * 50) + (speedScore * 0.3) + (pages.length >= 10 ? 20 : pages.length * 2)
+  
+  // Count skipped pages (would need to track during crawl)
+  const pagesSkipped = 0 // Placeholder - would need crawl context
+  
+  return {
+    timeToCrawl: crawlDuration,
+    pagesPerSecond: Math.round(pagesPerSecond * 100) / 100,
+    averagePageLoadTime: Math.round(averagePageLoadTime),
+    queueHealth,
+    disallowedPaths,
+    pagesSkipped,
+    crawlEfficiency: Math.min(100, Math.round(efficiency))
   }
 }
 
