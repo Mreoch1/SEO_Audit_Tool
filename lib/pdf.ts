@@ -340,7 +340,8 @@ function generateReportHTML(
   <!-- Scores Overview -->
   <div class="page">
     <h1>SEO Scores Overview</h1>
-    <div class="scores-grid">
+    ${generateScoreDials(summary)}
+    <div class="scores-grid" style="margin-top: 30px;">
       <div class="score-card">
         <h3>Overall Score</h3>
         <div class="score-value">${summary.overallScore}</div>
@@ -366,6 +367,7 @@ function generateReportHTML(
         <div class="score-value">${summary.totalPages}</div>
       </div>
     </div>
+    ${generateIssueDistributionChart(summary)}
     <p style="margin-top: 30px;">
       <strong>Issue Breakdown:</strong> ${summary.highSeverityIssues} High Priority, 
       ${summary.mediumSeverityIssues} Medium Priority, 
@@ -488,6 +490,7 @@ function generateReportHTML(
   <div class="page">
     <h1>Performance Metrics (Core Web Vitals)</h1>
     <p style="margin-bottom: 20px;">Performance data from Google PageSpeed Insights and page rendering:</p>
+    ${generateCoreWebVitalsGraph(result.pages)}
     <div class="issues-section">
       ${result.pages.filter(p => p.pageSpeedData || p.performanceMetrics).slice(0, 10).map(page => {
         // Use PageSpeed data if available (more accurate), otherwise fall back to performanceMetrics
@@ -717,6 +720,7 @@ function generateReportHTML(
   ${result.competitorAnalysis ? `
   <div class="page">
     <h1>Competitor Keyword Gap Analysis</h1>
+    ${generateCompetitorComparisonTable(result)}
     
     ${result.competitorAnalysis.detectedIndustry ? `
       <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 15px; margin-bottom: 20px;">
@@ -776,6 +780,14 @@ function generateReportHTML(
         <li style="margin-bottom: 10px;">Focus on high-value keyword gaps that align with your business goals</li>
       </ol>
     </div>
+  </div>
+  ` : ''}
+  
+  <!-- Internal Link Graph (Agency tier) -->
+  ${result.internalLinkGraph && result.raw.options.tier === 'agency' ? `
+  <div class="page">
+    <h1>Internal Link Graph Analysis</h1>
+    ${generateInternalLinkGraphVisualization(result)}
   </div>
   ` : ''}
   
@@ -1313,5 +1325,235 @@ function getAddOnsList(addOns: any, tier?: string): string {
   
   // Items already contain escaped HTML entities, so don't escape again
   return items.map(item => `<li>${item}</li>`).join('')
+}
+
+/**
+ * Generate score dials (circular progress indicators) - Agency tier visual
+ */
+function generateScoreDials(summary: AuditResult['summary']): string {
+  const scores = [
+    { label: 'Overall', value: summary.overallScore, color: '#3b82f6' },
+    { label: 'Technical', value: summary.technicalScore, color: '#ef4444' },
+    { label: 'On-Page', value: summary.onPageScore, color: '#f59e0b' },
+    { label: 'Content', value: summary.contentScore, color: '#10b981' },
+    { label: 'Accessibility', value: summary.accessibilityScore, color: '#8b5cf6' }
+  ]
+  
+  let html = '<div style="display: flex; flex-wrap: wrap; justify-content: space-around; margin: 30px 0; gap: 20px;">'
+  
+  scores.forEach(score => {
+    const percentage = score.value
+    const circumference = 2 * Math.PI * 45 // radius = 45
+    const offset = circumference - (percentage / 100) * circumference
+    const color = percentage >= 70 ? '#10b981' : percentage >= 40 ? '#f59e0b' : '#ef4444'
+    
+    html += `
+      <div style="text-align: center; width: 120px;">
+        <svg width="120" height="120" style="transform: rotate(-90deg);">
+          <circle cx="60" cy="60" r="45" fill="none" stroke="#e5e7eb" stroke-width="8"/>
+          <circle cx="60" cy="60" r="45" fill="none" stroke="${color}" stroke-width="8"
+            stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+            stroke-linecap="round" style="transition: stroke-dashoffset 0.5s;"/>
+        </svg>
+        <div style="margin-top: -90px; font-size: 24px; font-weight: bold; color: ${color};">
+          ${score.value}
+        </div>
+        <div style="margin-top: 5px; font-size: 12px; color: #666; font-weight: bold;">
+          ${score.label}
+        </div>
+      </div>
+    `
+  })
+  
+  html += '</div>'
+  return html
+}
+
+/**
+ * Generate issue distribution chart - Agency tier visual
+ */
+function generateIssueDistributionChart(summary: AuditResult['summary']): string {
+  const totalIssues = summary.highSeverityIssues + summary.mediumSeverityIssues + summary.lowSeverityIssues
+  if (totalIssues === 0) return ''
+  
+  const highPercent = (summary.highSeverityIssues / totalIssues) * 100
+  const mediumPercent = (summary.mediumSeverityIssues / totalIssues) * 100
+  const lowPercent = (summary.lowSeverityIssues / totalIssues) * 100
+  
+  return `
+    <div style="margin-top: 40px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 15px; color: #333;">Issue Distribution</h3>
+      <div style="display: flex; align-items: flex-end; height: 200px; gap: 10px; margin-bottom: 15px;">
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+          <div style="width: 100%; background: #ef4444; height: ${highPercent * 2}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
+          <div style="font-size: 12px; font-weight: bold; color: #ef4444;">${summary.highSeverityIssues}</div>
+          <div style="font-size: 11px; color: #666; margin-top: 3px;">High</div>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+          <div style="width: 100%; background: #f59e0b; height: ${mediumPercent * 2}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
+          <div style="font-size: 12px; font-weight: bold; color: #f59e0b;">${summary.mediumSeverityIssues}</div>
+          <div style="font-size: 11px; color: #666; margin-top: 3px;">Medium</div>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+          <div style="width: 100%; background: #6b7280; height: ${lowPercent * 2}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
+          <div style="font-size: 12px; font-weight: bold; color: #6b7280;">${summary.lowSeverityIssues}</div>
+          <div style="font-size: 11px; color: #666; margin-top: 3px;">Low</div>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+/**
+ * Generate Core Web Vitals graph - Agency tier visual
+ */
+function generateCoreWebVitalsGraph(pages: AuditResult['pages']): string {
+  const pageWithMetrics = pages.find(p => p.pageSpeedData || p.performanceMetrics)
+  if (!pageWithMetrics) return ''
+  
+  const metrics = pageWithMetrics.pageSpeedData?.mobile || pageWithMetrics.performanceMetrics
+  if (!metrics) return ''
+  
+  const lcp = metrics.lcp ? Math.min(metrics.lcp, 10000) : 0
+  const fcp = metrics.fcp ? Math.min(metrics.fcp, 5000) : 0
+  const cls = metrics.cls !== undefined ? Math.min(metrics.cls * 1000, 500) : 0 // Scale CLS for visualization
+  const ttfb = metrics.ttfb ? Math.min(metrics.ttfb, 2000) : 0
+  
+  // Normalize values for bar chart (0-100 scale)
+  const lcpNormalized = Math.min(100, (lcp / 4000) * 100)
+  const fcpNormalized = Math.min(100, (fcp / 3000) * 100)
+  const clsNormalized = Math.min(100, (cls / 250) * 100)
+  const ttfbNormalized = Math.min(100, (ttfb / 1800) * 100)
+  
+  const getColor = (value: number) => value <= 33 ? '#10b981' : value <= 66 ? '#f59e0b' : '#ef4444'
+  
+  return `
+    <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 15px; color: #333;">Core Web Vitals Performance</h3>
+      <div style="display: flex; flex-direction: column; gap: 15px;">
+        <div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <span style="font-size: 13px; font-weight: bold;">LCP (Largest Contentful Paint)</span>
+            <span style="font-size: 12px; color: ${getColor(lcpNormalized)};">${lcp}ms</span>
+          </div>
+          <div style="width: 100%; height: 20px; background: #e5e7eb; border-radius: 10px; overflow: hidden;">
+            <div style="width: ${lcpNormalized}%; height: 100%; background: ${getColor(lcpNormalized)}; transition: width 0.3s;"></div>
+          </div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <span style="font-size: 13px; font-weight: bold;">FCP (First Contentful Paint)</span>
+            <span style="font-size: 12px; color: ${getColor(fcpNormalized)};">${fcp}ms</span>
+          </div>
+          <div style="width: 100%; height: 20px; background: #e5e7eb; border-radius: 10px; overflow: hidden;">
+            <div style="width: ${fcpNormalized}%; height: 100%; background: ${getColor(fcpNormalized)}; transition: width 0.3s;"></div>
+          </div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <span style="font-size: 13px; font-weight: bold;">CLS (Cumulative Layout Shift)</span>
+            <span style="font-size: 12px; color: ${getColor(clsNormalized)};">${(metrics.cls || 0).toFixed(3)}</span>
+          </div>
+          <div style="width: 100%; height: 20px; background: #e5e7eb; border-radius: 10px; overflow: hidden;">
+            <div style="width: ${clsNormalized}%; height: 100%; background: ${getColor(clsNormalized)}; transition: width 0.3s;"></div>
+          </div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <span style="font-size: 13px; font-weight: bold;">TTFB (Time to First Byte)</span>
+            <span style="font-size: 12px; color: ${getColor(ttfbNormalized)};">${ttfb}ms</span>
+          </div>
+          <div style="width: 100%; height: 20px; background: #e5e7eb; border-radius: 10px; overflow: hidden;">
+            <div style="width: ${ttfbNormalized}%; height: 100%; background: ${getColor(ttfbNormalized)}; transition: width 0.3s;"></div>
+          </div>
+        </div>
+      </div>
+      <p style="margin-top: 15px; font-size: 11px; color: #666;">
+        Green: Good | Yellow: Needs Improvement | Red: Poor
+      </p>
+    </div>
+  `
+}
+
+/**
+ * Generate competitor comparison table - Agency tier visual
+ */
+function generateCompetitorComparisonTable(result: AuditResult): string {
+  if (!result.competitorAnalysis?.competitorCrawls || result.competitorAnalysis.competitorCrawls.length === 0) {
+    return ''
+  }
+  
+  const competitors = result.competitorAnalysis.competitorCrawls
+  const sitePages = result.summary.totalPages
+  
+  return `
+    <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 15px; color: #333;">Competitor Comparison</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #3b82f6; color: white;">
+            <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Competitor</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Pages Analyzed</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Keywords Found</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Your Site</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${competitors.map((comp, idx) => `
+            <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f9fafb'};">
+              <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${escapeHtml(comp.url)}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${comp.pageCount || 1}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${comp.keywords?.length || 0}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px; font-weight: bold; color: #3b82f6;">${sitePages} pages</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `
+}
+
+/**
+ * Generate internal link graph visualization - Agency tier visual
+ */
+function generateInternalLinkGraphVisualization(result: AuditResult): string {
+  if (!result.internalLinkGraph || result.raw.options.tier !== 'agency') {
+    return ''
+  }
+  
+  const graph = result.internalLinkGraph
+  
+  return `
+    <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 15px; color: #333;">Internal Link Graph Analysis</h3>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px;">
+        <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #ef4444;">
+          <div style="font-size: 24px; font-weight: bold; color: #ef4444;">${graph.orphanPages.length}</div>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">Orphan Pages</div>
+        </div>
+        <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #f59e0b;">
+          <div style="font-size: 24px; font-weight: bold; color: #f59e0b;">${graph.nodes.filter(n => n.isOrphan).length}</div>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">Isolated Pages</div>
+        </div>
+        <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #10b981;">
+          <div style="font-size: 24px; font-weight: bold; color: #10b981;">${graph.hubPages.length}</div>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">Hub Pages</div>
+        </div>
+        <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #3b82f6;">
+          <div style="font-size: 24px; font-weight: bold; color: #3b82f6;">${graph.authorityPages.length}</div>
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">Authority Pages</div>
+        </div>
+      </div>
+      ${graph.orphanPages.length > 0 ? `
+        <div style="margin-top: 20px; padding: 15px; background: #fef2f2; border-radius: 6px; border-left: 4px solid #ef4444;">
+          <strong style="color: #dc2626;">⚠️ Orphan Pages Detected:</strong>
+          <p style="margin-top: 8px; font-size: 12px; color: #666;">
+            ${graph.orphanPages.slice(0, 5).map(url => escapeHtml(url)).join('<br>')}
+            ${graph.orphanPages.length > 5 ? `<br>... and ${graph.orphanPages.length - 5} more` : ''}
+          </p>
+        </div>
+      ` : ''}
+    </div>
+  `
 }
 
