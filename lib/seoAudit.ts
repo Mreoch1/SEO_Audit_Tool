@@ -1536,17 +1536,9 @@ function analyzeSiteWideIssues(
       })
     }
     
-    // Missing alt tags
-    if (page.imageCount > 0 && page.missingAltCount > 0) {
-      const percentage = Math.round((page.missingAltCount / page.imageCount) * 100)
-      consolidateIssue(issueMap, {
-        category: 'Accessibility',
-        severity: percentage > 50 ? 'High' : 'Medium',
-        message: 'Missing alt attributes on images',
-        details: `${page.missingAltCount} of ${page.imageCount} images missing alt text`,
-        affectedPages: [page.url]
-      })
-    }
+    // Missing alt tags (only flag if enhanced on-page analysis didn't already flag it)
+    // Enhanced on-page analysis handles this more comprehensively, so we skip it here
+    // to avoid duplication
     
     // No viewport meta tag
     if (!page.hasViewport) {

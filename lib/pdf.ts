@@ -499,7 +499,8 @@ function generateReportHTML(
         const metrics = page.performanceMetrics
         
         // Use mobile metrics (stricter) if PageSpeed available
-        const lcp = mobile?.lcp || metrics?.lcp
+        // For LCP, only use local rendering metrics if they're > 500ms (somewhat realistic)
+        const lcp = mobile?.lcp || (metrics?.lcp && metrics.lcp > 500 ? metrics.lcp : undefined)
         const fcp = mobile?.fcp || metrics?.fcp
         const cls = mobile?.cls !== undefined ? mobile.cls : metrics?.cls
         const inp = mobile?.inp || metrics?.fid // INP from PageSpeed, FID from metrics
@@ -813,8 +814,10 @@ function generateReportHTML(
           // Format load time (escape to prevent LaTeX)
           const loadTimeMs = page.loadTime || 0
           const loadTimeText = escapeHtml(`${loadTimeMs} ms`)
-          const lcpValue = page.performanceMetrics?.lcp || page.pageSpeedData?.mobile?.lcp || page.pageSpeedData?.desktop?.lcp
-          const lcpText = lcpValue ? `<br><small style="font-size: 9px;">${escapeHtml(`LCP: ${Math.round(lcpValue)} ms`)}</small>` : ''
+          // Prioritize PageSpeed Insights data (real-world) over local rendering metrics
+          const lcpValue = page.pageSpeedData?.mobile?.lcp || page.pageSpeedData?.desktop?.lcp || page.performanceMetrics?.lcp
+          // Only show LCP if it's from PageSpeed (realistic) or if it's > 500ms (somewhat realistic from local rendering)
+          const lcpText = (lcpValue && lcpValue > 500) ? `<br><small style="font-size: 9px;">${escapeHtml(`LCP: ${Math.round(lcpValue)} ms`)}</small>` : ''
           
           return `
           <tr>

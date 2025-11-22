@@ -290,23 +290,32 @@ export function analyzeEnhancedOnPage(
   }
 
   // Analyze images
-  if (data.images.total > 0) {
+  if (data.images.total > 0 && data.images.withoutAlt > 0) {
     const missingAltPercent = (data.images.withoutAlt / data.images.total) * 100
     
     if (missingAltPercent > 50) {
       issues.push({
-        category: 'On-page',
+        category: 'Accessibility', // Changed from 'On-page' to 'Accessibility'
         severity: 'High',
-        message: 'High percentage of images missing alt text',
-        details: `${Math.round(missingAltPercent)}% of images are missing alt attributes. This hurts accessibility and SEO.`,
+        message: 'Missing alt attributes on images',
+        details: `${data.images.withoutAlt} of ${data.images.total} images missing alt text (${Math.round(missingAltPercent)}%). This hurts accessibility and SEO.`,
         affectedPages: [page.url]
       })
     } else if (missingAltPercent > 25) {
       issues.push({
-        category: 'On-page',
+        category: 'Accessibility', // Changed from 'On-page' to 'Accessibility'
         severity: 'Medium',
-        message: 'Some images missing alt text',
-        details: `${Math.round(missingAltPercent)}% of images are missing alt attributes.`,
+        message: 'Missing alt attributes on images',
+        details: `${data.images.withoutAlt} of ${data.images.total} images missing alt text (${Math.round(missingAltPercent)}%).`,
+        affectedPages: [page.url]
+      })
+    } else if (data.images.withoutAlt > 0) {
+      // Even if percentage is low, still flag it as low severity if any are missing
+      issues.push({
+        category: 'Accessibility',
+        severity: 'Low',
+        message: 'Missing alt attributes on images',
+        details: `${data.images.withoutAlt} of ${data.images.total} images missing alt text (${Math.round(missingAltPercent)}%).`,
         affectedPages: [page.url]
       })
     }
