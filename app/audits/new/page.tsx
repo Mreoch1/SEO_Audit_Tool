@@ -18,6 +18,8 @@ export default function NewAuditPage() {
   const [selectedTier, setSelectedTier] = useState<AuditTier | null>(null)
   const [loading, setLoading] = useState(false)
   const [addOns, setAddOns] = useState<AuditAddOns>({})
+  const [competitorUrls, setCompetitorUrls] = useState<string[]>([])
+  const [competitorInput, setCompetitorInput] = useState('')
   const [urlError, setUrlError] = useState('')
   
   const tierInfo = {
@@ -155,6 +157,30 @@ export default function NewAuditPage() {
     }
   }
 
+  const addCompetitorUrl = () => {
+    if (!competitorInput.trim()) return
+    
+    try {
+      const formatted = formatUrl(competitorInput)
+      new URL(formatted)
+      setCompetitorUrls([...competitorUrls, formatted])
+      setCompetitorInput('')
+    } catch {
+      // Ignore invalid URLs for now or show a toast
+      toast({
+        title: 'Invalid URL',
+        description: 'Please enter a valid URL for the competitor',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const removeCompetitorUrl = (index: number) => {
+    const newUrls = [...competitorUrls]
+    newUrls.splice(index, 1)
+    setCompetitorUrls(newUrls)
+  }
+
   const toggleAddOn = (key: keyof AuditAddOns, isNumeric = false) => {
     if (isNumeric) {
       const current = (addOns[key] as number) || 0
@@ -225,7 +251,8 @@ export default function NewAuditPage() {
           tier: auditTier,
           maxPages: tierData.maxPages,
           maxDepth: tierData.maxDepth,
-          addOns: Object.keys(addOns).length > 0 ? addOns : undefined
+          addOns: Object.keys(addOns).length > 0 ? addOns : undefined,
+          competitorUrls: addOns.competitorAnalysis ? competitorUrls : undefined
         })
       })
 
@@ -496,23 +523,74 @@ export default function NewAuditPage() {
                     </div>
 
                     {/* Competitor Keyword Gap Report */}
-                    <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.competitorAnalysis ? 'bg-blue-50 border-blue-200' : ''}`}>
-                      <div>
-                        <div className="font-medium">{addOnInfo.competitorAnalysis.name}</div>
-                        <div className="text-sm text-gray-500">{addOnInfo.competitorAnalysis.description}</div>
+                    <div className={`flex flex-col p-3 border rounded-lg ${addOns.competitorAnalysis ? 'bg-blue-50 border-blue-200' : ''}`}>
+                      <div className="flex items-center justify-between w-full mb-2">
+                        <div>
+                          <div className="font-medium">{addOnInfo.competitorAnalysis.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.competitorAnalysis.description}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">+${addOnInfo.competitorAnalysis.price}.00</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={addOns.competitorAnalysis ? "default" : "outline"}
+                            onClick={() => toggleAddOn('competitorAnalysis')}
+                            disabled={loading}
+                          >
+                            {addOns.competitorAnalysis ? 'Added' : 'Add'}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">+${addOnInfo.competitorAnalysis.price}.00</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={addOns.competitorAnalysis ? "default" : "outline"}
-                          onClick={() => toggleAddOn('competitorAnalysis')}
-                          disabled={loading}
-                        >
-                          {addOns.competitorAnalysis ? 'Added' : 'Add'}
-                        </Button>
-                      </div>
+                      
+                      {/* Competitor URL Inputs */}
+                      {addOns.competitorAnalysis && (
+                        <div className="mt-3 pl-2 border-l-2 border-blue-200 space-y-3">
+                          <Label className="text-xs text-gray-600">Optional: Add specific competitor URLs (leave empty to auto-detect)</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="https://competitor.com"
+                              value={competitorInput}
+                              onChange={(e) => setCompetitorInput(e.target.value)}
+                              className="bg-white h-8 text-sm"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  addCompetitorUrl()
+                                }
+                              }}
+                            />
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              variant="secondary"
+                              onClick={addCompetitorUrl}
+                              disabled={loading || !competitorInput}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                          
+                          {competitorUrls.length > 0 && (
+                            <div className="space-y-2">
+                              {competitorUrls.map((compUrl, index) => (
+                                <div key={index} className="flex items-center justify-between bg-white p-2 rounded border text-sm">
+                                  <span className="truncate max-w-[200px]">{compUrl}</span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => removeCompetitorUrl(index)}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   
