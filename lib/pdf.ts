@@ -30,8 +30,11 @@ export async function generatePDF(
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage'
-    ]
+      '--disable-dev-shm-usage',
+      '--disable-gpu'
+    ],
+    timeout: 60000,
+    pipe: true // Use pipe connection for stability
   })
   
   try {
