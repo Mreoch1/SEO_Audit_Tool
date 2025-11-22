@@ -142,6 +142,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { url, maxPages, maxDepth, tier, addOns, competitorUrls } = body
 
+    console.log('[API /api/audits POST] Received request:', { url, tier, addOns, competitorUrls })
+
     if (!url) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
     }
