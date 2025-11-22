@@ -28,7 +28,7 @@ export default function NewAuditPage() {
       price: '$19', 
       name: 'Starter', 
       description: 'Deep crawl (up to 50 pages), JavaScript rendering, Core Web Vitals, Technical SEO, On-Page SEO, Content Quality, Accessibility, Local SEO signals, Schema detection, Broken links, Internal linking overview.',
-      deliveryDays: 1,
+      deliveryDays: 2, // 2 business days
       keywords: 0,
       includes: {
         titleOptimization: true,
@@ -45,7 +45,7 @@ export default function NewAuditPage() {
       price: '$39', 
       name: 'Standard', 
       description: 'Everything in Starter + Larger crawl (up to 200 pages), Advanced Local SEO, Full Schema Validation, Mobile Responsiveness, Thin Content Detection, Keyword Extraction (NLP), Readability Diagnostics, Security Checks, Platform Detection, Automated Fix Recommendations.',
-      deliveryDays: 2,
+      deliveryDays: 3, // 3 business days
       keywords: 5,
       includes: {
         titleOptimization: true,
@@ -62,7 +62,7 @@ export default function NewAuditPage() {
       price: '$59', 
       name: 'Professional', 
       description: 'Everything in Standard + Deep crawl (up to 500 pages), Multi-level Internal Link Mapping, Crawl Diagnostics, Enhanced Accessibility, Full Keyword Opportunity Mapping, Content Structure Map, JS/CSS Payload Analysis, Core Web Vitals Opportunity Report, Priority Fix Action Plan.',
-      deliveryDays: 2,
+      deliveryDays: 4, // 4 business days
       keywords: 10,
       includes: {
         titleOptimization: true,
@@ -79,7 +79,7 @@ export default function NewAuditPage() {
       price: '$99', 
       name: 'Agency / Enterprise', 
       description: 'Everything in Professional + Unlimited pages, 3 Competitor Crawls + Keyword Gap Analysis, Full Local SEO Suite, Social Signals Audit, JS Rendering Diagnostics, Full Internal Link Graph, Crawl Error Exclusion, Duplicate URL Cleaning, Blank Report included (free).',
-      deliveryDays: 2,
+      deliveryDays: 5, // 5 business days
       keywords: 1000, // Effectively unlimited
       includes: {
         titleOptimization: true,
@@ -142,6 +142,11 @@ export default function NewAuditPage() {
       name: 'Extra Crawl Depth',
       price: 15,
       description: 'Increased crawl depth for deeper site analysis (Agency tier)'
+    },
+    expedited: {
+      name: '24-Hour Expedited Report',
+      price: 15,
+      description: 'Get your report delivered within 24 hours (expedited delivery)'
     }
   }
   
@@ -274,7 +279,21 @@ export default function NewAuditPage() {
       total += addOnInfo.extraCrawlDepth.price
     }
     
+    // Expedited Delivery (all tiers)
+    if (addOns.expedited) {
+      total += addOnInfo.expedited.price
+    }
+    
     return total
+  }
+  
+  const getExpectedDelivery = (): string => {
+    if (!selectedTier) return ''
+    if (addOns.expedited) {
+      return '24 hours (expedited)'
+    }
+    const days = tierInfo[selectedTier].deliveryDays
+    return `${days} business day${days > 1 ? 's' : ''}`
   }
 
   const handleSubmit = async (e: React.FormEvent, tier?: AuditTier) => {
@@ -415,7 +434,7 @@ export default function NewAuditPage() {
                         <div className="text-sm text-gray-600 mt-2">{info.description}</div>
                         <div className="text-xs text-gray-500 mt-2 space-y-1">
                           <div>Up to {info.maxPages} pages • Depth {info.maxDepth}</div>
-                          <div>{info.keywords} keywords • {info.deliveryDays} {info.deliveryDays === 1 ? 'day' : 'days'} delivery</div>
+                          <div>{info.keywords} keywords • Expected: {info.deliveryDays} business {info.deliveryDays === 1 ? 'day' : 'days'}</div>
                         </div>
                         <div className="mt-3 pt-3 border-t border-gray-200">
                           <div className="text-xs font-medium text-gray-700 mb-2">Includes:</div>
@@ -834,6 +853,28 @@ export default function NewAuditPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Expedited Delivery (all tiers) */}
+                    {selectedTier && (
+                      <div className={`flex items-center justify-between p-3 border rounded-lg ${addOns.expedited ? 'bg-blue-50 border-blue-200' : ''}`}>
+                        <div>
+                          <div className="font-medium">{addOnInfo.expedited.name}</div>
+                          <div className="text-sm text-gray-500">{addOnInfo.expedited.description}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">+${addOnInfo.expedited.price}.00</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={addOns.expedited ? "default" : "outline"}
+                            onClick={() => toggleAddOn('expedited')}
+                            disabled={loading}
+                          >
+                            {addOns.expedited ? 'Added' : 'Add'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="pt-4 border-t">
@@ -896,6 +937,20 @@ export default function NewAuditPage() {
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">{addOnInfo.extraCrawlDepth.name}</span>
                           <span className="font-medium">+${addOnInfo.extraCrawlDepth.price}.00</span>
+                        </div>
+                      )}
+                      {addOns.expedited && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{addOnInfo.expedited.name}</span>
+                          <span className="font-medium">+${addOnInfo.expedited.price}.00</span>
+                        </div>
+                      )}
+                      {selectedTier && (
+                        <div className="border-t pt-2 mt-2">
+                          <div className="flex justify-between items-center text-sm mb-2">
+                            <span className="text-gray-600">Expected Delivery:</span>
+                            <span className="font-medium text-blue-600">{getExpectedDelivery()}</span>
+                          </div>
                         </div>
                       )}
                       <div className="border-t pt-2 mt-2 flex justify-between items-center">
