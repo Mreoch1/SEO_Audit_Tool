@@ -121,6 +121,9 @@ export interface CompetitorAnalysis {
   detectedIndustry?: string // Auto-detected industry category
   industryConfidence?: number // Confidence score (0-1)
   allCompetitors?: string[] // All detected competitors (not just the one analyzed)
+  // NEW: Track which competitors were auto-detected vs user-provided
+  autoDetectedCompetitors?: string[] // URLs that were auto-detected
+  userProvidedCompetitors?: string[] // URLs that were user-provided
   // NEW: Agency tier - multiple competitor crawls
   competitorCrawls?: CompetitorData[] // Full data for all crawled competitors (up to 3 for Agency)
   crawlSummary?: {

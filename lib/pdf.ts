@@ -727,20 +727,38 @@ function generateReportHTML(
         <p style="margin: 0 0 8px 0;"><strong>🎯 Detected Industry:</strong> ${result.competitorAnalysis.detectedIndustry}</p>
         <p style="margin: 0 0 8px 0;"><strong>📊 Confidence:</strong> ${Math.round((result.competitorAnalysis.industryConfidence || 0) * 100)}%</p>
         ${result.competitorAnalysis.allCompetitors && result.competitorAnalysis.allCompetitors.length > 0 ? `
-          <p style="margin: 0;"><strong>🏢 Competitors Identified:</strong> ${result.competitorAnalysis.allCompetitors.slice(0, 3).map(c => `<a href="${c}" style="color: #3b82f6;">${c.replace(/^https?:\/\/(www\.)?/, '')}</a>`).join(', ')}${result.competitorAnalysis.allCompetitors.length > 3 ? ` and ${result.competitorAnalysis.allCompetitors.length - 3} more` : ''}</p>
+          <p style="margin: 0 0 8px 0;"><strong>🏢 Competitors Analyzed (${result.competitorAnalysis.allCompetitors.length}):</strong></p>
+          <ul style="margin: 0; padding-left: 20px;">
+            ${result.competitorAnalysis.allCompetitors.map(c => {
+              const isAutoDetected = result.competitorAnalysis?.autoDetectedCompetitors?.includes(c)
+              const isUserProvided = result.competitorAnalysis?.userProvidedCompetitors?.includes(c)
+              const label = isAutoDetected ? '🤖 Auto-detected' : isUserProvided ? '👤 You provided' : ''
+              return `<li style="margin: 4px 0;"><a href="${c}" style="color: #3b82f6;">${c.replace(/^https?:\/\/(www\.)?/, '')}</a> ${label ? `<span style="color: #666; font-size: 12px;">(${label})</span>` : ''}</li>`
+            }).join('')}
+          </ul>
         ` : ''}
       </div>
     ` : ''}
     
     ${result.competitorAnalysis.competitorUrl && result.competitorAnalysis.competitorUrl.startsWith('http') ? `
-      <p style="margin-bottom: 20px;"><strong>Competitor Analyzed:</strong> <a href="${result.competitorAnalysis.competitorUrl}" style="color: #3b82f6;">${result.competitorAnalysis.competitorUrl}</a></p>
-      <p style="margin-bottom: 20px;">This analysis crawled the competitor site and extracted real keywords from their content, comparing them against your site to identify opportunities.</p>
+      <p style="margin-bottom: 20px;"><strong>Competitor Analysis Method:</strong> Real competitor crawl</p>
+      <p style="margin-bottom: 20px;">This analysis crawled ${result.competitorAnalysis.allCompetitors?.length || 1} competitor site(s) and extracted real keywords from their content, comparing them against your site to identify opportunities.</p>
+      ${result.competitorAnalysis.autoDetectedCompetitors && result.competitorAnalysis.autoDetectedCompetitors.length > 0 ? `
+        <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+          <p style="margin: 0; font-size: 13px; color: #92400e;"><strong>ℹ️ Auto-Detection:</strong> ${result.competitorAnalysis.autoDetectedCompetitors.length} competitor(s) were automatically detected based on industry classification. You can override these by providing competitor URLs when creating the audit.</p>
+        </div>
+      ` : ''}
     ` : result.competitorAnalysis.competitorUrl && result.competitorAnalysis.competitorUrl.includes('required') ? `
       <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin-bottom: 20px;">
         <p style="margin: 0; font-weight: bold; color: #dc2626;">⚠️ Agency Tier Requirement: Competitor URLs Required</p>
-        <p style="margin: 8px 0 0 0; color: #666;">Agency tier includes 3 competitor crawls + keyword gap analysis. No competitor URLs were provided for this audit. Please provide competitor URLs for full Agency-tier competitor analysis.</p>
+        <p style="margin: 8px 0 0 0; color: #666;">Agency tier includes 3 competitor crawls + keyword gap analysis. No competitor URLs were provided and auto-detection found none. Please provide competitor URLs for full Agency-tier competitor analysis.</p>
       </div>
       <p style="margin-bottom: 20px;">This analysis uses pattern-based keyword suggestions as a fallback. For full Agency-tier competitor analysis, provide competitor URLs when creating the audit.</p>
+    ` : result.competitorAnalysis.competitorUrl && result.competitorAnalysis.competitorUrl.includes('No competitors') ? `
+      <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin-bottom: 20px;">
+        <p style="margin: 0; font-weight: bold; color: #dc2626;">⚠️ No Competitors Found</p>
+        <p style="margin: 8px 0 0 0; color: #666;">Auto-detection could not find competitors in your industry. This analysis uses pattern-based keyword suggestions as a fallback.</p>
+      </div>
     ` : result.competitorAnalysis.competitorUrl ? `
       <p style="margin-bottom: 20px;">${result.competitorAnalysis.competitorUrl}. This analysis identifies niche-specific keyword opportunities by combining your site's core topics with common SEO patterns used by competitors in your industry.</p>
     ` : `

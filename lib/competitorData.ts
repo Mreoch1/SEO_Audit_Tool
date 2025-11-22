@@ -486,3 +486,89 @@ export async function classifyDomain(
   }
 }
 
+/**
+ * Auto-fill missing competitor URLs based on industry classification
+ * 
+ * Logic:
+ * - If 0 URLs provided → find 3-4 competitors
+ * - If 1 URL provided → find 2 more
+ * - If 2 URLs provided → find 1 more
+ * - If 3+ URLs provided → use those (no auto-fill needed)
+ * 
+ * For Agency tier, ensures minimum 3 competitors
+ */
+export async function autoFillCompetitorUrls(
+  targetUrl: string,
+  providedUrls: string[],
+  html: string,
+  userAgent: string,
+  tier: 'starter' | 'standard' | 'professional' | 'agency' = 'standard'
+): Promise<{
+  finalUrls: string[]
+  autoDetected: string[]
+  provided: string[]
+  industry: string
+  confidence: number
+}> {
+  const provided = providedUrls.filter(url => url && url.trim().length > 0)
+  const targetDomain = new URL(targetUrl).hostname.replace(/^www\./, '')
+  
+  // Determine how many competitors we need
+  const minCompetitors = tier === 'agency' ? 3 : 1
+  const maxCompetitors = tier === 'agency' ? 4 : 3
+  const needed = Math.max(0, minCompetitors - provided.length)
+  
+  // If we have enough, return as-is
+  if (provided.length >= minCompetitors) {
+    return {
+      finalUrls: provided.slice(0, maxCompetitors),
+      autoDetected: [],
+      provided: provided.slice(0, maxCompetitors),
+      industry: 'Unknown',
+      confidence: 0
+    }
+  }
+  
+  // Classify the domain to find industry competitors
+  const classification = await classifyDomain(targetUrl, html, userAgent)
+  
+  // Get available competitors from industry classification
+  let availableCompetitors = classification.competitors || []
+  
+  // Filter out:
+  // 1. The target site itself
+  // 2. Already provided URLs
+  // 3. Invalid URLs
+  const providedDomains = new Set(
+    provided.map(url => {
+      try {
+        return new URL(url).hostname.replace(/^www\./, '')
+      } catch {
+        return ''
+      }
+    })
+  )
+  
+  availableCompetitors = availableCompetitors
+    .filter(url => {
+      try {
+        const domain = new URL(url).hostname.replace(/^www\./, '')
+        return domain !== targetDomain && !providedDomains.has(domain)
+      } catch {
+        return false
+      }
+    })
+    .slice(0, needed) // Take only what we need
+  
+  // Combine provided + auto-detected
+  const finalUrls = [...provided, ...availableCompetitors].slice(0, maxCompetitors)
+  
+  return {
+    finalUrls,
+    autoDetected: availableCompetitors,
+    provided,
+    industry: classification.industry,
+    confidence: classification.confidence
+  }
+}
+

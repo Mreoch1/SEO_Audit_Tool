@@ -16,7 +16,7 @@ import { checkSocialMediaPresence } from './social'
 import { performEnhancedTechnicalCheck, getTechnicalFixInstructions } from './enhancedTechnical'
 import { analyzeEnhancedOnPage, getOnPageFixInstructions } from './enhancedOnPage'
 import { analyzeEnhancedContent, getContentFixInstructions } from './enhancedContent'
-import { classifyDomain } from './competitorData'
+import { classifyDomain, autoFillCompetitorUrls } from './competitorData'
 import { deduplicateKeywords, formatKeywordsForDisplay, findKeywordGaps } from './keywordProcessor'
 import { consolidateIssue } from './issueProcessor'
 
@@ -471,13 +471,51 @@ export async function runAudit(
   // Competitor Analysis (if add-on is selected)
   let competitorAnalysis: CompetitorAnalysis | undefined
   if (opts.addOns?.competitorAnalysis) {
-    if (opts.competitorUrls && opts.competitorUrls.length > 0) {
-      // User provided competitor URLs - use them
-      console.log(`[Audit] Using user-provided competitor URLs for analysis: ${opts.competitorUrls.join(', ')}`)
+    // NEW: Auto-fill missing competitor URLs based on industry classification
+    const providedUrls = opts.competitorUrls || []
+    const firstPageHtml = pages[0]?.html || ''
+    
+    console.log(`[Audit] Competitor URL status: ${providedUrls.length} provided, tier: ${opts.tier}`)
+    
+    // Auto-fill missing competitors
+    let finalCompetitorUrls: string[] = []
+    let autoDetectedCompetitors: string[] = []
+    let detectedIndustry = 'Unknown'
+    let industryConfidence = 0
+    
+    try {
+      const autoFillResult = await autoFillCompetitorUrls(
+        rootUrl,
+        providedUrls,
+        firstPageHtml,
+        opts.userAgent,
+        opts.tier
+      )
       
-      // Agency tier: Analyze up to 3 competitors
+      finalCompetitorUrls = autoFillResult.finalUrls
+      autoDetectedCompetitors = autoFillResult.autoDetected
+      detectedIndustry = autoFillResult.industry
+      industryConfidence = autoFillResult.confidence
+      
+      if (autoDetectedCompetitors.length > 0) {
+        console.log(`[Audit] Auto-detected ${autoDetectedCompetitors.length} competitor(s): ${autoDetectedCompetitors.join(', ')}`)
+        console.log(`[Audit] Detected industry: ${detectedIndustry} (confidence: ${Math.round(industryConfidence * 100)}%)`)
+      }
+      
+      if (providedUrls.length > 0) {
+        console.log(`[Audit] User provided ${providedUrls.length} competitor URL(s): ${providedUrls.join(', ')}`)
+      }
+      
+      console.log(`[Audit] Final competitor list (${finalCompetitorUrls.length} total): ${finalCompetitorUrls.join(', ')}`)
+    } catch (error) {
+      console.warn('[Audit] Auto-fill failed, using provided URLs only:', error)
+      finalCompetitorUrls = providedUrls
+    }
+    
+    // Now analyze the final competitor list
+    if (finalCompetitorUrls.length > 0) {
       const maxCompetitors = opts.tier === 'agency' ? 3 : 1
-      const competitorsToAnalyze = opts.competitorUrls.slice(0, maxCompetitors)
+      const competitorsToAnalyze = finalCompetitorUrls.slice(0, maxCompetitors)
       
       if (opts.tier === 'agency' && competitorsToAnalyze.length > 1) {
         // Agency tier: Full multi-competitor crawl
@@ -488,6 +526,15 @@ export async function runAudit(
           opts,
           validPages
         )
+        
+        // Add auto-detection metadata
+        if (competitorAnalysis) {
+          competitorAnalysis.detectedIndustry = detectedIndustry
+          competitorAnalysis.industryConfidence = industryConfidence
+          competitorAnalysis.autoDetectedCompetitors = autoDetectedCompetitors
+          competitorAnalysis.userProvidedCompetitors = providedUrls
+          competitorAnalysis.allCompetitors = finalCompetitorUrls
+        }
       } else if (competitorsToAnalyze.length > 0) {
         // Standard/Professional: Single competitor, or Agency with only 1 URL
         competitorAnalysis = await generateRealCompetitorAnalysis(
@@ -495,50 +542,25 @@ export async function runAudit(
           topKeywords,
           opts
         )
-      } else {
-        // No competitor URLs provided
-        if (opts.tier === 'agency') {
-          console.warn('[Competitor] ⚠️ Agency tier requires competitor URLs for full analysis. No competitor URLs provided - using pattern-based fallback.')
-          // For Agency tier, still generate analysis but mark it as incomplete
-          competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
-          if (competitorAnalysis) {
-            competitorAnalysis.competitorUrl = 'Competitor URLs required for Agency tier analysis'
-            competitorAnalysis.keywordGaps = []
-            competitorAnalysis.competitorKeywords = []
-            competitorAnalysis.sharedKeywords = []
-          }
-        } else {
-          competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
+        
+        // Add auto-detection metadata
+        if (competitorAnalysis) {
+          competitorAnalysis.detectedIndustry = detectedIndustry
+          competitorAnalysis.industryConfidence = industryConfidence
+          competitorAnalysis.autoDetectedCompetitors = autoDetectedCompetitors
+          competitorAnalysis.userProvidedCompetitors = providedUrls
         }
       }
     } else {
-      // Auto-detect competitors based on industry classification
-      console.log('[Audit] Auto-detecting competitors based on site content...')
-      try {
-        const detectedIndustry = await classifyDomain(rootUrl, pages[0]?.html || '', opts.userAgent)
-        console.log(`[Audit] Detected industry: ${detectedIndustry.industry} (confidence: ${detectedIndustry.confidence})`)
-        
-        if (detectedIndustry.competitors.length > 0) {
-          console.log(`[Audit] Found ${detectedIndustry.competitors.length} competitors: ${detectedIndustry.competitors.join(', ')}`)
-          // Use the first detected competitor
-          competitorAnalysis = await generateRealCompetitorAnalysis(
-            detectedIndustry.competitors[0],
-            topKeywords,
-            opts
-          )
-          // Add industry info to the analysis
-          if (competitorAnalysis) {
-            competitorAnalysis.detectedIndustry = detectedIndustry.industry
-            competitorAnalysis.industryConfidence = detectedIndustry.confidence
-            competitorAnalysis.allCompetitors = detectedIndustry.competitors
-          }
-        } else {
-          console.log('[Audit] No competitors detected, falling back to pattern-based analysis')
-          competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
-        }
-      } catch (error) {
-        console.warn('[Audit] Competitor auto-detection failed, falling back to pattern-based analysis:', error)
-        competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
+      // No competitors found (even after auto-fill)
+      console.warn('[Competitor] No competitors available (auto-fill found none) - using pattern-based fallback')
+      competitorAnalysis = await generateCompetitorAnalysis(pages, topKeywords)
+      
+      if (competitorAnalysis && opts.tier === 'agency') {
+        competitorAnalysis.competitorUrl = 'No competitors found - pattern-based analysis only'
+        competitorAnalysis.keywordGaps = []
+        competitorAnalysis.competitorKeywords = []
+        competitorAnalysis.sharedKeywords = []
       }
     }
   }
