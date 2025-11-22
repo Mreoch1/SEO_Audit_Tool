@@ -58,6 +58,9 @@ import {
 // Import crawl diagnostics
 import { analyzeCrawl, CrawlDiagnostics, getStatusMessage, isCrawlSufficient } from './crawlDiagnostics'
 
+// Import Local SEO analysis (Sprint 2)
+import { analyzeLocalSEO } from './localSEO'
+
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
   maxPages: 50,
   maxDepth: 3,
@@ -443,6 +446,27 @@ export async function runAudit(
     }
   }
   
+  // Local SEO Analysis (Sprint 2)
+  console.log('[Audit] Running Local SEO analysis...')
+  const localSEO = await analyzeLocalSEO(validPages, url)
+  console.log(`[Audit] Local SEO score: ${localSEO.overallScore}/100, Issues: ${localSEO.issues.length}`)
+  
+  // Add Local SEO issues to main issues list
+  localSEO.issues.forEach(issue => {
+    allIssues.push({
+      type: `local-seo-${issue.title.toLowerCase().replace(/\s+/g, '-')}`,
+      severity: issue.severity,
+      category: 'Technical', // Local SEO is part of technical SEO
+      title: `[Local SEO] ${issue.title}`,
+      message: issue.description,
+      description: issue.description,
+      affectedPages: issue.affectedPages,
+      howToFix: issue.howToFix,
+      fixInstructions: issue.howToFix,
+      priority: issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
+    })
+  })
+  
   // Add fix instructions to existing issues that don't have them
   allIssues.forEach(issue => {
     if (!issue.fixInstructions) {
@@ -524,6 +548,7 @@ export async function runAudit(
     imageAltAnalysis,
     competitorAnalysis,
     crawlDiagnostics, // NEW: Crawl diagnostics
+    localSEO, // NEW: Local SEO analysis (Sprint 2)
     raw: {
       startTime,
       endTime,

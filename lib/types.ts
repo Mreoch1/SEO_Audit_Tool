@@ -110,8 +110,9 @@ export interface CompetitorAnalysis {
   allCompetitors?: string[] // All detected competitors (not just the one analyzed)
 }
 
-// Import CrawlDiagnostics type
+// Import CrawlDiagnostics and LocalSEOAnalysis types
 import { CrawlDiagnostics } from './crawlDiagnostics'
+import { LocalSEOAnalysis } from './localSEO'
 
 export interface AuditResult {
   summary: {
@@ -139,6 +140,7 @@ export interface AuditResult {
   imageAltAnalysis?: ImageAltAnalysis[]
   competitorAnalysis?: CompetitorAnalysis
   crawlDiagnostics?: CrawlDiagnostics // NEW: Crawl diagnostics
+  localSEO?: LocalSEOAnalysis // NEW: Local SEO analysis
   raw: {
     startTime: number
     endTime: number
