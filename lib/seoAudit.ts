@@ -242,7 +242,7 @@ export async function runAudit(
   // Track crawled pages
   const crawledUrls = new Set<string>()
   const pages: PageData[] = []
-  const allIssues: Issue[] = []
+  let allIssues: Issue[] = [] // Changed to 'let' to allow reassignment in deduplication
   
   // Site-wide data
   const siteWide: SiteWideData = {
@@ -503,27 +503,6 @@ export async function runAudit(
     }
   }
   
-  // Local SEO Analysis (Sprint 2)
-  console.log('[Audit] Running Local SEO analysis...')
-  const localSEO = await analyzeLocalSEO(validPages, url)
-  console.log(`[Audit] Local SEO score: ${localSEO.overallScore}/100, Issues: ${localSEO.issues.length}`)
-  
-  // Add Local SEO issues to main issues list
-  localSEO.issues.forEach(issue => {
-    allIssues.push({
-      type: `local-seo-${issue.title.toLowerCase().replace(/\s+/g, '-')}`,
-      severity: issue.severity,
-      category: 'Technical', // Local SEO is part of technical SEO
-      title: `[Local SEO] ${issue.title}`,
-      message: issue.description,
-      description: issue.description,
-      affectedPages: issue.affectedPages,
-      howToFix: issue.howToFix,
-      fixInstructions: issue.howToFix,
-      priority: issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
-    })
-  })
-  
   // Add fix instructions to existing issues that don't have them
   allIssues.forEach(issue => {
     if (!issue.fixInstructions) {
@@ -561,6 +540,27 @@ export async function runAudit(
   // Step 3: Run crawl diagnostics
   const crawlDiagnostics = analyzeCrawl(uniquePages, url)
   console.log(`[Audit] Crawl diagnostics: ${getStatusMessage(crawlDiagnostics)}`)
+  
+  // Local SEO Analysis (Sprint 2) - Run after validPages is defined
+  console.log('[Audit] Running Local SEO analysis...')
+  const localSEO = await analyzeLocalSEO(validPages, url)
+  console.log(`[Audit] Local SEO score: ${localSEO.overallScore}/100, Issues: ${localSEO.issues.length}`)
+  
+  // Add Local SEO issues to main issues list
+  localSEO.issues.forEach(issue => {
+    allIssues.push({
+      type: `local-seo-${issue.title.toLowerCase().replace(/\s+/g, '-')}`,
+      severity: issue.severity,
+      category: 'Technical', // Local SEO is part of technical SEO
+      title: `[Local SEO] ${issue.title}`,
+      message: issue.description,
+      description: issue.description,
+      affectedPages: issue.affectedPages,
+      howToFix: issue.howToFix,
+      fixInstructions: issue.howToFix,
+      priority: issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
+    })
+  })
   
   // SPRINT 2.2: Update fix instructions with platform-specific instructions
   const platform: Platform = crawlDiagnostics.platform || 'custom'
