@@ -110,9 +110,14 @@ export interface CompetitorAnalysis {
   allCompetitors?: string[] // All detected competitors (not just the one analyzed)
 }
 
+// Import CrawlDiagnostics type
+import { CrawlDiagnostics } from './crawlDiagnostics'
+
 export interface AuditResult {
   summary: {
-    totalPages: number
+    totalPages: number // Valid pages only (for SEO analysis)
+    totalPagesCrawled?: number // NEW: Total pages including errors
+    errorPages?: number // NEW: Number of error pages
     overallScore: number
     technicalScore: number
     onPageScore: number
@@ -128,10 +133,12 @@ export interface AuditResult {
   contentIssues: Issue[]
   accessibilityIssues: Issue[]
   performanceIssues: Issue[]
-  pages: PageData[]
+  pages: PageData[] // Valid pages only
+  allPages?: PageData[] // NEW: All pages including errors (for page-level table)
   siteWide: SiteWideData
   imageAltAnalysis?: ImageAltAnalysis[]
   competitorAnalysis?: CompetitorAnalysis
+  crawlDiagnostics?: CrawlDiagnostics // NEW: Crawl diagnostics
   raw: {
     startTime: number
     endTime: number

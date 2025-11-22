@@ -463,17 +463,50 @@ export async function runAudit(
   // Sort issues by priority (highest first)
   allIssues.sort((a, b) => (b.priority || 0) - (a.priority || 0))
   
-  // Calculate scores (enhanced algorithm)
-  const scores = calculateEnhancedScores(pages, allIssues, siteWide)
+  // SPRINT 1 INTEGRATION: Apply deduplication and filtering
+  console.log(`[Audit] Applying Sprint 1 fixes: deduplication and 404 filtering`)
+  
+  // Step 1: Deduplicate pages by normalized URL
+  const uniquePages = deduplicatePages(pages)
+  
+  // Step 2: Filter valid pages from error pages
+  const { validPages, errorPages } = filterValidPages(uniquePages)
+  
+  // Step 3: Run crawl diagnostics
+  const crawlDiagnostics = analyzeCrawl(uniquePages, url)
+  console.log(`[Audit] Crawl diagnostics: ${getStatusMessage(crawlDiagnostics)}`)
+  
+  // Step 4: Add broken pages issue if any error pages found
+  if (errorPages.length > 0) {
+    console.log(`[Audit] Found ${errorPages.length} broken pages, adding to issues`)
+    allIssues.push({
+      type: 'broken-pages',
+      severity: 'High',
+      category: 'Technical',
+      title: 'Broken pages detected',
+      message: `${errorPages.length} page${errorPages.length > 1 ? 's' : ''} returned error status codes`,
+      description: `${errorPages.length} page${errorPages.length > 1 ? 's' : ''} returned errors (404, 500, etc.). These pages are inaccessible to users and search engines.`,
+      affectedPages: errorPages.map(p => p.url),
+      howToFix: `1. Check if these pages should exist\n2. Fix broken links pointing to these pages\n3. Implement proper 301 redirects if pages have moved\n4. Remove or update any internal links to these pages\n5. Check your sitemap.xml and remove broken URLs`,
+      priority: 10
+    })
+  }
+  
+  // Step 5: Calculate scores based on VALID pages only (not error pages)
+  console.log(`[Audit] Calculating scores for ${validPages.length} valid pages (excluding ${errorPages.length} error pages)`)
+  const scores = calculateEnhancedScores(validPages, allIssues, siteWide)
   
   // Categorize issues
   const categorizedIssues = categorizeIssues(allIssues)
   
   const endTime = Date.now()
   
+  // SPRINT 1: Return with crawl diagnostics and valid pages only
   return {
     summary: {
-      totalPages: pages.length,
+      totalPages: validPages.length, // Use valid pages count
+      totalPagesCrawled: uniquePages.length, // Total including errors
+      errorPages: errorPages.length, // NEW: Error page count
       overallScore: scores.overall,
       technicalScore: scores.technical,
       onPageScore: scores.onPage,
@@ -485,10 +518,12 @@ export async function runAudit(
       extractedKeywords: topKeywords.length > 0 ? topKeywords : undefined,
     },
     ...categorizedIssues,
-    pages,
+    pages: validPages, // Return only valid pages for SEO analysis
+    allPages: uniquePages, // NEW: All pages including errors (for page-level table)
     siteWide,
     imageAltAnalysis,
     competitorAnalysis,
+    crawlDiagnostics, // NEW: Crawl diagnostics
     raw: {
       startTime,
       endTime,
