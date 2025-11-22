@@ -105,7 +105,12 @@ export async function runAudit(
   console.log('[Audit] Checking sitemap.xml...')
   await checkSitemap(rootUrl, siteWide)
   
-  // Crawl pages (pass imageAltTags flag if add-on is selected)
+  // Initialize browser for this audit (reuse across all pages)
+  const { initializeBrowser, closeBrowser } = await import('./renderer')
+  await initializeBrowser()
+  
+  try {
+    // Crawl pages (pass imageAltTags flag if add-on is selected)
   console.log(`[Audit] Starting to crawl up to ${opts.maxPages} pages...`)
   await crawlPages(rootUrl, baseDomain, opts, crawledUrls, pages, allIssues, false) // Image alt tags analysis is done separately
   console.log(`[Audit] Finished crawling ${pages.length} pages`)
@@ -345,6 +350,14 @@ export async function runAudit(
   const categorizedIssues = categorizeIssues(allIssues)
   
   const endTime = Date.now()
+  
+  // Clean up browser instance after audit completes
+  try {
+    await closeBrowser()
+    console.log('[Audit] Browser closed successfully')
+  } catch (error) {
+    console.warn('[Audit] Error closing browser:', error)
+  }
   
   return {
     summary: {
@@ -830,9 +843,72 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
     }
     
     return pageData
-  } catch (error) {
-    // Fallback to basic fetch if rendering fails
-    console.warn(`Rendering failed for ${url}, falling back to basic fetch:`, error)
+  } catch (error: any) {
+    // Check if it's a connection error - if so, try to recreate browser and retry once
+    const errorMessage = error?.message || String(error)
+    const isConnectionError = /ECONNRESET|socket hang up|Connection closed|Target closed/i.test(errorMessage)
+    
+    if (isConnectionError) {
+      console.warn(`[Renderer] Connection error for ${url}, attempting browser recovery...`)
+      try {
+        // Force browser recreation
+        const { closeBrowser, initializeBrowser } = await import('./renderer')
+        await closeBrowser()
+        await new Promise(resolve => setTimeout(resolve, 1000)) // Wait a bit
+        await initializeBrowser()
+        
+        // Retry once with fresh browser
+        console.log(`[Renderer] Retrying ${url} with fresh browser...`)
+        const rendered = await renderPage(url, userAgent, 0) // No additional retries in renderPage
+        
+        let initialHtml = ''
+        try {
+          const initialResponse = await fetch(url, {
+            signal: AbortSignal.timeout(5000),
+            headers: { 'User-Agent': userAgent }
+          })
+          initialHtml = await initialResponse.text()
+        } catch {
+          initialHtml = rendered.renderedHtml
+        }
+        
+        const llmReadability = calculateRenderingPercentage(initialHtml, rendered.renderedHtml)
+        const [httpVersion, compression] = await Promise.all([
+          checkHttpVersion(url, userAgent),
+          checkCompression(url, userAgent)
+        ])
+        
+        const pageSpeedPromise = isMainPage ? fetchPageSpeedInsights(url) : Promise.resolve(null)
+        const pageData = await parseHtmlWithRenderer(
+          rendered.renderedHtml,
+          initialHtml,
+          url,
+          rendered.statusCode,
+          rendered.loadTime,
+          rendered.contentType,
+          rendered.metrics,
+          rendered.imageData,
+          rendered.linkData,
+          llmReadability,
+          needsImageDetails,
+          httpVersion,
+          compression
+        )
+        
+        const pageSpeedData = await pageSpeedPromise
+        if (pageSpeedData) {
+          pageData.pageSpeedData = pageSpeedData
+        }
+        
+        return pageData
+      } catch (retryError) {
+        console.warn(`[Renderer] Retry also failed for ${url}, falling back to basic fetch:`, retryError)
+      }
+    } else {
+      console.warn(`Rendering failed for ${url}, falling back to basic fetch:`, error)
+    }
+    
+    // If Puppeteer fails or retry fails, fall back to basic fetch
     const fallbackData = await analyzePageFallback(url, userAgent)
     
     // Still try to get HTTP version and compression even in fallback

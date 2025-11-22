@@ -38,102 +38,203 @@ export interface RenderedPageData {
   }
 }
 
+// Browser instance per audit (not global)
 let browserInstance: Browser | null = null
+let pageInstance: Page | null = null
 
 /**
- * Get or create a browser instance (reuse for performance)
+ * Get or create a browser instance with connection checking and auto-reconnect
  */
 async function getBrowser(): Promise<Browser> {
-  if (!browserInstance) {
-    browserInstance = await puppeteer.launch({
-      headless: "new",
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu'
-      ]
-    })
+  // Check if browser exists and is still connected
+  if (browserInstance && browserInstance.isConnected()) {
+    return browserInstance
   }
+  
+  // Browser doesn't exist or is disconnected - create new one
+  if (browserInstance) {
+    try {
+      await browserInstance.close().catch(() => {})
+    } catch {
+      // Ignore errors when closing disconnected browser
+    }
+    browserInstance = null
+  }
+  
+  console.log('[Renderer] Launching new browser instance...')
+  browserInstance = await puppeteer.launch({
+    headless: "new",
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--disable-gpu',
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process'
+    ],
+    // Increase timeout for browser launch
+    timeout: 60000
+  })
+  
+  // Handle browser disconnection
+  browserInstance.on('disconnected', () => {
+    console.warn('[Renderer] Browser disconnected, will recreate on next use')
+    browserInstance = null
+    pageInstance = null
+  })
+  
   return browserInstance
 }
 
 /**
- * Close browser instance (call on app shutdown)
+ * Get or create a page instance (reuse for performance within same audit)
+ */
+async function getPage(): Promise<Page> {
+  const browser = await getBrowser()
+  
+  // Reuse existing page if it's still open
+  if (pageInstance && !pageInstance.isClosed()) {
+    return pageInstance
+  }
+  
+  // Create new page
+  pageInstance = await browser.newPage()
+  return pageInstance
+}
+
+/**
+ * Initialize browser for an audit (call at start of audit)
+ */
+export async function initializeBrowser(): Promise<void> {
+  await getBrowser()
+}
+
+/**
+ * Close browser instance (call at end of audit or on error)
  */
 export async function closeBrowser(): Promise<void> {
+  if (pageInstance && !pageInstance.isClosed()) {
+    try {
+      await pageInstance.close()
+    } catch (error) {
+      console.warn('[Renderer] Error closing page:', error)
+    }
+    pageInstance = null
+  }
+  
   if (browserInstance) {
-    await browserInstance.close()
+    try {
+      await browserInstance.close()
+    } catch (error) {
+      console.warn('[Renderer] Error closing browser:', error)
+    }
     browserInstance = null
   }
 }
 
 /**
- * Render a page with JavaScript execution
+ * Render a page with JavaScript execution (with retry logic for ECONNRESET)
  */
 export async function renderPage(
   url: string,
-  userAgent: string = 'SEO-Audit-Bot/1.0'
+  userAgent: string = 'SEO-Audit-Bot/1.0',
+  maxRetries: number = 2
 ): Promise<RenderedPageData> {
-  const browser = await getBrowser()
-  const page = await browser.newPage()
+  let lastError: Error | null = null
   
-  try {
-    // Set user agent
-    await page.setUserAgent(userAgent)
-    
-    // Set viewport
-    await page.setViewport({ width: 1920, height: 1080 })
-    
-    const startTime = Date.now()
-    
-    // Navigate and wait for network to be idle
-    const response = await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 30000
-    })
-    
-    const loadTime = Date.now() - startTime
-    
-    // Get status code
-    const statusCode = response?.status() || 200
-    
-    // Get content type
-    const contentType = response?.headers()['content-type'] || 'text/html'
-    
-    // Get rendered HTML (after JS execution)
-    const renderedHtml = await page.content()
-    
-    // Measure Core Web Vitals
-    const metrics = await measureCoreWebVitals(page)
-    
-    // Wait a bit more for any lazy-loaded content
-    await page.waitForTimeout(2000)
-    
-    // Get final HTML (in case lazy loading added content)
-    const finalHtml = await page.content()
-    
-    // Analyze images and links while page is still open
-    const imageData = await analyzeImages(page, url)
-    const linkData = await analyzeLinks(page, url)
-    
-    await page.close()
-    
-    return {
-      html: renderedHtml,
-      renderedHtml: finalHtml,
-      loadTime,
-      statusCode,
-      contentType,
-      metrics,
-      imageData,
-      linkData
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const page = await getPage()
+      
+      // Set user agent
+      await page.setUserAgent(userAgent)
+      
+      // Set viewport
+      await page.setViewport({ width: 1920, height: 1080 })
+      
+      const startTime = Date.now()
+      
+      // Navigate and wait for network to be idle
+      const response = await page.goto(url, {
+        waitUntil: 'networkidle2',
+        timeout: 30000
+      })
+      
+      const loadTime = Date.now() - startTime
+      
+      // Get status code
+      const statusCode = response?.status() || 200
+      
+      // Get content type
+      const contentType = response?.headers()['content-type'] || 'text/html'
+      
+      // Get rendered HTML (after JS execution)
+      const renderedHtml = await page.content()
+      
+      // Measure Core Web Vitals
+      const metrics = await measureCoreWebVitals(page)
+      
+      // Wait a bit more for any lazy-loaded content
+      await page.waitForTimeout(2000)
+      
+      // Get final HTML (in case lazy loading added content)
+      const finalHtml = await page.content()
+      
+      // Analyze images and links while page is still open
+      const imageData = await analyzeImages(page, url)
+      const linkData = await analyzeLinks(page, url)
+      
+      // Don't close the page - we'll reuse it for next page in same audit
+      // Just navigate away to clear state
+      try {
+        await page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {})
+      } catch {
+        // Ignore errors when clearing page
+      }
+      
+      return {
+        html: renderedHtml,
+        renderedHtml: finalHtml,
+        loadTime,
+        statusCode,
+        contentType,
+        metrics,
+        imageData,
+        linkData
+      }
+    } catch (error: any) {
+      lastError = error
+      const errorMessage = error?.message || String(error)
+      const isConnectionError = /ECONNRESET|socket hang up|Connection closed|Target closed/i.test(errorMessage)
+      
+      // If it's a connection error and we have retries left, force browser recreation
+      if (isConnectionError && attempt < maxRetries) {
+        console.warn(`[Renderer] Connection error on attempt ${attempt + 1}/${maxRetries + 1} for ${url}, recreating browser...`)
+        // Force browser recreation
+        if (browserInstance) {
+          try {
+            await browserInstance.close().catch(() => {})
+          } catch {
+            // Ignore
+          }
+          browserInstance = null
+          pageInstance = null
+        }
+        // Wait a bit before retry
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        continue
+      }
+      
+      // If not a connection error or out of retries, throw
+      if (!isConnectionError || attempt === maxRetries) {
+        throw new Error(`Failed to render ${url} after ${attempt + 1} attempts: ${errorMessage}`)
+      }
     }
-  } catch (error) {
-    await page.close()
-    throw new Error(`Failed to render ${url}: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
+  
+  // Should never reach here, but TypeScript needs it
+  throw lastError || new Error(`Failed to render ${url}`)
 }
 
 /**

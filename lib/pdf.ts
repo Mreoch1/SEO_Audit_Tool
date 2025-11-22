@@ -26,8 +26,12 @@ export async function generatePDF(
   const html = generateReportHTML(auditResult, branding, url)
   
   const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage'
+    ]
   })
   
   try {

@@ -5,6 +5,9 @@ import { prisma } from '@/lib/db'
 import { runAudit } from '@/lib/seoAudit'
 import { generateShortSummary, generateDetailedSummary } from '@/lib/reportSummary'
 
+// Ensure we're using Node.js runtime (required for Puppeteer)
+export const runtime = 'nodejs'
+
 // GET /api/audits - List audits
 export async function GET(request: NextRequest) {
   try {
