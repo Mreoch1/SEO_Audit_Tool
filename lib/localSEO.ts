@@ -72,6 +72,30 @@ export interface GBPIndicators {
   hasGoogleReviewsWidget: boolean
   hasGBPLink: boolean
   gbpUrl?: string
+  hasOpeningHours: boolean
+  openingHours?: string
+  recommendations: string[]
+}
+
+/**
+ * Local citation data
+ */
+export interface LocalCitation {
+  platform: string // e.g., 'Yelp', 'Yellow Pages', 'Google Business Profile'
+  url?: string
+  hasNAP: boolean
+  isConsistent: boolean
+}
+
+/**
+ * NAP consistency analysis
+ */
+export interface NAPConsistency {
+  consistencyScore: number // 0-100
+  nameVariations: string[]
+  addressVariations: string[]
+  phoneVariations: string[]
+  inconsistentPages: string[]
   recommendations: string[]
 }
 
@@ -80,10 +104,12 @@ export interface GBPIndicators {
  */
 export interface LocalSEOAnalysis {
   nap: NAPData
+  napConsistency: NAPConsistency // NEW: Agency tier - NAP consistency analysis
   schema: LocalSchemaAnalysis
   serviceAreaPages: ServiceAreaPage[]
   keywords: LocalKeywordAnalysis
   gbp: GBPIndicators
+  citations: LocalCitation[] // NEW: Agency tier - Local citations audit
   overallScore: number // 0-100
   issues: LocalSEOIssue[]
   recommendations: string[]
@@ -112,6 +138,9 @@ export async function analyzeLocalSEO(
   // Extract NAP data
   const nap = extractNAP(pages)
   
+  // NEW: Agency tier - NAP consistency analysis
+  const napConsistency = analyzeNAPConsistency(pages, nap)
+  
   // Analyze local schema
   const schema = analyzeLocalSchema(pages)
   
@@ -121,26 +150,31 @@ export async function analyzeLocalSEO(
   // Analyze local keywords
   const keywords = analyzeLocalKeywords(pages)
   
-  // Check for GBP indicators
+  // Check for GBP indicators (enhanced for Agency tier)
   const gbp = detectGBPIndicators(pages)
   
+  // NEW: Agency tier - Local citations audit
+  const citations = await auditLocalCitations(pages, rootUrl)
+  
   // Calculate overall score
-  const overallScore = calculateLocalSEOScore(nap, schema, serviceAreaPages, keywords, gbp)
+  const overallScore = calculateLocalSEOScore(nap, napConsistency, schema, serviceAreaPages, keywords, gbp, citations)
   
   // Generate issues
-  const issues = generateLocalSEOIssues(nap, schema, serviceAreaPages, keywords, gbp)
+  const issues = generateLocalSEOIssues(nap, napConsistency, schema, serviceAreaPages, keywords, gbp, citations)
   
   // Generate recommendations
-  const recommendations = generateLocalSEORecommendations(nap, schema, serviceAreaPages, keywords, gbp)
+  const recommendations = generateLocalSEORecommendations(nap, napConsistency, schema, serviceAreaPages, keywords, gbp, citations)
   
   console.log(`[Local SEO] Analysis complete. Score: ${overallScore}/100, Issues: ${issues.length}`)
   
   return {
     nap,
+    napConsistency,
     schema,
     serviceAreaPages,
     keywords,
     gbp,
+    citations,
     overallScore,
     issues,
     recommendations
@@ -458,13 +492,14 @@ function analyzeLocalKeywords(pages: PageData[]): LocalKeywordAnalysis {
 }
 
 /**
- * Detect Google Business Profile indicators
+ * Detect Google Business Profile indicators (Enhanced for Agency tier)
  */
 function detectGBPIndicators(pages: PageData[]): GBPIndicators {
   const indicators: GBPIndicators = {
     hasGoogleMapsEmbed: false,
     hasGoogleReviewsWidget: false,
     hasGBPLink: false,
+    hasOpeningHours: false,
     recommendations: []
   }
   
@@ -489,6 +524,16 @@ function detectGBPIndicators(pages: PageData[]): GBPIndicators {
       indicators.hasGBPLink = true
       indicators.gbpUrl = gbpLinkMatch[0]
     }
+    
+    // NEW: Check for opening hours (in schema or text)
+    if (html.includes('opening hours') || html.includes('hours:') || html.includes('open') && html.includes('monday')) {
+      indicators.hasOpeningHours = true
+      // Try to extract hours
+      const hoursMatch = html.match(/(?:hours?|open)[:\s]+([^<]+?)(?:<|closed|hours)/i)
+      if (hoursMatch) {
+        indicators.openingHours = hoursMatch[1].trim()
+      }
+    }
   }
   
   // Generate recommendations
@@ -501,26 +546,31 @@ function detectGBPIndicators(pages: PageData[]): GBPIndicators {
   if (!indicators.hasGoogleReviewsWidget) {
     indicators.recommendations.push('Display Google reviews on your website to build trust and improve local SEO')
   }
+  if (!indicators.hasOpeningHours) {
+    indicators.recommendations.push('Display your business hours prominently on your website and in schema markup')
+  }
   
   return indicators
 }
 
 /**
- * Calculate overall local SEO score
+ * Calculate overall local SEO score (Enhanced for Agency tier)
  */
 function calculateLocalSEOScore(
   nap: NAPData,
+  napConsistency: NAPConsistency,
   schema: LocalSchemaAnalysis,
   serviceAreaPages: ServiceAreaPage[],
   keywords: LocalKeywordAnalysis,
-  gbp: GBPIndicators
+  gbp: GBPIndicators,
+  citations: LocalCitation[]
 ): number {
   let score = 0
   
-  // NAP consistency (25 points)
-  if (nap.phone) score += 10
-  if (nap.address) score += 10
-  if (nap.isConsistent) score += 5
+  // NAP consistency (25 points) - Enhanced with consistency score
+  if (nap.phone) score += 8
+  if (nap.address) score += 8
+  score += (napConsistency.consistencyScore / 100) * 9 // Weighted by consistency
   
   // Local schema (30 points)
   if (schema.hasLocalBusiness) score += 15
@@ -537,23 +587,32 @@ function calculateLocalSEOScore(
   if (keywords.hasLocationKeywords) score += 8
   if (keywords.hasServiceKeywords) score += 7
   
-  // GBP indicators (10 points)
-  if (gbp.hasGoogleMapsEmbed) score += 4
+  // GBP indicators (10 points) - Enhanced
+  if (gbp.hasGoogleMapsEmbed) score += 3
   if (gbp.hasGBPLink) score += 3
-  if (gbp.hasGoogleReviewsWidget) score += 3
+  if (gbp.hasGoogleReviewsWidget) score += 2
+  if (gbp.hasOpeningHours) score += 2
+  
+  // NEW: Local citations (5 points for Agency tier)
+  const consistentCitations = citations.filter(c => c.isConsistent).length
+  if (citations.length > 0) {
+    score += Math.min(5, (consistentCitations / citations.length) * 5)
+  }
   
   return Math.min(score, 100)
 }
 
 /**
- * Generate local SEO issues
+ * Generate local SEO issues (Enhanced for Agency tier)
  */
 function generateLocalSEOIssues(
   nap: NAPData,
+  napConsistency: NAPConsistency,
   schema: LocalSchemaAnalysis,
   serviceAreaPages: ServiceAreaPage[],
   keywords: LocalKeywordAnalysis,
-  gbp: GBPIndicators
+  gbp: GBPIndicators,
+  citations: LocalCitation[]
 ): LocalSEOIssue[] {
   const issues: LocalSEOIssue[] = []
   
@@ -576,13 +635,14 @@ function generateLocalSEOIssues(
     })
   }
   
-  if (!nap.isConsistent && nap.variations && nap.variations.length > 1) {
+  // Enhanced NAP consistency issue (Agency tier)
+  if (napConsistency.consistencyScore < 80) {
     issues.push({
-      severity: 'Medium',
-      title: 'Inconsistent NAP data',
-      description: `Found ${nap.variations.length} different versions of your business information across your website.`,
-      howToFix: '1. Standardize your business name, address, and phone number\n2. Use the exact same format everywhere\n3. Update all pages to match your Google Business Profile\n4. Check footer, contact page, and schema markup for consistency',
-      affectedPages: nap.foundOn
+      severity: 'High',
+      title: 'Inconsistent NAP data across pages',
+      description: `Found ${napConsistency.phoneVariations.length} phone variations and ${napConsistency.addressVariations.length} address variations. NAP consistency score: ${napConsistency.consistencyScore}/100.`,
+      howToFix: '1. Standardize your business name, address, and phone number\n2. Use the exact same format everywhere\n3. Update all pages to match your Google Business Profile\n4. Check footer, contact page, and schema markup for consistency\n5. Remove any old or incorrect NAP data',
+      affectedPages: napConsistency.inconsistentPages.slice(0, 10)
     })
   }
   
@@ -625,7 +685,7 @@ function generateLocalSEOIssues(
     })
   }
   
-  // GBP issues
+  // GBP issues (Enhanced)
   if (!gbp.hasGoogleMapsEmbed) {
     issues.push({
       severity: 'Low',
@@ -635,18 +695,49 @@ function generateLocalSEOIssues(
     })
   }
   
+  if (!gbp.hasOpeningHours) {
+    issues.push({
+      severity: 'Medium',
+      title: 'Missing opening hours',
+      description: 'No business hours found on your website. Opening hours help with local search and user experience.',
+      howToFix: '1. Add your business hours to your contact page\n2. Include them in your LocalBusiness schema markup\n3. Display hours prominently in your header or footer\n4. Keep hours updated, especially during holidays'
+    })
+  }
+  
+  // NEW: Citation issues (Agency tier)
+  if (citations.length === 0) {
+    issues.push({
+      severity: 'Medium',
+      title: 'No local citations detected',
+      description: 'No links to local directory listings found on your website. Citations help with local search rankings.',
+      howToFix: '1. Create listings on Google Business Profile, Yelp, Yellow Pages\n2. Add links to your citations from your website\n3. Ensure NAP data is consistent across all citations\n4. Claim and optimize your listings on major platforms'
+    })
+  } else {
+    const inconsistentCitations = citations.filter(c => !c.isConsistent)
+    if (inconsistentCitations.length > 0) {
+      issues.push({
+        severity: 'High',
+        title: 'Inconsistent citation data',
+        description: `Found ${inconsistentCitations.length} citation(s) with inconsistent NAP data.`,
+        howToFix: '1. Review all your local directory listings\n2. Update NAP data to match your primary business information\n3. Use the exact same format (name, address, phone) everywhere\n4. Verify consistency using a citation management tool'
+      })
+    }
+  }
+  
   return issues
 }
 
 /**
- * Generate local SEO recommendations
+ * Generate local SEO recommendations (Enhanced for Agency tier)
  */
 function generateLocalSEORecommendations(
   nap: NAPData,
+  napConsistency: NAPConsistency,
   schema: LocalSchemaAnalysis,
   serviceAreaPages: ServiceAreaPage[],
   keywords: LocalKeywordAnalysis,
-  gbp: GBPIndicators
+  gbp: GBPIndicators,
+  citations: LocalCitation[]
 ): string[] {
   const recommendations: string[] = []
   
@@ -668,6 +759,184 @@ function generateLocalSEORecommendations(
   recommendations.push('Encourage customers to leave Google reviews to improve local rankings')
   recommendations.push('Add your business to local directories (Yelp, Yellow Pages, industry-specific directories)')
   
+  // Add NAP consistency recommendations
+  if (napConsistency.consistencyScore < 80) {
+    recommendations.push(`Standardize your NAP data across all pages. Found ${napConsistency.nameVariations.length} name variations, ${napConsistency.addressVariations.length} address variations.`)
+  }
+  
+  // Add citation recommendations
+  if (citations.length === 0) {
+    recommendations.push('Create listings on major local directories (Google Business Profile, Yelp, Yellow Pages, Bing Places)')
+  } else {
+    const inconsistentCitations = citations.filter(c => !c.isConsistent).length
+    if (inconsistentCitations > 0) {
+      recommendations.push(`Update ${inconsistentCitations} inconsistent citation(s) to match your primary NAP`)
+    }
+  }
+  
   return recommendations
+}
+
+/**
+ * Analyze NAP consistency across all pages (Agency tier)
+ */
+function analyzeNAPConsistency(pages: PageData[], nap: NAPData): NAPConsistency {
+  const consistency: NAPConsistency = {
+    consistencyScore: 100,
+    nameVariations: [],
+    addressVariations: [],
+    phoneVariations: [],
+    inconsistentPages: [],
+    recommendations: []
+  }
+  
+  // Collect all NAP variations from pages
+  const nameSet = new Set<string>()
+  const addressSet = new Set<string>()
+  const phoneSet = new Set<string>()
+  
+  for (const page of pages) {
+    if (!page.html) continue
+    
+    const html = page.html
+    
+    // Extract phone numbers
+    const phoneRegex = /(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g
+    const phones = html.match(phoneRegex)
+    if (phones) {
+      phones.forEach(phone => {
+        const normalized = phone.replace(/[^\d]/g, '')
+        if (normalized.length === 10 || normalized.length === 11) {
+          phoneSet.add(normalized)
+        }
+      })
+    }
+    
+    // Extract addresses
+    const addressRegex = /\d{1,5}\s+[a-z0-9\s,.-]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|way|court|ct|boulevard|blvd|circle|cir|place|pl)/gi
+    const addresses = html.match(addressRegex)
+    if (addresses) {
+      addresses.forEach(addr => {
+        addressSet.add(addr.trim().toLowerCase())
+      })
+    }
+  }
+  
+  consistency.phoneVariations = Array.from(phoneSet)
+  consistency.addressVariations = Array.from(addressSet)
+  
+  // Calculate consistency score
+  let deductions = 0
+  
+  if (consistency.phoneVariations.length > 1) {
+    deductions += 20 * (consistency.phoneVariations.length - 1)
+  }
+  if (consistency.addressVariations.length > 1) {
+    deductions += 20 * (consistency.addressVariations.length - 1)
+  }
+  
+  consistency.consistencyScore = Math.max(0, 100 - deductions)
+  
+  // Find inconsistent pages
+  if (consistency.phoneVariations.length > 1 || consistency.addressVariations.length > 1) {
+    // Mark pages with different NAP data as inconsistent
+    pages.forEach(page => {
+      if (page.html) {
+        const hasDifferentPhone = consistency.phoneVariations.some(phone => 
+          page.html?.includes(phone) && phone !== nap.phone
+        )
+        const hasDifferentAddress = consistency.addressVariations.some(addr => 
+          page.html?.toLowerCase().includes(addr) && addr !== nap.address?.toLowerCase()
+        )
+        
+        if (hasDifferentPhone || hasDifferentAddress) {
+          consistency.inconsistentPages.push(page.url)
+        }
+      }
+    })
+  }
+  
+  // Generate recommendations
+  if (consistency.consistencyScore < 80) {
+    consistency.recommendations.push(
+      `Found ${consistency.phoneVariations.length} phone number variations and ${consistency.addressVariations.length} address variations. ` +
+      `Standardize your NAP data across all pages to match your Google Business Profile.`
+    )
+  }
+  
+  return consistency
+}
+
+/**
+ * Audit local citations (Agency tier)
+ * Checks for common local directory listings
+ */
+async function auditLocalCitations(
+  pages: PageData[],
+  rootUrl: string
+): Promise<LocalCitation[]> {
+  const citations: LocalCitation[] = []
+  
+  // Common local citation platforms
+  const citationPlatforms = [
+    'Google Business Profile',
+    'Yelp',
+    'Yellow Pages',
+    'Bing Places',
+    'Facebook Business',
+    'Apple Maps',
+    'Foursquare'
+  ]
+  
+  // Check for links to citation platforms in HTML
+  for (const page of pages) {
+    if (!page.html) continue
+    
+    const html = page.html.toLowerCase()
+    
+    // Check for Google Business Profile
+    if (html.includes('google.com/maps/place') || html.includes('google.com/business')) {
+      citations.push({
+        platform: 'Google Business Profile',
+        hasNAP: true, // Assume NAP is present if link exists
+        isConsistent: true // Would need to verify against site NAP
+      })
+    }
+    
+    // Check for Yelp
+    if (html.includes('yelp.com/biz')) {
+      citations.push({
+        platform: 'Yelp',
+        hasNAP: true,
+        isConsistent: true
+      })
+    }
+    
+    // Check for Yellow Pages
+    if (html.includes('yellowpages.com') || html.includes('yp.com')) {
+      citations.push({
+        platform: 'Yellow Pages',
+        hasNAP: true,
+        isConsistent: true
+      })
+    }
+    
+    // Check for Facebook Business
+    if (html.includes('facebook.com/pages') || html.includes('facebook.com/business')) {
+      citations.push({
+        platform: 'Facebook Business',
+        hasNAP: true,
+        isConsistent: true
+      })
+    }
+  }
+  
+  // Note: Full citation audit would require checking external directories
+  // This is a basic on-site detection. For full audit, would need to:
+  // 1. Search for business name + location on each platform
+  // 2. Verify NAP consistency
+  // 3. Check listing completeness
+  
+  return citations
 }
 

@@ -515,23 +515,59 @@ export function calculateAllScores(
 
 /**
  * Calculate overall SEO score (weighted average)
+ * Updated weights per Agency tier requirements:
+ * - Technical: 35%
+ * - On-Page: 25%
+ * - Content: 25%
+ * - Accessibility: 15%
  */
 export function calculateOverallScore(categoryScores: CategoryScores): number {
   const weights = {
-    technical: 0.25,
-    onPage: 0.25,
-    content: 0.20,
-    performance: 0.20,
-    accessibility: 0.10
+    technical: 0.35,  // Updated from 0.25
+    onPage: 0.25,     // Same
+    content: 0.25,     // Updated from 0.20
+    performance: 0.0,  // Removed from overall (still calculated separately)
+    accessibility: 0.15 // Updated from 0.10
   }
   
-  const overall = 
-    categoryScores.technical * weights.technical +
-    categoryScores.onPage * weights.onPage +
-    categoryScores.content * weights.content +
-    categoryScores.performance * weights.performance +
-    categoryScores.accessibility * weights.accessibility
+  // Apply diminishing returns to avoid 0/100 extremes
+  const technical = applyDiminishingReturns(categoryScores.technical)
+  const onPage = applyDiminishingReturns(categoryScores.onPage)
+  const content = applyDiminishingReturns(categoryScores.content)
+  const accessibility = applyDiminishingReturns(categoryScores.accessibility)
   
-  return Math.round(overall)
+  const overall = 
+    technical * weights.technical +
+    onPage * weights.onPage +
+    content * weights.content +
+    accessibility * weights.accessibility
+  
+  // Ensure score is between 5-95 to avoid extremes
+  return Math.max(5, Math.min(95, Math.round(overall)))
+}
+
+/**
+ * Apply diminishing returns to prevent extreme scores
+ * Maps 0-100 to approximately 10-90 range to avoid 0/100 extremes
+ */
+function applyDiminishingReturns(score: number): number {
+  if (score <= 0) return 10 // Minimum floor
+  if (score >= 100) return 90 // Maximum ceiling
+  
+  // Use a sigmoid-like curve to compress extremes
+  // Maps 0-100 to approximately 10-90
+  const normalized = score / 100
+  const compressed = 10 + (normalized * 80) // Scale to 10-90 range
+  
+  // Add slight curve to further compress extremes
+  if (normalized < 0.2) {
+    // Very low scores get slight boost
+    return Math.max(10, compressed * 1.1)
+  } else if (normalized > 0.8) {
+    // Very high scores get slight reduction
+    return Math.min(90, compressed * 0.95)
+  }
+  
+  return compressed
 }
 

@@ -2036,11 +2036,13 @@ function analyzeSiteWideIssues(
 /**
  * Calculate enhanced SEO scores with more nuanced algorithm
  * 
- * Scoring weights (adjustable):
- * - Technical: 30%
- * - On-page: 30%
- * - Content: 20%
- * - Accessibility: 20%
+ * Updated scoring weights (Agency tier requirements):
+ * - Technical: 35%
+ * - On-page: 25%
+ * - Content: 25%
+ * - Accessibility: 15%
+ * 
+ * Uses weighted scoring with diminishing returns to avoid 0/100 extremes
  */
 function calculateEnhancedScores(
   pages: PageData[],
@@ -2054,187 +2056,30 @@ function calculateEnhancedScores(
   accessibility: number
 } {
   if (pages.length === 0) {
+    // Return neutral scores instead of 0 to avoid extremes
     return {
-      overall: 0,
-      technical: 0,
-      onPage: 0,
-      content: 0,
-      accessibility: 0
+      overall: 50,
+      technical: 50,
+      onPage: 50,
+      content: 50,
+      accessibility: 50
     }
   }
   
-  // Enhanced Technical score (0-100)
-  let technicalScore = 100
-  technicalScore -= !siteWide.robotsTxtExists ? 8 : 0
-  technicalScore -= !siteWide.sitemapExists ? 12 : 0
-  technicalScore -= Math.min((siteWide.brokenPages.length / pages.length) * 40, 40)
+  // Use the new scoring module functions
+  const categoryScores = calculateAllScores(issues, pages, {
+    robotsTxtExists: siteWide.robotsTxtExists,
+    sitemapExists: siteWide.sitemapExists
+  })
   
-  const technicalIssues = issues.filter(i => i.category === 'Technical')
-  const highTechIssues = technicalIssues.filter(i => i.severity === 'High')
-  const mediumTechIssues = technicalIssues.filter(i => i.severity === 'Medium')
-  const lowTechIssues = technicalIssues.filter(i => i.severity === 'Low')
-  
-  // More nuanced penalty system
-  technicalScore -= Math.min(highTechIssues.length * 12, 50)
-  technicalScore -= Math.min(mediumTechIssues.length * 6, 30)
-  technicalScore -= Math.min(lowTechIssues.length * 2, 10)
-  
-  // Bonus for HTTPS
-  const hasHttps = pages.some(p => p.url.startsWith('https://'))
-  if (hasHttps) technicalScore = Math.min(100, technicalScore + 5)
-  
-  technicalScore = Math.max(0, Math.min(100, Math.round(technicalScore)))
-  
-  // Enhanced On-page score (0-100)
-  let onPageScore = 100
-  const onPageIssues = issues.filter(i => i.category === 'On-page')
-  
-  if (onPageIssues.length === 0) {
-    onPageScore = 100
-  } else {
-    const highOnPagePages = new Set<string>()
-    const mediumOnPagePages = new Set<string>()
-    const lowOnPagePages = new Set<string>()
-    
-    onPageIssues.forEach(issue => {
-      if (issue.affectedPages && issue.affectedPages.length > 0) {
-        issue.affectedPages.forEach(url => {
-          if (issue.severity === 'High') {
-            highOnPagePages.add(url)
-          } else if (issue.severity === 'Medium') {
-            mediumOnPagePages.add(url)
-          } else if (issue.severity === 'Low') {
-            lowOnPagePages.add(url)
-          }
-        })
-      }
-    })
-    
-    const highIssueRate = highOnPagePages.size / pages.length
-    const mediumIssueRate = mediumOnPagePages.size / pages.length
-    const lowIssueRate = lowOnPagePages.size / pages.length
-    
-    onPageScore -= Math.min(highIssueRate * 65, 65)
-    onPageScore -= Math.min(mediumIssueRate * 30, 30)
-    onPageScore -= Math.min(lowIssueRate * 10, 10)
-    
-    // Check for pages with good on-page elements
-    const pagesWithGoodOnPage = pages.filter(p => 
-      p.title && p.titleLength! >= 30 && p.titleLength! <= 60 &&
-      p.metaDescription && p.metaDescriptionLength! >= 120 && p.metaDescriptionLength! <= 160 &&
-      p.h1Count === 1
-    ).length
-    const goodOnPageRate = pagesWithGoodOnPage / pages.length
-    onPageScore += goodOnPageRate * 10 // Bonus for good on-page elements
-    
-    const uniqueIssueTypes = new Set(onPageIssues.map(i => i.message))
-    if (uniqueIssueTypes.size > pages.length * 0.5) {
-      onPageScore -= 5
-    }
-  }
-  
-  onPageScore = Math.max(0, Math.min(100, Math.round(onPageScore)))
-  
-  // Enhanced Content score (0-100)
-  // Factors: word count, readability, content quality issues
-  let contentScore = 100
-  const thinPages = pages.filter(p => p.wordCount < 300).length
-  const goodContentPages = pages.filter(p => p.wordCount >= 1000).length
-  
-  // Word count penalties and bonuses
-  contentScore -= Math.min((thinPages / pages.length) * 45, 45)
-  contentScore += Math.min((goodContentPages / pages.length) * 15, 15) // Bonus for comprehensive content
-  
-  // Content issues penalties
-  const contentIssues = issues.filter(i => i.category === 'Content')
-  contentScore -= Math.min(contentIssues.filter(i => i.severity === 'High').length * 12, 40)
-  contentScore -= Math.min(contentIssues.filter(i => i.severity === 'Medium').length * 6, 25)
-  contentScore -= Math.min(contentIssues.filter(i => i.severity === 'Low').length * 2, 10)
-  
-  // Check average word count
-  const avgWordCount = pages.reduce((sum, p) => sum + p.wordCount, 0) / pages.length
-  if (avgWordCount >= 1000) {
-    contentScore += 5 // Bonus for comprehensive content
-  } else if (avgWordCount < 300) {
-    contentScore -= 10 // Penalty for thin content
-  }
-  
-  // **NEW: Readability penalty** (Flesch Reading Ease)
-  // Extract readability scores from content issues
-  const readabilityIssues = contentIssues.filter(i => 
-    i.message.toLowerCase().includes('readability') || 
-    i.message.toLowerCase().includes('flesch') ||
-    i.message.toLowerCase().includes('reading ease')
-  )
-  
-  if (readabilityIssues.length > 0) {
-    // If readability is mentioned in issues, it's a problem
-    // Severe readability issues (Flesch < 30) should significantly impact score
-    const severeReadabilityIssues = readabilityIssues.filter(i => 
-      i.details && /flesch.*?(\d+)/i.test(i.details) && parseInt(i.details.match(/flesch.*?(\d+)/i)![1]) < 30
-    )
-    
-    if (severeReadabilityIssues.length > 0) {
-      // Very difficult to read (Flesch < 30) = major penalty
-      contentScore -= 25
-    } else if (readabilityIssues.some(i => i.severity === 'High')) {
-      // Difficult to read (Flesch 30-50) = moderate penalty
-      contentScore -= 15
-    } else {
-      // Somewhat difficult to read (Flesch 50-60) = minor penalty
-      contentScore -= 8
-    }
-  }
-  
-  // **NEW: Sentence length penalty**
-  const longSentenceIssues = contentIssues.filter(i => 
-    i.message.toLowerCase().includes('sentence') && 
-    i.message.toLowerCase().includes('long')
-  )
-  
-  if (longSentenceIssues.length > 0) {
-    // Sentences averaging > 50 words = readability problem
-    contentScore -= 10
-  }
-  
-  contentScore = Math.max(0, Math.min(100, Math.round(contentScore)))
-  
-  // Enhanced Accessibility score (0-100)
-  let accessibilityScore = 100
-  const totalImages = pages.reduce((sum, p) => sum + p.imageCount, 0)
-  const totalMissingAlt = pages.reduce((sum, p) => sum + p.missingAltCount, 0)
-  
-  if (totalImages > 0) {
-    const missingAltRate = totalMissingAlt / totalImages
-    accessibilityScore -= missingAltRate * 55 // More severe penalty
-  }
-  
-  const accessibilityIssues = issues.filter(i => i.category === 'Accessibility')
-  accessibilityScore -= Math.min(accessibilityIssues.filter(i => i.severity === 'High').length * 12, 40)
-  accessibilityScore -= Math.min(accessibilityIssues.filter(i => i.severity === 'Medium').length * 6, 25)
-  accessibilityScore -= Math.min(accessibilityIssues.filter(i => i.severity === 'Low').length * 2, 10)
-  
-  // Bonus for pages with viewport tags
-  const pagesWithViewport = pages.filter(p => p.hasViewport).length
-  const viewportRate = pagesWithViewport / pages.length
-  accessibilityScore += viewportRate * 5
-  
-  accessibilityScore = Math.max(0, Math.min(100, Math.round(accessibilityScore)))
-  
-  // Overall score (weighted average)
-  const overall = Math.round(
-    technicalScore * 0.3 +
-    onPageScore * 0.3 +
-    contentScore * 0.2 +
-    accessibilityScore * 0.2
-  )
+  const overall = calculateOverallScore(categoryScores)
   
   return {
     overall,
-    technical: technicalScore,
-    onPage: onPageScore,
-    content: contentScore,
-    accessibility: accessibilityScore
+    technical: categoryScores.technical,
+    onPage: categoryScores.onPage,
+    content: categoryScores.content,
+    accessibility: categoryScores.accessibility
   }
 }
 
