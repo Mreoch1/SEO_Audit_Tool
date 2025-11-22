@@ -77,13 +77,19 @@ async function getBrowser(): Promise<Browser> {
         '--disable-background-timer-throttling',
         '--disable-renderer-backgrounding',
         '--disable-backgrounding-occluded-windows',
-        '--disable-ipc-flooding-protection'
+        '--disable-ipc-flooding-protection',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--mute-audio',
+        '--disable-extensions'
       ],
       // Increase timeout for browser launch
       timeout: 60000,
       // Use pipe instead of WebSocket for more stable connection
       pipe: true,
-      ignoreHTTPSErrors: true
+      ignoreHTTPSErrors: true,
+      // Explicitly set protocol timeout
+      protocolTimeout: 60000
     })
     
     // Verify browser is actually connected and working
