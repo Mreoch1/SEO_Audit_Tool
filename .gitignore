@@ -50,3 +50,6 @@ next-env.d.ts
 
 *.pdf
 *.pdf
+
+# Local Netlify folder
+.netlify

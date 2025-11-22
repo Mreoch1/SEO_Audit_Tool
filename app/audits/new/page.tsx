@@ -18,8 +18,7 @@ export default function NewAuditPage() {
   const [selectedTier, setSelectedTier] = useState<AuditTier | null>(null)
   const [loading, setLoading] = useState(false)
   const [addOns, setAddOns] = useState<AuditAddOns>({})
-  const [competitorUrls, setCompetitorUrls] = useState<string[]>([])
-  const [competitorInput, setCompetitorInput] = useState('')
+  const [competitorUrls, setCompetitorUrls] = useState<string[]>([]) // Competitor URLs array
   const [urlError, setUrlError] = useState('')
   
   const tierInfo = {
@@ -183,28 +182,36 @@ export default function NewAuditPage() {
     }
   }
 
-  const addCompetitorUrl = () => {
-    if (!competitorInput.trim()) return
-    
-    try {
-      const formatted = formatUrl(competitorInput)
-      new URL(formatted)
-      setCompetitorUrls([...competitorUrls, formatted])
-      setCompetitorInput('')
-    } catch {
-      // Ignore invalid URLs for now or show a toast
-      toast({
-        title: 'Invalid URL',
-        description: 'Please enter a valid URL for the competitor',
-        variant: 'destructive'
-      })
+  const updateCompetitorUrl = (index: number, value: string) => {
+    const newUrls = [...competitorUrls]
+    // Ensure array is large enough
+    while (newUrls.length <= index) {
+      newUrls.push('')
     }
+    newUrls[index] = value
+    // Remove trailing empty strings (but keep at least the slots we need)
+    const maxSlots = getMaxCompetitorSlots()
+    while (newUrls.length > maxSlots && newUrls[newUrls.length - 1] === '') {
+      newUrls.pop()
+    }
+    setCompetitorUrls(newUrls)
   }
 
-  const removeCompetitorUrl = (index: number) => {
-    const newUrls = [...competitorUrls]
-    newUrls.splice(index, 1)
-    setCompetitorUrls(newUrls)
+  const getMaxCompetitorSlots = (): number => {
+    if (selectedTier === 'agency') {
+      // Agency tier: base 3 + additional competitors add-on
+      const additionalCount = addOns.additionalCompetitors ? (addOns.additionalCompetitors as number) : 0
+      return Math.min(4, 3 + additionalCount) // Max 4 total
+    }
+    // For other tiers with competitor analysis add-on, show 3 slots
+    if (addOns.competitorAnalysis) {
+      return 3
+    }
+    return 0
+  }
+
+  const getCompetitorUrlValue = (index: number): string => {
+    return competitorUrls[index] || ''
   }
 
   const toggleAddOn = (key: keyof AuditAddOns, isNumeric = false) => {
@@ -303,7 +310,9 @@ export default function NewAuditPage() {
           maxPages: tierData.maxPages,
           maxDepth: tierData.maxDepth,
           addOns: Object.keys(addOns).length > 0 ? addOns : undefined,
-          competitorUrls: addOns.competitorAnalysis ? competitorUrls : undefined
+          competitorUrls: addOns.competitorAnalysis 
+            ? competitorUrls.filter(url => url && url.trim().length > 0) // Only send non-empty URLs
+            : undefined
         })
       })
 
@@ -597,53 +606,73 @@ export default function NewAuditPage() {
                       </div>
                       
                       {/* Competitor URL Inputs */}
-                      {addOns.competitorAnalysis && (
-                        <div className="mt-3 pl-2 border-l-2 border-blue-200 space-y-3">
-                          <Label className="text-xs text-gray-600">Optional: Add specific competitor URLs (leave empty to auto-detect)</Label>
-                          <div className="flex gap-2">
-                            <Input
-                              placeholder="https://competitor.com"
-                              value={competitorInput}
-                              onChange={(e) => setCompetitorInput(e.target.value)}
-                              className="bg-white h-8 text-sm"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  addCompetitorUrl()
-                                }
-                              }}
-                            />
-                            <Button 
-                              type="button" 
-                              size="sm" 
-                              variant="secondary"
-                              onClick={addCompetitorUrl}
-                              disabled={loading || !competitorInput}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                          
-                          {competitorUrls.length > 0 && (
+                      {addOns.competitorAnalysis && (() => {
+                        const maxSlots = getMaxCompetitorSlots()
+                        const slotsToShow = Math.max(3, maxSlots) // Show at least 3, up to maxSlots
+                        
+                        return (
+                          <div className="mt-3 pl-2 border-l-2 border-blue-200 space-y-3">
+                            <Label className="text-xs text-gray-600">
+                              Optional: Add specific competitor URLs (leave empty to auto-detect)
+                              {selectedTier === 'agency' && (
+                                <span className="text-gray-500 ml-1">
+                                  ({maxSlots} {maxSlots === 1 ? 'slot' : 'slots'} available)
+                                </span>
+                              )}
+                            </Label>
                             <div className="space-y-2">
-                              {competitorUrls.map((compUrl, index) => (
-                                <div key={index} className="flex items-center justify-between bg-white p-2 rounded border text-sm">
-                                  <span className="truncate max-w-[200px]">{compUrl}</span>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                    onClick={() => removeCompetitorUrl(index)}
-                                  >
-                                    <Minus className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              ))}
+                              {Array.from({ length: slotsToShow }).map((_, index) => {
+                                const urlValue = getCompetitorUrlValue(index)
+                                return (
+                                  <div key={index} className="flex items-center gap-2">
+                                    <Input
+                                      placeholder={`Competitor ${index + 1} URL (optional)`}
+                                      value={urlValue}
+                                      onChange={(e) => updateCompetitorUrl(index, e.target.value)}
+                                      onBlur={(e) => {
+                                        // Auto-format URL on blur
+                                        if (e.target.value.trim()) {
+                                          try {
+                                            const formatted = formatUrl(e.target.value)
+                                            new URL(formatted)
+                                            updateCompetitorUrl(index, formatted)
+                                          } catch {
+                                            // Invalid URL, show error toast
+                                            toast({
+                                              title: 'Invalid URL',
+                                              description: 'Please enter a valid URL (e.g., example.com or https://example.com)',
+                                              variant: 'destructive'
+                                            })
+                                          }
+                                        }
+                                      }}
+                                      className="bg-white h-9 text-sm flex-1"
+                                      disabled={loading}
+                                    />
+                                    {urlValue && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        onClick={() => updateCompetitorUrl(index, '')}
+                                        disabled={loading}
+                                      >
+                                        <Minus className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                )
+                              })}
                             </div>
-                          )}
-                        </div>
-                      )}
+                            <p className="text-xs text-gray-500 mt-1">
+                              {selectedTier === 'agency' 
+                                ? `Agency tier includes ${maxSlots} competitor crawls. Leave empty to auto-detect.`
+                                : 'Leave empty to auto-detect competitors based on your industry.'}
+                            </p>
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     {/* Additional Competitors (Agency tier only) */}
