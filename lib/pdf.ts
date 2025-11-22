@@ -1270,7 +1270,6 @@ function getAddOnsList(addOns: any, tier?: string): string {
   
   // New add-ons
   if (addOns.blankReport) {
-    const tier = result.raw.options.tier
     if (tier === 'agency') {
       items.push('Blank Report (Unbranded) - Included')
     } else {
