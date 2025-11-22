@@ -106,8 +106,15 @@ export async function runAudit(
   await checkSitemap(rootUrl, siteWide)
   
   // Initialize browser for this audit (reuse across all pages)
-  const { initializeBrowser, closeBrowser } = await import('./renderer')
-  await initializeBrowser()
+  let browserInitialized = false
+  try {
+    const { initializeBrowser, closeBrowser } = await import('./renderer')
+    await initializeBrowser()
+    browserInitialized = true
+  } catch (browserError) {
+    console.warn('[Audit] Browser initialization failed, will use fallback fetch only:', browserError)
+    // Continue without browser - we'll use basic fetch fallback
+  }
   
   try {
     // Crawl pages (pass imageAltTags flag if add-on is selected)

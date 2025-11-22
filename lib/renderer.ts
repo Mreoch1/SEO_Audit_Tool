@@ -62,29 +62,59 @@ async function getBrowser(): Promise<Browser> {
   }
   
   console.log('[Renderer] Launching new browser instance...')
-  browserInstance = await puppeteer.launch({
-    headless: "new",
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--disable-gpu',
-      '--disable-web-security',
-      '--disable-features=IsolateOrigins,site-per-process'
-    ],
-    // Increase timeout for browser launch
-    timeout: 60000
-  })
-  
-  // Handle browser disconnection
-  browserInstance.on('disconnected', () => {
-    console.warn('[Renderer] Browser disconnected, will recreate on next use')
+  try {
+    browserInstance = await puppeteer.launch({
+      headless: "new",
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-ipc-flooding-protection'
+      ],
+      // Increase timeout for browser launch
+      timeout: 60000,
+      // Use pipe instead of WebSocket for more stable connection
+      pipe: false
+    })
+    
+    // Verify browser is actually connected and working
+    if (!browserInstance.isConnected()) {
+      throw new Error('Browser launched but not connected')
+    }
+    
+    // Test browser with a simple page creation
+    try {
+      const testPage = await browserInstance.newPage()
+      await testPage.close()
+      console.log('[Renderer] Browser instance verified and ready')
+    } catch (testError) {
+      console.error('[Renderer] Browser test failed, closing and retrying:', testError)
+      await browserInstance.close().catch(() => {})
+      throw new Error(`Browser test failed: ${testError instanceof Error ? testError.message : 'Unknown error'}`)
+    }
+    
+    // Handle browser disconnection
+    browserInstance.on('disconnected', () => {
+      console.warn('[Renderer] Browser disconnected, will recreate on next use')
+      browserInstance = null
+      pageInstance = null
+    })
+    
+    return browserInstance
+  } catch (launchError: any) {
+    console.error('[Renderer] Failed to launch browser:', launchError)
     browserInstance = null
-    pageInstance = null
-  })
-  
-  return browserInstance
+    // Re-throw with more context
+    throw new Error(`Failed to launch Puppeteer browser: ${launchError?.message || 'Unknown error'}. This may be due to missing Chrome/Chromium installation or system permissions.`)
+  }
 }
 
 /**
