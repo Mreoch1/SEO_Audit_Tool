@@ -54,7 +54,7 @@ export function validatePerformanceMetrics(metrics: {
     }
     
     // FCP should be >= TTFB
-    if (ttfb !== undefined && fcp < ttfb) {
+    if (ttfb !== undefined && fcp !== undefined && fcp < ttfb) {
       warnings.push(`Invalid FCP < TTFB: ${fcp}ms < ${ttfb}ms - adjusting FCP to TTFB`)
       fcp = ttfb
     }

@@ -129,9 +129,10 @@ export function calculateTechnicalScore(
   
   // Helper to check if issue matches pattern
   const matchesIssue = (issue: Issue, patterns: string[]): boolean => {
-    const type = (issue.type || '').toLowerCase()
+    const issueAny = issue as any
+    const type = (issueAny.type || '').toLowerCase()
     const message = (issue.message || '').toLowerCase()
-    const title = (issue.title || '').toLowerCase()
+    const title = (issueAny.title || '').toLowerCase()
     return patterns.some(pattern => 
       type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
     )
@@ -247,9 +248,9 @@ export function calculateOnPageScore(
   
   // Helper to check if issue matches pattern (checks both type and message)
   const matchesIssue = (issue: Issue, patterns: string[]): boolean => {
-    const type = (issue.type || '').toLowerCase()
+    const type = ((issue as any).type || '').toLowerCase()
     const message = (issue.message || '').toLowerCase()
-    const title = (issue.title || '').toLowerCase()
+    const title = ((issue as any).title || '').toLowerCase()
     return patterns.some(pattern => 
       type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
     )
@@ -382,9 +383,10 @@ export function calculateContentScore(
   
   // Helper to check if issue matches pattern
   const matchesIssue = (issue: Issue, patterns: string[]): boolean => {
-    const type = (issue.type || '').toLowerCase()
+    const issueAny = issue as any
+    const type = (issueAny.type || '').toLowerCase()
     const message = (issue.message || '').toLowerCase()
-    const title = (issue.title || '').toLowerCase()
+    const title = (issueAny.title || '').toLowerCase()
     return patterns.some(pattern => 
       type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
     )
@@ -432,8 +434,15 @@ export function calculateContentScore(
   )
   readabilityIssues.forEach(issue => {
     // Check for very difficult readability (Flesch < 30 or 0)
-    const isVeryDifficult = (issue.details || '').includes('Flesch') && 
-                           ((issue.details || '').match(/Flesch.*?(\d+)/i)?.[1] || '100') < '30')
+    let isVeryDifficult = false
+    if ((issue.details || '').includes('Flesch')) {
+      const fleschMatch = (issue.details || '').match(/Flesch.*?(\d+)/i)
+      if (fleschMatch && fleschMatch[1]) {
+        const fleschScore = parseInt(fleschMatch[1], 10)
+        isVeryDifficult = fleschScore < 30
+      }
+    }
+    
     if (isVeryDifficult) {
       score -= 10 // Major penalty for very difficult readability
     } else if (issue.severity === 'High') {
@@ -670,9 +679,10 @@ export function calculateAccessibilityScore(
   
   // Helper to check if issue matches pattern
   const matchesIssue = (issue: Issue, patterns: string[]): boolean => {
-    const type = (issue.type || '').toLowerCase()
+    const issueAny = issue as any
+    const type = (issueAny.type || '').toLowerCase()
     const message = (issue.message || '').toLowerCase()
-    const title = (issue.title || '').toLowerCase()
+    const title = (issueAny.title || '').toLowerCase()
     return patterns.some(pattern => 
       type.includes(pattern) || message.includes(pattern) || title.includes(pattern)
     )

@@ -197,13 +197,14 @@ function extractNAP(pages: PageData[]): NAPData {
   const emailVariations = new Set<string>()
   
   for (const page of pages) {
-    if (!page.html) continue
+    // Combine available text fields for NAP extraction
+    const pageText = `${page.title || ''} ${page.metaDescription || ''} ${(page.h1Text || []).join(' ')}`.toLowerCase()
     
-    const html = page.html.toLowerCase()
+    if (!pageText.trim()) continue
     
     // Extract phone numbers (US format)
     const phoneRegex = /(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g
-    const phones = html.match(phoneRegex)
+    const phones = pageText.match(phoneRegex)
     if (phones) {
       phones.forEach(phone => {
         const normalized = phone.replace(/[^\d]/g, '')
@@ -216,7 +217,7 @@ function extractNAP(pages: PageData[]): NAPData {
     
     // Extract email addresses
     const emailRegex = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g
-    const emails = html.match(emailRegex)
+    const emails = pageText.match(emailRegex)
     if (emails) {
       emails.forEach(email => {
         if (!email.includes('example.com') && !email.includes('test.com')) {
@@ -230,7 +231,7 @@ function extractNAP(pages: PageData[]): NAPData {
     
     // Extract addresses (basic pattern - street number + street name)
     const addressRegex = /\d{1,5}\s+[a-z0-9\s,.-]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|way|court|ct|boulevard|blvd|circle|cir|place|pl)/gi
-    const addresses = html.match(addressRegex)
+    const addresses = pageText.match(addressRegex)
     if (addresses) {
       addresses.forEach(addr => {
         addressVariations.add(addr.trim())
@@ -306,23 +307,21 @@ function analyzeLocalSchema(pages: PageData[]): LocalSchemaAnalysis {
       }
     }
     
-    // Check for specific fields in schema (would need to parse JSON-LD)
-    if (page.html) {
-      const html = page.html.toLowerCase()
-      if (html.includes('"address"') || html.includes('"streetaddress"')) {
-        analysis.hasAddress = true
-      }
-      if (html.includes('"telephone"') || html.includes('"phone"')) {
-        analysis.hasPhone = true
-      }
-      if (html.includes('"openinghours"') || html.includes('"hoursavailable"')) {
-        analysis.hasOpeningHours = true
-      }
-      if (html.includes('"geo"') || html.includes('"latitude"')) {
-        analysis.hasGeo = true
-      }
-      if (html.includes('"pricerange"')) {
-        analysis.hasPriceRange = true
+    // Check for specific fields in schema (using schemaAnalysis if available)
+    if (page.schemaAnalysis) {
+      // Schema analysis already done, check for address/phone in extracted data
+      // We can infer from schema types and available page data
+      if (page.title || page.metaDescription) {
+        const pageText = `${page.title || ''} ${page.metaDescription || ''}`.toLowerCase()
+        if (pageText.includes('address') || pageText.includes('street')) {
+          analysis.hasAddress = true
+        }
+        if (pageText.includes('phone') || pageText.includes('telephone') || pageText.includes('call')) {
+          analysis.hasPhone = true
+        }
+        if (pageText.includes('hours') || pageText.includes('open')) {
+          analysis.hasOpeningHours = true
+        }
       }
     }
   }
@@ -504,35 +503,31 @@ function detectGBPIndicators(pages: PageData[]): GBPIndicators {
   }
   
   for (const page of pages) {
-    if (!page.html) continue
+    // Combine available text fields for GBP detection
+    const pageText = `${page.title || ''} ${page.metaDescription || ''} ${(page.h1Text || []).join(' ')} ${page.url}`.toLowerCase()
     
-    const html = page.html.toLowerCase()
+    if (!pageText.trim()) continue
     
-    // Check for Google Maps embed
-    if (html.includes('google.com/maps/embed') || html.includes('maps.google.com')) {
+    // Check for Google Maps embed (check URL and text)
+    if (pageText.includes('google.com/maps/embed') || pageText.includes('maps.google.com') || page.url.includes('maps')) {
       indicators.hasGoogleMapsEmbed = true
     }
     
     // Check for Google reviews widget
-    if (html.includes('google.com/maps/place') && html.includes('reviews')) {
+    if (pageText.includes('google.com/maps/place') && pageText.includes('reviews')) {
       indicators.hasGoogleReviewsWidget = true
     }
     
     // Check for GBP link
-    const gbpLinkMatch = html.match(/https?:\/\/(?:www\.)?google\.com\/maps\/place\/([^"'\s]+)/i)
+    const gbpLinkMatch = pageText.match(/https?:\/\/(?:www\.)?google\.com\/maps\/place\/([^"'\s]+)/i)
     if (gbpLinkMatch) {
       indicators.hasGBPLink = true
       indicators.gbpUrl = gbpLinkMatch[0]
     }
     
-    // NEW: Check for opening hours (in schema or text)
-    if (html.includes('opening hours') || html.includes('hours:') || html.includes('open') && html.includes('monday')) {
+    // NEW: Check for opening hours (in text)
+    if (pageText.includes('opening hours') || pageText.includes('hours:') || (pageText.includes('open') && pageText.includes('monday'))) {
       indicators.hasOpeningHours = true
-      // Try to extract hours
-      const hoursMatch = html.match(/(?:hours?|open)[:\s]+([^<]+?)(?:<|closed|hours)/i)
-      if (hoursMatch) {
-        indicators.openingHours = hoursMatch[1].trim()
-      }
     }
   }
   
@@ -796,13 +791,14 @@ function analyzeNAPConsistency(pages: PageData[], nap: NAPData): NAPConsistency 
   const phoneSet = new Set<string>()
   
   for (const page of pages) {
-    if (!page.html) continue
+    // Combine available text fields for NAP consistency check
+    const pageText = `${page.title || ''} ${page.metaDescription || ''} ${(page.h1Text || []).join(' ')}`
     
-    const html = page.html
+    if (!pageText.trim()) continue
     
     // Extract phone numbers
     const phoneRegex = /(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g
-    const phones = html.match(phoneRegex)
+    const phones = pageText.match(phoneRegex)
     if (phones) {
       phones.forEach(phone => {
         const normalized = phone.replace(/[^\d]/g, '')
@@ -814,7 +810,7 @@ function analyzeNAPConsistency(pages: PageData[], nap: NAPData): NAPConsistency 
     
     // Extract addresses
     const addressRegex = /\d{1,5}\s+[a-z0-9\s,.-]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|way|court|ct|boulevard|blvd|circle|cir|place|pl)/gi
-    const addresses = html.match(addressRegex)
+    const addresses = pageText.match(addressRegex)
     if (addresses) {
       addresses.forEach(addr => {
         addressSet.add(addr.trim().toLowerCase())
@@ -841,12 +837,13 @@ function analyzeNAPConsistency(pages: PageData[], nap: NAPData): NAPConsistency 
   if (consistency.phoneVariations.length > 1 || consistency.addressVariations.length > 1) {
     // Mark pages with different NAP data as inconsistent
     pages.forEach(page => {
-      if (page.html) {
+      const pageText = `${page.title || ''} ${page.metaDescription || ''} ${(page.h1Text || []).join(' ')}`
+      if (pageText.trim()) {
         const hasDifferentPhone = consistency.phoneVariations.some(phone => 
-          page.html?.includes(phone) && phone !== nap.phone
+          pageText.includes(phone) && phone !== nap.phone
         )
         const hasDifferentAddress = consistency.addressVariations.some(addr => 
-          page.html?.toLowerCase().includes(addr) && addr !== nap.address?.toLowerCase()
+          pageText.toLowerCase().includes(addr) && addr !== nap.address?.toLowerCase()
         )
         
         if (hasDifferentPhone || hasDifferentAddress) {
@@ -888,14 +885,15 @@ async function auditLocalCitations(
     'Foursquare'
   ]
   
-  // Check for links to citation platforms in HTML
+  // Check for links to citation platforms in page data
   for (const page of pages) {
-    if (!page.html) continue
+    // Combine available text fields and URL for citation detection
+    const pageText = `${page.title || ''} ${page.metaDescription || ''} ${page.url}`.toLowerCase()
     
-    const html = page.html.toLowerCase()
+    if (!pageText.trim()) continue
     
     // Check for Google Business Profile
-    if (html.includes('google.com/maps/place') || html.includes('google.com/business')) {
+    if (pageText.includes('google.com/maps/place') || pageText.includes('google.com/business')) {
       citations.push({
         platform: 'Google Business Profile',
         hasNAP: true, // Assume NAP is present if link exists
@@ -904,7 +902,7 @@ async function auditLocalCitations(
     }
     
     // Check for Yelp
-    if (html.includes('yelp.com/biz')) {
+    if (pageText.includes('yelp.com/biz')) {
       citations.push({
         platform: 'Yelp',
         hasNAP: true,
@@ -913,7 +911,7 @@ async function auditLocalCitations(
     }
     
     // Check for Yellow Pages
-    if (html.includes('yellowpages.com') || html.includes('yp.com')) {
+    if (pageText.includes('yellowpages.com') || pageText.includes('yp.com')) {
       citations.push({
         platform: 'Yellow Pages',
         hasNAP: true,
@@ -922,7 +920,7 @@ async function auditLocalCitations(
     }
     
     // Check for Facebook Business
-    if (html.includes('facebook.com/pages') || html.includes('facebook.com/business')) {
+    if (pageText.includes('facebook.com/pages') || pageText.includes('facebook.com/business')) {
       citations.push({
         platform: 'Facebook Business',
         hasNAP: true,

@@ -792,15 +792,15 @@ function generateReportHTML(
   ` : ''}
   
   <!-- Duplicate URL Cleaning (Agency tier) -->
-  ${result.duplicateUrlReport && result.raw.options.tier === 'agency' ? `
+  ${(result as any).duplicateUrlAnalysis && result.raw.options.tier === 'agency' ? `
   <div class="page">
     <h1>Duplicate URL Analysis</h1>
-    ${generateDuplicateUrlReport(result.duplicateUrlReport)}
+    ${generateDuplicateUrlReport((result as any).duplicateUrlAnalysis)}
   </div>
   ` : ''}
   
   <!-- JS Rendering Diagnostics (Agency tier) -->
-  ${result.pages.some(p => p.llmReadability?.hydrationIssues || p.llmReadability?.scriptBundleAnalysis) && result.raw.options.tier === 'agency' ? `
+  ${result.pages.some(p => (p.llmReadability as any)?.hydrationIssues || (p.llmReadability as any)?.scriptBundleAnalysis) && result.raw.options.tier === 'agency' ? `
   <div class="page">
     <h1>JS Rendering Diagnostics</h1>
     ${generateJSRenderingDiagnostics(result.pages)}
@@ -1564,7 +1564,7 @@ function generateInternalLinkGraphVisualization(result: AuditResult): string {
           <div style="font-size: 12px; color: #666; margin-top: 5px;">Orphan Pages</div>
         </div>
         <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #f59e0b;">
-          <div style="font-size: 24px; font-weight: bold; color: #f59e0b;">${graph.nodes.filter(n => n.isOrphan).length}</div>
+          <div style="font-size: 24px; font-weight: bold; color: #f59e0b;">${graph.isolatedPages?.length || 0}</div>
           <div style="font-size: 12px; color: #666; margin-top: 5px;">Isolated Pages</div>
         </div>
         <div style="padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #10b981;">
@@ -1645,7 +1645,7 @@ function generateDuplicateUrlReport(duplicateReport: any): string {
  * Generate JS rendering diagnostics (Agency tier)
  */
 function generateJSRenderingDiagnostics(pages: any[]): string {
-  const pagesWithDiagnostics = pages.filter(p => p.llmReadability?.hydrationIssues || p.llmReadability?.scriptBundleAnalysis)
+  const pagesWithDiagnostics = pages.filter(p => (p.llmReadability as any)?.hydrationIssues || (p.llmReadability as any)?.scriptBundleAnalysis)
   
   if (pagesWithDiagnostics.length === 0) {
     return '<p>No JS rendering diagnostics available.</p>'
@@ -1654,7 +1654,7 @@ function generateJSRenderingDiagnostics(pages: any[]): string {
   return `
     <div style="margin-top: 30px;">
       ${pagesWithDiagnostics.slice(0, 5).map(page => {
-        const llm = page.llmReadability
+        const llm = page.llmReadability as any
         const hydration = llm?.hydrationIssues
         const scripts = llm?.scriptBundleAnalysis
         const shadow = llm?.shadowDOMAnalysis
