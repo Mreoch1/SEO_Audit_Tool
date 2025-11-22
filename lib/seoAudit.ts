@@ -2065,6 +2065,9 @@ async function generateRealCompetitorAnalysis(
   siteKeywords: string[],
   options: Required<AuditOptions>
 ): Promise<CompetitorAnalysis> {
+  console.log(`[Competitor Analysis] Starting analysis for ${competitorUrl}`)
+  console.log(`[Competitor Analysis] Client has ${siteKeywords.length} keywords: ${siteKeywords.slice(0, 5).join(', ')}...`)
+  
   try {
     // Crawl competitor site (limited to homepage + a few pages for performance)
     const competitorPages: PageData[] = []
@@ -2074,6 +2077,8 @@ async function generateRealCompetitorAnalysis(
     // Limit competitor crawl to 5 pages max
     const maxCompetitorPages = 5
     const maxCompetitorDepth = 2
+    
+    console.log(`[Competitor Analysis] Will crawl up to ${maxCompetitorPages} pages from competitor`)
     
     while (competitorQueue.length > 0 && competitorPages.length < maxCompetitorPages) {
       const { url, depth } = competitorQueue.shift()!
@@ -2085,8 +2090,10 @@ async function generateRealCompetitorAnalysis(
       competitorCrawledUrls.add(url)
       
       try {
+        console.log(`[Competitor Analysis] Crawling page ${competitorPages.length + 1}/${maxCompetitorPages}: ${url}`)
         const pageData = await analyzePage(url, options.userAgent, false)
         competitorPages.push(pageData)
+        console.log(`[Competitor Analysis] Successfully crawled ${url} - found ${pageData.extractedKeywords?.length || 0} keywords`)
         
         // Extract links for further crawling (limited)
         if (depth < maxCompetitorDepth && pageData.internalLinkCount > 0 && competitorPages.length < maxCompetitorPages) {
@@ -2142,6 +2149,9 @@ async function generateRealCompetitorAnalysis(
     const competitorKeywordsArray = Array.from(competitorKeywords)
     const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
     
+    console.log(`[Competitor Analysis] Extracted ${competitorKeywordsArray.length} total keywords from ${competitorPages.length} competitor pages`)
+    console.log(`[Competitor Analysis] Sample competitor keywords: ${competitorKeywordsArray.slice(0, 10).join(', ')}`)
+    
     // Find keyword gaps (competitor has, site doesn't)
     const keywordGaps = competitorKeywordsArray.filter(kw => {
       const kwLower = kw.toLowerCase()
@@ -2168,6 +2178,8 @@ async function generateRealCompetitorAnalysis(
       })
     })
     
+    console.log(`[Competitor Analysis] Found ${keywordGaps.length} keyword gaps and ${sharedKeywords.length} shared keywords`)
+    
     return {
       competitorUrl,
       competitorKeywords: competitorKeywordsArray.slice(0, 25),
@@ -2176,7 +2188,7 @@ async function generateRealCompetitorAnalysis(
     }
   } catch (error) {
     // If competitor analysis fails, return placeholder
-    console.warn(`Competitor analysis failed for ${competitorUrl}:`, error)
+    console.error(`[Competitor Analysis] Failed for ${competitorUrl}:`, error)
     return {
       competitorUrl,
       competitorKeywords: [],
