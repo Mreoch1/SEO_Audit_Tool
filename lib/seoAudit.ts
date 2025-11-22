@@ -1584,9 +1584,62 @@ function analyzeSiteWideIssues(
         category: 'Technical',
         severity: 'High',
         message: 'Page has noindex directive',
-        details: 'This page will not be indexed by search engines',
+        details: 'This page will not be indexed by search engines. Remove the noindex meta tag if you want this page to appear in search results.',
         affectedPages: [page.url]
       })
+    }
+    
+    // Nofollow
+    if (page.hasNofollow) {
+      consolidateIssue(issueMap, {
+        category: 'Technical',
+        severity: 'Medium',
+        message: 'Page has nofollow directive',
+        details: 'Search engines will not follow links on this page. This prevents link equity from being passed to linked pages.',
+        affectedPages: [page.url]
+      })
+    }
+    
+    // Canonical validation
+    if (!page.canonical) {
+      consolidateIssue(issueMap, {
+        category: 'On-Page',
+        severity: 'Medium',
+        message: 'Missing canonical tag',
+        details: 'Canonical tags prevent duplicate content issues. Add <link rel="canonical" href="[preferred-url]"> to the <head> section.',
+        affectedPages: [page.url]
+      })
+    } else {
+      // Validate canonical URL
+      try {
+        const pageUrl = new URL(page.url)
+        const canonicalUrl = new URL(page.canonical, page.url)
+        
+        // Check if canonical is different from current URL (potential issue)
+        if (canonicalUrl.href !== pageUrl.href) {
+          // Check if it's just protocol difference (http vs https)
+          if (canonicalUrl.hostname === pageUrl.hostname && canonicalUrl.pathname === pageUrl.pathname) {
+            // Just protocol or www difference - this is okay
+          } else {
+            consolidateIssue(issueMap, {
+              category: 'On-Page',
+              severity: 'Low',
+              message: 'Canonical points to different URL',
+              details: `Canonical URL (${page.canonical}) differs from page URL. This is intentional if this is a duplicate page, otherwise it may indicate a configuration issue.`,
+              affectedPages: [page.url]
+            })
+          }
+        }
+      } catch (error) {
+        // Invalid canonical URL
+        consolidateIssue(issueMap, {
+          category: 'On-Page',
+          severity: 'Medium',
+          message: 'Invalid canonical URL',
+          details: `Canonical URL "${page.canonical}" is not a valid URL. Ensure it's an absolute URL (e.g., https://example.com/page).`,
+          affectedPages: [page.url]
+        })
+      }
     }
   })
   

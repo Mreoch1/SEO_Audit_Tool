@@ -168,6 +168,26 @@ export async function performEnhancedTechnicalCheck(
       })
     }
 
+    if (!data.csp) {
+      issues.push({
+        category: 'Technical',
+        severity: 'Low',
+        message: 'Missing Content-Security-Policy header',
+        details: 'CSP helps prevent XSS attacks, clickjacking, and other code injection attacks. Recommended for enhanced security.',
+        affectedPages: [url]
+      })
+    }
+
+    if (!data.referrerPolicy) {
+      issues.push({
+        category: 'Technical',
+        severity: 'Low',
+        message: 'Missing Referrer-Policy header',
+        details: 'Referrer-Policy controls how much referrer information is shared. Recommended: "strict-origin-when-cross-origin" or "no-referrer-when-downgrade".',
+        affectedPages: [url]
+      })
+    }
+
     // Check HTTP version
     const altSvc = headers.get('Alt-Svc')
     if (altSvc && (altSvc.includes('h3=') || altSvc.includes('h3-29='))) {
@@ -373,6 +393,26 @@ export function getTechnicalFixInstructions(issue: Issue): string {
 4. Check browser console for mixed content warnings
 5. Use Content Security Policy (CSP) to block mixed content:
    Content-Security-Policy: upgrade-insecure-requests`
+  }
+  
+  if (message.includes('content-security-policy') || message.includes('csp')) {
+    return `1. Add Content-Security-Policy header to your server configuration
+2. Start with a basic policy: Content-Security-Policy: default-src 'self'
+3. For Apache, add to .htaccess: Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+4. For Nginx, add to server block: add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'" always;
+5. Test your CSP using browser console and gradually tighten the policy
+6. Use CSP reporting to monitor violations: report-uri /csp-report-endpoint`
+  }
+  
+  if (message.includes('referrer-policy')) {
+    return `1. Add Referrer-Policy header to your server configuration
+2. Recommended value: Referrer-Policy: strict-origin-when-cross-origin
+3. For Apache, add to .htaccess: Header always set Referrer-Policy "strict-origin-when-cross-origin"
+4. For Nginx, add to server block: add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+5. Alternative values:
+   - no-referrer: Never send referrer information
+   - same-origin: Only send referrer for same-origin requests
+   - strict-origin: Only send origin (not full URL) for cross-origin requests`
   }
   
   return `Review the issue details and consult your web server documentation for implementation steps.`
