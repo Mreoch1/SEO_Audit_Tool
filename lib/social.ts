@@ -159,15 +159,37 @@ function extractSocialLinks(html: string, baseUrl: string): SocialMediaLinks {
   
   // Check each platform
   for (const [platform, pattern] of Object.entries(patterns)) {
-    const match = allLinksText.match(pattern)
-    if (match) {
-      // Get the first unique match
-      const url = match[0]
-      if (url.startsWith('http')) {
-        links[platform as keyof SocialMediaLinks] = url
-      } else {
-        // Construct full URL
-        links[platform as keyof SocialMediaLinks] = `https://${url}`
+    const matches = allLinksText.match(pattern)
+    if (matches) {
+      // Filter out favicon and other non-profile URLs
+      const validMatches = matches.filter(match => {
+        const url = match.toLowerCase()
+        // Filter out favicon URLs
+        if (url.includes('/favicon') || url.includes('/favicon.ico')) {
+          return false
+        }
+        // Filter out other common non-profile paths
+        const nonProfilePaths = ['/icon', '/logo', '/image', '/img', '/assets', '/static', '/cdn']
+        if (nonProfilePaths.some(path => url.includes(path))) {
+          return false
+        }
+        // For Twitter/X, filter out paths that are clearly not usernames
+        if ((platform === 'twitter') && url.match(/\/[^\/]+\.[a-z]{2,4}$/i)) {
+          // URLs ending with file extensions are likely not profiles
+          return false
+        }
+        return true
+      })
+      
+      if (validMatches.length > 0) {
+        // Get the first valid match
+        const url = validMatches[0]
+        if (url.startsWith('http')) {
+          links[platform as keyof SocialMediaLinks] = url
+        } else {
+          // Construct full URL
+          links[platform as keyof SocialMediaLinks] = `https://${url}`
+        }
       }
     }
   }

@@ -136,6 +136,60 @@ function deduplicatePages(pages: PageData[]): PageData[] {
 }
 
 /**
+ * Sprint 3.2: Deduplicate issues that are essentially the same
+ * Handles cases where the same issue appears with different severities or slightly different messages
+ */
+function deduplicateIssues(issues: Issue[]): Issue[] {
+  const seen = new Map<string, Issue>()
+  
+  for (const issue of issues) {
+    // Create a normalized key based on category and message
+    // Normalize the message to catch variations like "Title tag too short" vs "Page title too short"
+    const normalizedMessage = (issue.message || issue.title || '').toLowerCase()
+      .replace(/^(title tag|page title|title)/i, 'title')
+      .replace(/^(meta description|meta)/i, 'meta description')
+      .replace(/^(missing|no|not found)/i, 'missing')
+      .replace(/\s+/g, ' ')
+      .trim()
+    
+    const key = `${issue.category}|${normalizedMessage}`
+    
+    if (seen.has(key)) {
+      const existing = seen.get(key)!
+      // Keep the higher severity version
+      const severityOrder = { 'High': 3, 'Medium': 2, 'Low': 1 }
+      const existingSeverity = severityOrder[existing.severity as keyof typeof severityOrder] || 0
+      const newSeverity = severityOrder[issue.severity as keyof typeof severityOrder] || 0
+      
+      if (newSeverity > existingSeverity) {
+        // Replace with higher severity version
+        seen.set(key, issue)
+      } else {
+        // Merge affected pages
+        if (issue.affectedPages) {
+          if (!existing.affectedPages) {
+            existing.affectedPages = []
+          }
+          existing.affectedPages.push(...issue.affectedPages)
+          existing.affectedPages = Array.from(new Set(existing.affectedPages))
+        }
+        // Update fix instructions if missing
+        if (!existing.fixInstructions && issue.fixInstructions) {
+          existing.fixInstructions = issue.fixInstructions
+        }
+        if (!existing.howToFix && issue.howToFix) {
+          existing.howToFix = issue.howToFix
+        }
+      }
+    } else {
+      seen.set(key, { ...issue })
+    }
+  }
+  
+  return Array.from(seen.values())
+}
+
+/**
  * Main audit function
  */
 export async function runAudit(
@@ -489,6 +543,11 @@ export async function runAudit(
   
   // Sort issues by priority (highest first)
   allIssues.sort((a, b) => (b.priority || 0) - (a.priority || 0))
+  
+  // SPRINT 3.2: Final issue deduplication
+  console.log(`[Audit] Applying final issue deduplication (${allIssues.length} issues before)`)
+  allIssues = deduplicateIssues(allIssues)
+  console.log(`[Audit] After deduplication: ${allIssues.length} unique issues`)
   
   // SPRINT 1 INTEGRATION: Apply deduplication and filtering
   console.log(`[Audit] Applying Sprint 1 fixes: deduplication and 404 filtering`)
