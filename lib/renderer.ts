@@ -82,7 +82,8 @@ async function getBrowser(): Promise<Browser> {
       // Increase timeout for browser launch
       timeout: 60000,
       // Use pipe instead of WebSocket for more stable connection
-      pipe: false
+      pipe: true,
+      ignoreHTTPSErrors: true
     })
     
     // Verify browser is actually connected and working
