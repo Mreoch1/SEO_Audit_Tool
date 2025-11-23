@@ -597,19 +597,19 @@ export function calculatePerformanceScore(
   
   // Page size issues (-20 points max)
   const sizeIssues = issues.filter(i => 
-    i.category === 'performance' && (i.type.includes('size') || i.type.includes('image'))
+    i.category === 'Performance' && ((i as any).type?.includes('size') || (i as any).type?.includes('image'))
   )
   score -= Math.min(weights.pageSize, sizeIssues.length * 4)
   
   // Compression issues (-15 points max)
   const compressionIssues = issues.filter(i => 
-    i.category === 'performance' && i.type.includes('compression')
+    i.category === 'Performance' && (i as any).type?.includes('compression')
   )
   score -= Math.min(weights.compression, compressionIssues.length * 7.5)
   
   // Caching issues (-15 points max)
   const cacheIssues = issues.filter(i => 
-    i.category === 'performance' && i.type.includes('cache')
+    i.category === 'Performance' && (i as any).type?.includes('cache')
   )
   score -= Math.min(weights.caching, cacheIssues.length * 5)
   
@@ -621,10 +621,38 @@ export function calculatePerformanceScore(
  * CRITICAL FIX: Clamp invalid metrics
  */
 function calculateCoreWebVitalsSubscore(pages: PageData[]): number {
-  const mainPage = pages.find(p => p.pageSpeedData) || pages[0]
-  if (!mainPage?.pageSpeedData) return 70 // Neutral if no data
+  const mainPage = pages.find(p => p.pageSpeedData || p.performanceMetrics) || pages[0]
+  if (!mainPage) return 70 // Neutral if no data
   
-  const { lcp, fcp, cls, ttfb } = mainPage.pageSpeedData
+  // Try to get metrics from pageSpeedData (simplified structure) or performanceMetrics
+  let lcp: number | undefined
+  let fcp: number | undefined
+  let cls: number | undefined
+  let ttfb: number | undefined
+  
+  if (mainPage.pageSpeedData) {
+    // Handle both simplified structure and full PageSpeedData structure
+    const psd = mainPage.pageSpeedData as any
+    if (psd.lcp !== undefined) {
+      lcp = psd.lcp
+      fcp = psd.fcp
+      cls = psd.cls
+      ttfb = psd.ttfb
+    } else if (psd.mobile) {
+      // Full PageSpeedData structure
+      lcp = psd.mobile.lcp
+      fcp = psd.mobile.fcp
+      cls = psd.mobile.cls
+      ttfb = psd.mobile.ttfb
+    }
+  } else if (mainPage.performanceMetrics) {
+    lcp = mainPage.performanceMetrics.lcp
+    fcp = mainPage.performanceMetrics.fcp
+    cls = mainPage.performanceMetrics.cls
+    ttfb = mainPage.performanceMetrics.ttfb
+  }
+  
+  if (lcp === undefined && fcp === undefined) return 70 // No paint metrics
   let score = 100
   
   // Validate and clamp LCP (should be reasonable relative to FCP/TTFB)

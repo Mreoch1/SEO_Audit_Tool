@@ -20,17 +20,31 @@ export interface EnhancedContentData {
     sentenceCount: number
     averageWordsPerSentence: number
     quality: 'excellent' | 'good' | 'fair' | 'poor'
+    depthScore?: number // NEW: Agency tier - Content depth score (0-100)
+    industryBenchmark?: 'above' | 'at' | 'below' // NEW: Agency tier - vs industry benchmarks
   }
   readability: {
     fleschScore: number
     gradeLevel: string
     readability: 'very-easy' | 'easy' | 'fairly-easy' | 'standard' | 'fairly-difficult' | 'difficult' | 'very-difficult'
+    paragraphLevelReadability?: { // NEW: Agency tier - Paragraph-level readability
+      paragraphIndex: number
+      fleschScore: number
+      wordCount: number
+    }[]
   }
   keywords: {
     density: number
     distribution: 'good' | 'fair' | 'poor'
     semanticKeywords: number
     keywordStuffing: boolean
+    placement?: { // NEW: Agency tier - Keyword placement analysis
+      inTitle: boolean
+      inH1: boolean
+      inIntro: boolean // First 100 words
+      inFirst100Words: boolean
+      placementScore: number // 0-100
+    }
   }
   structure: {
     hasLists: boolean
@@ -42,6 +56,17 @@ export interface EnhancedContentData {
   freshness: {
     lastModified?: string
     updateFrequency: 'frequent' | 'moderate' | 'rare' | 'unknown'
+    isFresh?: boolean // NEW: Agency tier - Content freshness detection
+    daysSinceUpdate?: number // NEW: Agency tier
+  }
+  topicCoverage?: { // NEW: Agency tier - Topic coverage map
+    topics: string[]
+    coverageScore: number // 0-100
+    missingTopics?: string[]
+  }
+  aiContentLikelihood?: { // NEW: Agency tier - AI content detection (optional)
+    score: number // 0-100 (higher = more likely AI-generated)
+    indicators: string[]
   }
 }
 
@@ -51,10 +76,22 @@ export interface EnhancedContentData {
  * 60-69 (standard), 50-59 (fairly difficult), 30-49 (difficult), 0-29 (very difficult)
  */
 function calculateFleschReadingEase(text: string): number {
-  // Split text into sentences by sentence-ending punctuation followed by whitespace or end of string
-  // This is more accurate than matching punctuation marks
-  const sentenceEndings = text.split(/[.!?]+(?:\s+|$)/).filter(s => s.trim().length > 0)
-  const words = text.split(/\s+/).filter(w => w.length > 0)
+  // CRITICAL FIX #5: Improved sentence splitting to avoid false positives
+  // Split on sentence-ending punctuation followed by space or end of string
+  // Exclude abbreviations and URLs
+  const cleanedText = text
+    .replace(/https?:\/\/[^\s]+/g, '') // Remove URLs
+    .replace(/\b[A-Z]{2,}\b/g, '') // Remove acronyms that might be mistaken for sentence endings
+    .replace(/\.{2,}/g, '.') // Normalize multiple periods
+  
+  // Split sentences more accurately
+  const sentenceEndings = cleanedText.split(/(?<=[.!?])\s+(?=[A-Z])/).filter(s => {
+    const trimmed = s.trim()
+    // Filter out very short fragments that aren't sentences
+    return trimmed.length > 10 && /[.!?]$/.test(trimmed)
+  })
+  
+  const words = cleanedText.split(/\s+/).filter(w => w.length > 0 && /[a-zA-Z]/.test(w))
   const syllables = words.reduce((count, word) => {
     return count + countSyllables(word)
   }, 0)
@@ -75,8 +112,9 @@ function calculateFleschReadingEase(text: string): number {
   const avgSentenceLength = words.length / sentenceEndings.length
   const avgSyllablesPerWord = syllables / words.length
 
-  // Cap sentence length at reasonable maximum to avoid extreme scores
-  const cappedSentenceLength = Math.min(avgSentenceLength, 50)
+  // CRITICAL FIX #5: Cap sentence length more aggressively to prevent unrealistic scores
+  // If avg sentence length is > 50, something is wrong with sentence splitting
+  const cappedSentenceLength = Math.min(avgSentenceLength, 30) // Reduced from 50 to 30
   const cappedSyllablesPerWord = Math.min(avgSyllablesPerWord, 3)
 
   const score = 206.835 - (1.015 * cappedSentenceLength) - (84.6 * cappedSyllablesPerWord)
@@ -98,11 +136,12 @@ function countSyllables(word: string): number {
 }
 
 /**
- * Analyze content with enhanced depth
+ * Analyze content with enhanced depth (Enhanced for Agency tier)
  */
 export function analyzeEnhancedContent(
   page: PageData,
-  html: string
+  html: string,
+  primaryKeyword?: string // NEW: Agency tier - Primary keyword for placement analysis
 ): { data: EnhancedContentData; issues: Issue[] } {
   const issues: Issue[] = []
   const data: EnhancedContentData = {
@@ -136,21 +175,77 @@ export function analyzeEnhancedContent(
     }
   }
 
+  // CRITICAL FIX #9 & #11: Extract text content from main content areas, exclude nav/header/footer
+  // Prefer <main>, <article>, <section> over full page content
+  let mainContent = ''
+  const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+  const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+  const sectionMatches = html.match(/<section[^>]*>([\s\S]*?)<\/section>/gi) || []
+  
+  if (mainMatch) {
+    mainContent = mainMatch[1]
+  } else if (articleMatch) {
+    mainContent = articleMatch[1]
+  } else if (sectionMatches.length > 0) {
+    // Use all sections combined
+    mainContent = sectionMatches.join(' ')
+  } else {
+    // Fallback: exclude common nav/header/footer patterns
+    mainContent = html
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+  }
+  
   // Extract text content (remove HTML tags)
-  const textContent = html
+  const textContent = mainContent
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+  
+  // CRITICAL FIX #1: Update word count from rendered content (if different from page.wordCount)
+  // Recalculate word count from extracted main content
+  const renderedWordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
+  if (renderedWordCount > 0 && renderedWordCount !== page.wordCount) {
+    // Update the data with rendered word count
+    data.depth.wordCount = renderedWordCount
+  }
+  
+  // NEW: Agency tier - Extract first 100 words for keyword placement analysis
+  const first100Words = textContent.split(/\s+/).slice(0, 100).join(' ').toLowerCase()
+  const introText = first100Words
+  
+  // NEW: Agency tier - Extract paragraphs for paragraph-level readability
+  const paragraphTexts: string[] = []
+  const paragraphMatches = html.match(/<p[^>]*>([\s\S]*?)<\/p>/gi) || []
+  paragraphMatches.forEach(para => {
+    const paraText = para
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (paraText.length > 20) { // Only include substantial paragraphs
+      paragraphTexts.push(paraText)
+    }
+  })
 
-  // Count paragraphs
-  const paragraphMatches = html.match(/<p[^>]*>/gi) || []
-  data.depth.paragraphCount = paragraphMatches.length
+  // Count paragraphs (use extracted paragraphs if available)
+  data.depth.paragraphCount = paragraphTexts.length > 0 ? paragraphTexts.length : (html.match(/<p[^>]*>/gi) || []).length
 
-  // Count sentences
-  const sentences = textContent.match(/[.!?]+/g) || []
-  data.depth.sentenceCount = sentences.length
+  // CRITICAL FIX #5: Count sentences more accurately (same logic as Flesch calculation)
+  const cleanedText = textContent
+    .replace(/https?:\/\/[^\s]+/g, '') // Remove URLs
+    .replace(/\b[A-Z]{2,}\b/g, '') // Remove acronyms
+    .replace(/\.{2,}/g, '.') // Normalize multiple periods
+  
+  const sentenceEndings = cleanedText.split(/(?<=[.!?])\s+(?=[A-Z])/).filter(s => {
+    const trimmed = s.trim()
+    return trimmed.length > 10 && /[.!?]$/.test(trimmed)
+  })
+  
+  data.depth.sentenceCount = Math.max(1, sentenceEndings.length) // At least 1 sentence
 
   // Calculate average words per sentence
   if (data.depth.sentenceCount > 0) {
@@ -194,15 +289,158 @@ export function analyzeEnhancedContent(
     data.readability.gradeLevel = 'College graduate'
   }
 
+  // NEW: Agency tier - Keyword placement analysis
+  if (primaryKeyword) {
+    const keywordLower = primaryKeyword.toLowerCase()
+    data.keywords.placement = {
+      inTitle: page.title ? page.title.toLowerCase().includes(keywordLower) : false,
+      inH1: page.h1Text ? page.h1Text.some(h1 => h1.toLowerCase().includes(keywordLower)) : false,
+      inIntro: introText.includes(keywordLower),
+      inFirst100Words: first100Words.includes(keywordLower),
+      placementScore: 0
+    }
+    
+    // Calculate placement score (0-100)
+    let placementScore = 0
+    if (data.keywords.placement.inTitle) placementScore += 30
+    if (data.keywords.placement.inH1) placementScore += 30
+    if (data.keywords.placement.inIntro) placementScore += 20
+    if (data.keywords.placement.inFirst100Words) placementScore += 20
+    data.keywords.placement.placementScore = placementScore
+  }
+  
+  // NEW: Agency tier - Content depth score (0-100)
+  let depthScore = 0
+  if (data.depth.wordCount >= 2000) depthScore += 40
+  else if (data.depth.wordCount >= 1000) depthScore += 30
+  else if (data.depth.wordCount >= 500) depthScore += 20
+  else if (data.depth.wordCount >= 300) depthScore += 10
+  
+  if (data.depth.paragraphCount >= 10) depthScore += 20
+  else if (data.depth.paragraphCount >= 5) depthScore += 15
+  else if (data.depth.paragraphCount >= 3) depthScore += 10
+  
+  if (data.structure.hasLists) depthScore += 10
+  if (data.structure.hasTables) depthScore += 10
+  if (data.structure.hasImages) depthScore += 10
+  
+  data.depth.depthScore = Math.min(100, depthScore)
+  
+  // NEW: Agency tier - Industry benchmark comparison (simplified)
+  // In production, this would compare against actual industry data
+  const industryAvgWordCount = 800 // Simplified benchmark
+  if (data.depth.wordCount >= industryAvgWordCount * 1.5) {
+    data.depth.industryBenchmark = 'above'
+  } else if (data.depth.wordCount >= industryAvgWordCount * 0.8) {
+    data.depth.industryBenchmark = 'at'
+  } else {
+    data.depth.industryBenchmark = 'below'
+  }
+  
+  // NEW: Agency tier - Paragraph-level readability
+  if (paragraphTexts.length > 0) {
+    data.readability.paragraphLevelReadability = paragraphTexts.slice(0, 10).map((paraText, idx) => ({
+      paragraphIndex: idx + 1,
+      fleschScore: calculateFleschReadingEase(paraText),
+      wordCount: paraText.split(/\s+/).filter(w => w.length > 0).length
+    }))
+  }
+  
+  // NEW: Agency tier - Topic coverage analysis
+  // Extract topics from headings and key phrases
+  const headingTexts = [
+    ...(page.h1Text || []),
+    ...(html.match(/<h2[^>]*>([^<]+)<\/h2>/gi) || []).map(h => h.replace(/<[^>]+>/g, '').trim())
+  ]
+  const detectedTopics = headingTexts.filter(h => h.length > 3).slice(0, 10)
+  
+  if (detectedTopics.length > 0) {
+    data.topicCoverage = {
+      topics: detectedTopics,
+      coverageScore: Math.min(100, detectedTopics.length * 10), // Simplified scoring
+      missingTopics: [] // Would be populated with expected topics for the industry
+    }
+  }
+  
+  // NEW: Agency tier - Content freshness detection
+  // Check for last modified date in HTML or meta tags
+  const lastModifiedMatch = html.match(/<meta[^>]*name=["']last-modified["'][^>]*content=["']([^"']+)["']/i) ||
+    html.match(/<meta[^>]*http-equiv=["']last-modified["'][^>]*content=["']([^"']+)["']/i)
+  
+  if (lastModifiedMatch) {
+    try {
+      const lastModified = new Date(lastModifiedMatch[1])
+      const daysSinceUpdate = Math.floor((Date.now() - lastModified.getTime()) / (1000 * 60 * 60 * 24))
+      data.freshness.lastModified = lastModified.toISOString()
+      data.freshness.daysSinceUpdate = daysSinceUpdate
+      data.freshness.isFresh = daysSinceUpdate < 90 // Content is "fresh" if updated within 90 days
+      
+      if (daysSinceUpdate < 30) {
+        data.freshness.updateFrequency = 'frequent'
+      } else if (daysSinceUpdate < 180) {
+        data.freshness.updateFrequency = 'moderate'
+      } else {
+        data.freshness.updateFrequency = 'rare'
+      }
+    } catch (e) {
+      // Invalid date format
+    }
+  }
+  
+  // NEW: Agency tier - AI content likelihood (basic heuristic)
+  // This is a simplified check - production would use more sophisticated analysis
+  const aiIndicators: string[] = []
+  let aiScore = 0
+  
+  // Check for repetitive sentence structures
+  const aiSentences = textContent.split(/[.!?]+/).filter(s => s.trim().length > 10)
+  if (aiSentences.length > 5) {
+    const avgLength = aiSentences.reduce((sum, s) => sum + s.split(/\s+/).length, 0) / aiSentences.length
+    const lengthVariance = aiSentences.reduce((sum, s) => {
+      const len = s.split(/\s+/).length
+      return sum + Math.pow(len - avgLength, 2)
+    }, 0) / aiSentences.length
+    
+    if (lengthVariance < 5) { // Very uniform sentence lengths
+      aiIndicators.push('Uniform sentence structure')
+      aiScore += 20
+    }
+  }
+  
+  // Check for excessive use of transition words (AI often overuses these)
+  const transitionWords = ['furthermore', 'moreover', 'additionally', 'consequently', 'therefore', 'thus', 'hence']
+  const transitionCount = transitionWords.reduce((count, word) => {
+    return count + (textContent.toLowerCase().match(new RegExp(`\\b${word}\\b`, 'g')) || []).length
+  }, 0)
+  
+  if (transitionCount > aiSentences.length * 0.1) { // More than 10% of sentences have transition words
+    aiIndicators.push('Excessive transition words')
+    aiScore += 15
+  }
+  
+  // Check for generic phrases
+  const genericPhrases = ['it is important to', 'it should be noted', 'in conclusion', 'in summary']
+  const genericCount = genericPhrases.reduce((count, phrase) => {
+    return count + (textContent.toLowerCase().includes(phrase) ? 1 : 0)
+  }, 0)
+  
+  if (genericCount >= 2) {
+    aiIndicators.push('Generic phrases detected')
+    aiScore += 10
+  }
+  
+  if (aiScore > 0) {
+    data.aiContentLikelihood = {
+      score: Math.min(100, aiScore),
+      indicators: aiIndicators
+    }
+  }
+  
   // Check for lists and tables
   data.structure.hasLists = /<(ul|ol)[^>]*>/i.test(html)
   data.structure.hasTables = /<table[^>]*>/i.test(html)
 
-  // Analyze paragraph length
-  const paragraphTexts = paragraphMatches.map(() => {
-    // Extract paragraph text (simplified)
-    return ''
-  })
+  // Analyze paragraph length (using already extracted paragraphTexts)
   const avgParagraphLength = data.depth.paragraphCount > 0 
     ? data.depth.wordCount / data.depth.paragraphCount 
     : 0

@@ -1,111 +1,187 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/db'
-import { generatePDF } from '@/lib/pdf'
-import { sendEmail } from '@/lib/email'
-import * as fs from 'fs'
-import * as path from 'path'
+#!/usr/bin/env node
+/**
+ * Test script to create an audit and email the report
+ * 
+ * Usage:
+ *   tsx scripts/testAuditAndEmail.ts
+ */
 
-// POST /api/audits/[id]/email - Email PDF report
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
-) {
-  const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+import { prisma } from '../lib/db'
+import { runAudit } from '../lib/seoAudit'
+import { generatePDF } from '../lib/pdf'
+import { sendEmail } from '../lib/email'
+import { generateShortSummary, generateDetailedSummary } from '../lib/reportSummary'
 
-  const resolvedParams = params instanceof Promise ? await params : params
-  const auditId = resolvedParams.id
+async function main() {
+  const url = 'https://seoauditpro.net'
+  const emailTo = 'mreoch82@hotmail.com'
 
-  const body = await request.json()
-  const { emailTo } = body
+  console.log(`\n🔍 Starting SEO audit for: ${url}`)
+  console.log(`📧 Will email report to: ${emailTo}\n`)
 
-  if (!emailTo) {
-    return NextResponse.json({ error: 'emailTo is required' }, { status: 400 })
-  }
-
-  const audit = await prisma.audit.findUnique({
-    where: { id: auditId }
-  })
-
-  if (!audit) {
-    return NextResponse.json({ error: 'Audit not found' }, { status: 404 })
-  }
-
-  const settings = await prisma.appSettings.findUnique({
-    where: { id: 'singleton' }
-  })
-
-  // Get logo as base64 for email embedding
-  let logoDataUri: string | null = null
-  const logoPath = settings?.logoUrl || '/logo.png'
-  
   try {
-    // If it's a relative path, try to read from public folder
-    if (logoPath.startsWith('/')) {
-      const publicLogoPath = path.join(process.cwd(), 'public', logoPath.replace(/^\//, ''))
-      if (fs.existsSync(publicLogoPath)) {
-        const logoBuffer = fs.readFileSync(publicLogoPath)
-        const mimeType = logoPath.endsWith('.png') ? 'image/png' : 
-                        logoPath.endsWith('.jpg') || logoPath.endsWith('.jpeg') ? 'image/jpeg' :
-                        logoPath.endsWith('.gif') ? 'image/gif' : 'image/png'
-        logoDataUri = `data:${mimeType};base64,${logoBuffer.toString('base64')}`
-      }
-    } else if (logoPath.startsWith('http://') || logoPath.startsWith('https://')) {
-      // If it's already an absolute URL, use it directly
-      logoDataUri = logoPath
+    // Check if user exists
+    const users = await prisma.user.findMany()
+    if (users.length === 0) {
+      console.error('❌ No users found in database. Please create a user first.')
+      console.log('   Run: npm run create-user')
+      process.exit(1)
     }
-  } catch (error) {
-    console.warn('Failed to load logo for email:', error)
-    // Continue without logo
-  }
 
-  const branding = {
-    brandName: settings?.brandName || 'SEO Audit Pro',
-    brandSubtitle: settings?.brandSubtitle || undefined,
-    primaryColor: settings?.primaryColor || '#3b82f6',
-    logoUrl: logoDataUri || undefined
-  }
+    // Check SMTP settings
+    const settings = await prisma.appSettings.findUnique({
+      where: { id: 'singleton' }
+    })
 
-  if (!audit.rawJson) {
-    return NextResponse.json({ error: 'Audit data not found' }, { status: 404 })
-  }
+    if (!settings?.smtpHost || !settings?.smtpUser || !settings?.smtpPassword) {
+      console.error('❌ SMTP settings not configured. Please configure in Settings page.')
+      console.log('   Required: smtpHost, smtpUser, smtpPassword')
+      process.exit(1)
+    }
 
-  const auditResult = JSON.parse(audit.rawJson)
+    console.log('✅ Database and SMTP settings verified\n')
 
-  try {
-    const pdfBuffer = await generatePDF(auditResult, branding, audit.url)
+    // Create audit record
+    console.log('📝 Creating audit record...')
+    const audit = await prisma.audit.create({
+      data: {
+        url,
+        status: 'running',
+        overallScore: 0,
+        technicalScore: 0,
+        onPageScore: 0,
+        contentScore: 0,
+        accessibilityScore: 0,
+        shortSummary: 'Audit in progress...',
+        detailedSummary: 'The audit is currently running. This may take several minutes for large sites.',
+        rawJson: null
+      }
+    })
 
-    // Format the audit summary for better readability
-    const formattedSummary = audit.shortSummary
+    console.log(`✅ Audit created with ID: ${audit.id}\n`)
+
+    // Run audit with timeout and progress updates
+    console.log('🔍 Running audit (this may take a few minutes)...')
+    console.log('   This will crawl and analyze the website...\n')
+    const auditStartTime = Date.now()
+    
+    // Show progress indicator
+    let progressInterval: NodeJS.Timeout | null = null
+    try {
+      progressInterval = setInterval(() => {
+        const elapsed = Math.round((Date.now() - auditStartTime) / 1000)
+        const minutes = Math.floor(elapsed / 60)
+        const seconds = elapsed % 60
+        process.stdout.write(`\r   ⏳ Running... (${minutes}m ${seconds}s)`)
+      }, 2000)
+      
+      const auditPromise = runAudit(url, {
+        maxPages: 5,
+        maxDepth: 3,
+        tier: 'starter'
+      })
+
+      // Add timeout of 10 minutes (reduced from 15)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Audit timed out after 10 minutes')), 10 * 60 * 1000)
+      })
+
+      const auditResult = await Promise.race([auditPromise, timeoutPromise]) as Awaited<ReturnType<typeof runAudit>>
+      
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+      process.stdout.write('\r' + ' '.repeat(50) + '\r') // Clear progress line
+
+      const auditDuration = Math.round((Date.now() - auditStartTime) / 1000)
+      const minutes = Math.floor(auditDuration / 60)
+      const seconds = auditDuration % 60
+      console.log(`✅ Audit completed in ${minutes}m ${seconds}s`)
+      console.log(`   Pages scanned: ${auditResult.pages.length}\n`)
+    } catch (error) {
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
+      process.stdout.write('\r' + ' '.repeat(50) + '\r') // Clear progress line
+      console.error('\n❌ Audit error:', error instanceof Error ? error.message : error)
+      throw error
+    }
+
+    // Generate summaries
+    const shortSummary = generateShortSummary(auditResult)
+    const detailedSummary = generateDetailedSummary(auditResult)
+
+    // Update audit record
+    console.log('💾 Saving audit results...')
+    await prisma.audit.update({
+      where: { id: audit.id },
+      data: {
+        status: 'completed',
+        overallScore: auditResult.summary.overallScore,
+        technicalScore: auditResult.summary.technicalScore,
+        onPageScore: auditResult.summary.onPageScore,
+        contentScore: auditResult.summary.contentScore,
+        accessibilityScore: auditResult.summary.accessibilityScore,
+        shortSummary,
+        detailedSummary,
+        rawJson: JSON.stringify(auditResult),
+        issues: {
+          create: [
+            ...auditResult.technicalIssues,
+            ...auditResult.onPageIssues,
+            ...auditResult.contentIssues,
+            ...auditResult.accessibilityIssues,
+            ...auditResult.performanceIssues
+          ].map(issue => ({
+            category: issue.category,
+            severity: issue.severity,
+            message: issue.message,
+            details: issue.details || '',
+            affectedPagesJson: JSON.stringify(issue.affectedPages || [])
+          }))
+        }
+      }
+    })
+
+    console.log('✅ Audit results saved\n')
+
+    // Get branding settings
+    const branding = {
+      brandName: settings?.brandName || 'SEO Audit Pro',
+      brandSubtitle: settings?.brandSubtitle || undefined,
+      primaryColor: settings?.primaryColor || '#3b82f6',
+      logoUrl: settings?.logoUrl || '/logo.png'
+    }
+
+    // Generate PDF
+    console.log('📄 Generating PDF report...')
+    const pdfBuffer = await generatePDF(auditResult, branding, url)
+    console.log('✅ PDF generated\n')
+
+    // Format email content (similar to email route)
+    const formattedSummary = shortSummary
       .split('\n')
       .filter(line => line.trim().length > 0)
       .map(line => `<p style="margin: 0 0 12px 0; color: #374151; line-height: 1.6;">${line.trim()}</p>`)
       .join('')
 
-    // Get audit scores for display
-    const overallScore = audit.overallScore || 0
-    const technicalScore = audit.technicalScore || 0
-    const onPageScore = audit.onPageScore || 0
-    const contentScore = audit.contentScore || 0
-    const accessibilityScore = audit.accessibilityScore || 0
-
-    // Get score color based on value
     const getScoreColor = (score: number) => {
-      if (score >= 80) return '#10b981' // green
-      if (score >= 60) return '#f59e0b' // yellow
-      return '#ef4444' // red
+      if (score >= 80) return '#10b981'
+      if (score >= 60) return '#f59e0b'
+      return '#ef4444'
     }
+
+    const overallScore = auditResult.summary.overallScore
+    const technicalScore = auditResult.summary.technicalScore
+    const onPageScore = auditResult.summary.onPageScore
+    const contentScore = auditResult.summary.contentScore
+    const accessibilityScore = auditResult.summary.accessibilityScore
 
     const primaryColor = branding.primaryColor || '#3b82f6'
     const brandName = branding.brandName || 'SEOAuditPro'
+    const escapedUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-    // Escape HTML in URL for safety
-    const escapedUrl = audit.url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    
     const emailHtml = `
 <!DOCTYPE html>
 <html lang="en">
@@ -123,8 +199,11 @@ export async function POST(
                     <!-- Header -->
                     <tr>
                         <td style="background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%); padding: 40px 40px 30px 40px; text-align: center;">
-                            ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="${brandName}" style="max-width: 200px; height: auto; margin-bottom: 0; display: block; margin-left: auto; margin-right: auto;" />` : ''}
-                            ${branding.brandSubtitle ? `<p style="margin: 16px 0 0 0; color: #ffffff; font-size: 16px; opacity: 0.9;">${branding.brandSubtitle}</p>` : ''}
+                            ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="${brandName}" style="max-width: 200px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">` : ''}
+                            <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: -0.5px;">
+                                ${brandName}
+                            </h1>
+                            ${branding.brandSubtitle ? `<p style="margin: 8px 0 0 0; color: #ffffff; font-size: 16px; opacity: 0.9;">${branding.brandSubtitle}</p>` : ''}
                         </td>
                     </tr>
                     
@@ -204,9 +283,8 @@ export async function POST(
                     <!-- Footer -->
                     <tr>
                         <td style="background-color: #f9fafb; padding: 32px 40px; border-top: 1px solid #e5e7eb; text-align: center;">
-                            ${branding.logoUrl ? `<p style="margin: 0 0 8px 0; text-align: center;"><img src="${branding.logoUrl}" alt="${brandName}" style="max-width: 150px; height: auto;" /></p>` : ''}
-                            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px; text-align: center;">
-                                Professional SEO Auditing
+                            <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">
+                                <strong style="color: #111827;">${brandName}</strong> - Professional SEO Auditing
                             </p>
                             <p style="margin: 0 0 12px 0; color: #9ca3af; font-size: 12px; line-height: 1.6;">
                                 This is an automated email from your SEO audit system.<br>
@@ -226,11 +304,10 @@ export async function POST(
 </html>
     `
 
-    // Create a better plain text version (important for spam filters)
     const emailText = `
 ${brandName} - SEO Audit Report
 
-Your comprehensive SEO audit for ${audit.url} has been completed.
+Your comprehensive SEO audit for ${url} has been completed.
 
 SCORES:
 - Overall Score: ${overallScore}/100
@@ -240,7 +317,7 @@ SCORES:
 - Accessibility: ${accessibilityScore}/100
 
 SUMMARY:
-${audit.shortSummary.replace(/\n/g, '\n\n')}
+${shortSummary.replace(/\n/g, '\n\n')}
 
 A detailed PDF report is attached to this email with comprehensive analysis, actionable recommendations, and page-level findings.
 
@@ -251,10 +328,11 @@ Professional SEO Auditing Services
 This is an automated email from your SEO audit system. If you have questions, please reply to this email.
     `.trim()
 
-    // Clean subject line to avoid spam triggers
-    const cleanUrl = audit.url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+    const cleanUrl = url.replace(/^https?:\/\//, '').replace(/\/$/, '')
     const subject = `${brandName} - SEO Audit Report for ${cleanUrl}`
 
+    // Send email
+    console.log(`📧 Sending email to ${emailTo}...`)
     await sendEmail({
       to: emailTo,
       subject: subject,
@@ -266,13 +344,25 @@ This is an automated email from your SEO audit system. If you have questions, pl
       }]
     })
 
-    return NextResponse.json({ success: true })
+    console.log('✅ Email sent successfully!')
+    console.log(`\n📊 Audit Summary:`)
+    console.log(`   Overall Score: ${overallScore}/100`)
+    console.log(`   Technical: ${technicalScore}/100`)
+    console.log(`   On-Page: ${onPageScore}/100`)
+    console.log(`   Content: ${contentScore}/100`)
+    console.log(`   Accessibility: ${accessibilityScore}/100`)
+    console.log(`\n✨ Done! Check your email at ${emailTo}\n`)
+
   } catch (error) {
-    console.error('Email sending error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to send email' },
-      { status: 500 }
-    )
+    console.error('\n❌ Error:', error instanceof Error ? error.message : error)
+    if (error instanceof Error && error.stack) {
+      console.error('Stack trace:', error.stack)
+    }
+    process.exit(1)
+  } finally {
+    await prisma.$disconnect()
   }
 }
+
+main()
 

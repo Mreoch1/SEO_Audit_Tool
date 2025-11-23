@@ -33,8 +33,33 @@ export interface EnhancedOnPageData {
     h1Count: number
     h2Count: number
     h3Count: number
+    h4Count?: number // NEW: Agency tier
+    h5Count?: number // NEW: Agency tier
+    h6Count?: number // NEW: Agency tier
     hierarchy: 'good' | 'fair' | 'poor'
     keywordUsage: number
+    hierarchyMap?: { // NEW: Agency tier - Heading hierarchy map
+      level: number
+      text: string
+      order: number
+    }[]
+    hasProperHierarchy?: boolean // NEW: Agency tier - Checks for proper H1->H2->H3 order
+  }
+  titleH1Alignment?: { // NEW: Agency tier - Title/H1 alignment
+    isAligned: boolean
+    similarityScore: number // 0-100
+    titleText?: string
+    h1Text?: string
+    recommendations: string[]
+  }
+  duplicateTitles?: { // NEW: Agency tier - Duplicate title detection
+    count: number
+    pages: string[]
+  }
+  ogConflicts?: { // NEW: Agency tier - OG/Twitter conflicts
+    titleMismatch: boolean
+    descriptionMismatch: boolean
+    conflicts: string[]
   }
   internalLinking: {
     count: number
@@ -67,7 +92,8 @@ export interface EnhancedOnPageData {
 export function analyzeEnhancedOnPage(
   page: PageData,
   html: string,
-  primaryKeyword?: string
+  primaryKeyword?: string,
+  siteCategory?: string
 ): { data: EnhancedOnPageData; issues: Issue[] } {
   const issues: Issue[] = []
   const data: EnhancedOnPageData = {
@@ -148,21 +174,30 @@ export function analyzeEnhancedOnPage(
       data.title.readability = 'good'
     }
 
-    // Title length issues
-    if (page.titleLength! < 30) {
+    // CRITICAL FIX #3: Title length issues - Contextual rules
+    // Homepage brand names (like "NASA") are acceptable even if short
+    // News articles: 35-60 chars is acceptable
+    // Not strict 50-60 requirement
+    const isHomepage = page.url === page.url.split('/').slice(0, 3).join('/') || page.url.endsWith('/')
+    const isBrandName = page.title && page.title.length < 20 && /^[A-Z\s]+$/.test(page.title.trim())
+    const isNewsArticle = page.url.toLowerCase().includes('/news/') || page.url.toLowerCase().includes('/article/')
+    
+    if (page.titleLength! < 30 && !isHomepage && !isBrandName) {
+      // For non-homepage, non-brand pages, flag if very short (< 30)
       issues.push({
         category: 'On-page',
-        severity: 'High',
+        severity: 'Medium', // Reduced from High
         message: 'Title tag too short',
-        details: `Title is ${page.titleLength} characters. Recommended: 50-60 characters for optimal display in search results.`,
+        details: `Title is ${page.titleLength} characters. Recommended: 35-60 characters for optimal display in search results.`,
         affectedPages: [page.url]
       })
-    } else if (page.titleLength! > 60) {
+    } else if (page.titleLength! > 70) {
+      // Only flag if significantly over (70+ chars), not 60+
       issues.push({
         category: 'On-page',
-        severity: 'Medium',
+        severity: 'Low', // Reduced from Medium
         message: 'Title tag too long',
-        details: `Title is ${page.titleLength} characters. May be truncated in search results. Recommended: 50-60 characters.`,
+        details: `Title is ${page.titleLength} characters. May be truncated in search results. Recommended: 35-60 characters for best results.`,
         affectedPages: [page.url]
       })
     }
@@ -236,7 +271,21 @@ export function analyzeEnhancedOnPage(
       })
     }
 
-    if (!data.metaDescription.hasCallToAction) {
+    // CRITICAL FIX #14: Only flag missing CTA for business/commercial sites
+    // Check if page has business-related schema or is a commercial site
+    const hasBusinessSchema = page.schemaTypes?.some(t => 
+      t.includes('LocalBusiness') || 
+      t.includes('Business') || 
+      t.includes('Service') ||
+      t.includes('Product') ||
+      t.includes('Store') ||
+      t.includes('Restaurant') ||
+      t.includes('Organization')
+    ) || false
+    
+    // Only flag missing CTA for business/commercial sites (not Government/Education/News/Nonprofit)
+    const isCommercialSite = !siteCategory || (siteCategory !== 'Government' && siteCategory !== 'Education' && siteCategory !== 'News' && siteCategory !== 'Nonprofit')
+    if (!data.metaDescription.hasCallToAction && (hasBusinessSchema || isCommercialSite)) {
       issues.push({
         category: 'On-page',
         severity: 'Low',
@@ -247,9 +296,49 @@ export function analyzeEnhancedOnPage(
     }
   }
 
-  // Analyze heading structure
+  // NEW: Agency tier - Extract all headings for hierarchy map
+  const headingMap: { level: number; text: string; order: number }[] = []
+  const headingOrder = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+  let headingOrderIndex = 0
+  
+  headingOrder.forEach((tag, level) => {
+    const matches = html.match(new RegExp(`<${tag}[^>]*>([^<]+)</${tag}>`, 'gi')) || []
+    matches.forEach(match => {
+      const text = match.replace(new RegExp(`<${tag}[^>]*>|</${tag}>`, 'gi'), '').trim()
+      if (text.length > 0) {
+        headingMap.push({
+          level: level + 1,
+          text: text.substring(0, 100), // Limit length
+          order: headingOrderIndex++
+        })
+      }
+    })
+  })
+  
+  data.headings.hierarchyMap = headingMap
+  
+  // NEW: Agency tier - Check for proper heading hierarchy
+  let hasProperHierarchy = true
+  let lastLevel = 0
+  for (const heading of headingMap) {
+    if (heading.level > lastLevel + 1) {
+      // Skipped a level (e.g., H1 -> H3 without H2)
+      hasProperHierarchy = false
+      break
+    }
+    lastLevel = heading.level
+  }
+  data.headings.hasProperHierarchy = hasProperHierarchy
+  
+  // Count all heading levels
   const h3Matches = html.match(/<h3[^>]*>/gi) || []
   data.headings.h3Count = h3Matches.length
+  const h4Matches = html.match(/<h4[^>]*>/gi) || []
+  data.headings.h4Count = h4Matches.length
+  const h5Matches = html.match(/<h5[^>]*>/gi) || []
+  data.headings.h5Count = h5Matches.length
+  const h6Matches = html.match(/<h6[^>]*>/gi) || []
+  data.headings.h6Count = h6Matches.length
 
   // Check heading hierarchy
   if (data.headings.h1Count === 0) {
@@ -287,6 +376,60 @@ export function analyzeEnhancedOnPage(
     data.headings.hierarchy = 'fair'
   } else {
     data.headings.hierarchy = 'poor'
+  }
+  
+  // NEW: Agency tier - Title/H1 alignment analysis
+  if (page.title && page.h1Text && page.h1Text.length > 0) {
+    const titleText = page.title.toLowerCase().trim()
+    const h1Text = page.h1Text[0].toLowerCase().trim()
+    
+    // Calculate similarity (simple word overlap)
+    const titleWords = new Set(titleText.split(/\s+/).filter(w => w.length > 2))
+    const h1Words = new Set(h1Text.split(/\s+/).filter(w => w.length > 2))
+    
+    const commonWords = Array.from(titleWords).filter(w => h1Words.has(w))
+    const totalUniqueWords = new Set([...titleWords, ...h1Words]).size
+    const similarityScore = totalUniqueWords > 0 
+      ? Math.round((commonWords.length / totalUniqueWords) * 100)
+      : 0
+    
+    const isAligned = similarityScore >= 30 // At least 30% word overlap
+    
+    data.titleH1Alignment = {
+      isAligned,
+      similarityScore,
+      titleText: page.title,
+      h1Text: page.h1Text[0],
+      recommendations: []
+    }
+    
+    if (!isAligned) {
+      data.titleH1Alignment.recommendations.push(
+        'Title and H1 should be aligned. Consider using similar keywords and phrasing.',
+        'H1 should reinforce the main topic stated in the title tag.'
+      )
+    } else if (similarityScore < 50) {
+      data.titleH1Alignment.recommendations.push(
+        'Title and H1 could be more closely aligned for better SEO consistency.'
+      )
+    }
+  } else {
+    data.titleH1Alignment = {
+      isAligned: false,
+      similarityScore: 0,
+      recommendations: ['Ensure both title tag and H1 exist and are aligned.']
+    }
+  }
+  
+  // NEW: Agency tier - Check for improper heading hierarchy
+  if (!data.headings.hasProperHierarchy && headingMap.length > 1) {
+    issues.push({
+      category: 'On-page',
+      severity: 'Medium',
+      message: 'Improper heading hierarchy',
+      details: 'Headings skip levels (e.g., H1 followed by H3 without H2). Maintain proper hierarchy: H1 → H2 → H3 → H4.',
+      affectedPages: [page.url]
+    })
   }
 
   // Analyze images
@@ -343,8 +486,10 @@ export function analyzeEnhancedOnPage(
     
     data.url.hasKeywords = pathSegments.length > 0 && pathSegments.some(seg => seg.length > 3)
     
+    // CRITICAL FIX #13: Only flag stop words if URL is excessively long (8+ words)
     const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']
-    data.url.hasStopWords = stopWords.some(word => urlText.includes(word))
+    const urlWordCount = pathSegments.join('-').split(/[-_]/).filter(w => w.length > 0).length
+    data.url.hasStopWords = urlWordCount >= 8 && stopWords.some(word => urlText.includes(word))
     
     if (urlObj.pathname.length > 3 && pathSegments.length <= 3 && !data.url.hasStopWords) {
       data.url.readability = 'good'
@@ -362,12 +507,13 @@ export function analyzeEnhancedOnPage(
       })
     }
 
-    if (data.url.hasStopWords) {
+    // CRITICAL FIX #13: Only flag stop words if URL is excessively long (8+ words)
+    if (data.url.hasStopWords && urlWordCount >= 8) {
       issues.push({
         category: 'On-page',
         severity: 'Low',
-        message: 'URL contains stop words',
-        details: 'Remove stop words (the, a, an, etc.) from URLs for cleaner, more keyword-focused URLs.',
+        message: 'URL contains stop words and is excessively long',
+        details: `URL has ${urlWordCount} words and contains stop words. Consider removing stop words (the, a, an, etc.) for cleaner URLs.`,
         affectedPages: [page.url]
       })
     }
@@ -378,6 +524,66 @@ export function analyzeEnhancedOnPage(
   // Check for social meta tags
   data.social.hasOpenGraph = /<meta[^>]*property=["']og:/i.test(html)
   data.social.hasTwitterCard = /<meta[^>]*(name|property)=["']twitter:/i.test(html)
+  
+  // NEW: Agency tier - OG/Twitter conflicts detection
+  const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i)
+  const ogDescriptionMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)
+  const twitterTitleMatch = html.match(/<meta[^>]*(name|property)=["']twitter:title["'][^>]*content=["']([^"']+)["']/i)
+  const twitterDescriptionMatch = html.match(/<meta[^>]*(name|property)=["']twitter:description["'][^>]*content=["']([^"']+)["']/i)
+  
+  const conflicts: string[] = []
+  let titleMismatch = false
+  let descriptionMismatch = false
+  
+  if (page.title && ogTitleMatch) {
+    const ogTitle = ogTitleMatch[1].trim()
+    const pageTitle = page.title.trim()
+    if (ogTitle.toLowerCase() !== pageTitle.toLowerCase()) {
+      titleMismatch = true
+      conflicts.push(`OG title ("${ogTitle}") differs from page title ("${pageTitle}")`)
+    }
+  }
+  
+  if (page.metaDescription && ogDescriptionMatch) {
+    const ogDesc = ogDescriptionMatch[1].trim()
+    const pageDesc = page.metaDescription.trim()
+    if (ogDesc.toLowerCase() !== pageDesc.toLowerCase()) {
+      descriptionMismatch = true
+      conflicts.push(`OG description differs from meta description`)
+    }
+  }
+  
+  if (ogTitleMatch && twitterTitleMatch) {
+    const ogTitle = ogTitleMatch[1].trim()
+    const twitterTitle = twitterTitleMatch[2] ? twitterTitleMatch[2].trim() : twitterTitleMatch[1].trim()
+    if (ogTitle.toLowerCase() !== twitterTitle.toLowerCase()) {
+      conflicts.push(`OG title and Twitter title differ`)
+    }
+  }
+  
+  if (ogDescriptionMatch && twitterDescriptionMatch) {
+    const ogDesc = ogDescriptionMatch[1].trim()
+    const twitterDesc = twitterDescriptionMatch[2] ? twitterDescriptionMatch[2].trim() : twitterDescriptionMatch[1].trim()
+    if (ogDesc.toLowerCase() !== twitterDesc.toLowerCase()) {
+      conflicts.push(`OG description and Twitter description differ`)
+    }
+  }
+  
+  if (conflicts.length > 0) {
+    data.ogConflicts = {
+      titleMismatch,
+      descriptionMismatch,
+      conflicts
+    }
+    
+    issues.push({
+      category: 'On-page',
+      severity: 'Low',
+      message: 'Social media tag conflicts detected',
+      details: conflicts.join('; '),
+      affectedPages: [page.url]
+    })
+  }
 
   if (!data.social.hasOpenGraph) {
     issues.push({

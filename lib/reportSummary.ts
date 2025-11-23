@@ -11,7 +11,13 @@ import { AuditResult } from './types'
  * Generate short summary (~150-250 words) for Upwork delivery
  */
 export function generateShortSummary(result: AuditResult): string {
-  const { summary, technicalIssues, onPageIssues, contentIssues, accessibilityIssues } = result
+  const { 
+    summary, 
+    technicalIssues = [], 
+    onPageIssues = [], 
+    contentIssues = [], 
+    accessibilityIssues = [] 
+  } = result
   
   const totalIssues = summary.highSeverityIssues + summary.mediumSeverityIssues + summary.lowSeverityIssues
   
@@ -40,10 +46,10 @@ export function generateShortSummary(result: AuditResult): string {
   
   // Mention top issue types - prioritize high-priority issues first
   const highPriorityIssues = [
-    ...technicalIssues.filter(i => i.severity === 'High'),
-    ...onPageIssues.filter(i => i.severity === 'High'),
-    ...contentIssues.filter(i => i.severity === 'High'),
-    ...accessibilityIssues.filter(i => i.severity === 'High')
+    ...(technicalIssues || []).filter(i => i.severity === 'High'),
+    ...(onPageIssues || []).filter(i => i.severity === 'High'),
+    ...(contentIssues || []).filter(i => i.severity === 'High'),
+    ...(accessibilityIssues || []).filter(i => i.severity === 'High')
   ]
   
   const issueTypes: string[] = []
@@ -60,10 +66,10 @@ export function generateShortSummary(result: AuditResult): string {
   // Then add medium-priority issues if we have room
   if (issueTypes.length < 5) {
     const mediumPriorityIssues = [
-      ...technicalIssues.filter(i => i.severity === 'Medium'),
-      ...onPageIssues.filter(i => i.severity === 'Medium'),
-      ...contentIssues.filter(i => i.severity === 'Medium'),
-      ...accessibilityIssues.filter(i => i.severity === 'Medium')
+      ...(technicalIssues || []).filter(i => i.severity === 'Medium'),
+      ...(onPageIssues || []).filter(i => i.severity === 'Medium'),
+      ...(contentIssues || []).filter(i => i.severity === 'Medium'),
+      ...(accessibilityIssues || []).filter(i => i.severity === 'Medium')
     ]
     const mediumIssueTypes = mediumPriorityIssues
       .map(i => normalizeIssueType(i.message))
@@ -122,10 +128,10 @@ export function generateShortSummary(result: AuditResult): string {
     }
   } else {
     // No high-priority issues, focus on medium/low
-    const missingTitle = onPageIssues.some(i => i.message.includes('Missing page title'))
-    const missingMeta = onPageIssues.some(i => i.message.includes('Missing meta description'))
-    const missingH1 = onPageIssues.some(i => i.message.includes('Missing H1'))
-    const thinContent = contentIssues.some(i => i.message.includes('Thin content'))
+    const missingTitle = (onPageIssues || []).some(i => i.message.includes('Missing page title'))
+    const missingMeta = (onPageIssues || []).some(i => i.message.includes('Missing meta description'))
+    const missingH1 = (onPageIssues || []).some(i => i.message.includes('Missing H1'))
+    const thinContent = (contentIssues || []).some(i => i.message.includes('Thin content'))
     
     if (missingTitle || missingMeta || missingH1) {
       const missingItems: string[] = []
@@ -133,17 +139,17 @@ export function generateShortSummary(result: AuditResult): string {
       if (missingMeta) missingItems.push('meta descriptions')
       if (missingH1) missingItems.push('H1 tags')
       recommendations.push(`optimizing on-page elements like ${missingItems.join(' and ')}`)
-    } else if (onPageIssues.length > 0) {
+    } else if ((onPageIssues || []).length > 0) {
       recommendations.push('optimizing on-page SEO elements')
     }
     
     if (thinContent) {
       recommendations.push('expanding thin content pages')
-    } else if (contentIssues.length > 0) {
+    } else if ((contentIssues || []).length > 0) {
       recommendations.push('improving content quality')
     }
     
-    if (technicalIssues.length > 0 && recommendations.length === 0) {
+    if ((technicalIssues || []).length > 0 && recommendations.length === 0) {
       recommendations.push('enhancing technical SEO elements')
     }
   }
@@ -169,7 +175,14 @@ export function generateShortSummary(result: AuditResult): string {
  * Generate detailed summary (~400-600 words) for PDF first page
  */
 export function generateDetailedSummary(result: AuditResult): string {
-  const { summary, technicalIssues, onPageIssues, contentIssues, accessibilityIssues, siteWide } = result
+  const { 
+    summary, 
+    technicalIssues = [], 
+    onPageIssues = [], 
+    contentIssues = [], 
+    accessibilityIssues = [],
+    siteWide 
+  } = result
   
   const totalIssues = summary.highSeverityIssues + summary.mediumSeverityIssues + summary.lowSeverityIssues
   
@@ -198,9 +211,9 @@ export function generateDetailedSummary(result: AuditResult): string {
   text += `Key Findings\n\n`
   
   // Technical findings
-  if (technicalIssues.length > 0) {
-    const highTech = technicalIssues.filter(i => i.severity === 'High').length
-    text += `Technical SEO: ${technicalIssues.length} issue${technicalIssues.length !== 1 ? 's' : ''} found, including ${highTech} high-priority. `
+  if ((technicalIssues || []).length > 0) {
+    const highTech = (technicalIssues || []).filter(i => i.severity === 'High').length
+    text += `Technical SEO: ${(technicalIssues || []).length} issue${(technicalIssues || []).length !== 1 ? 's' : ''} found, including ${highTech} high-priority. `
     if (!siteWide.sitemapExists) {
       text += `Notably, no sitemap.xml was detected, which can limit search engine discovery of your pages. `
     }
@@ -211,17 +224,17 @@ export function generateDetailedSummary(result: AuditResult): string {
   }
   
   // On-page findings
-  if (onPageIssues.length > 0) {
+  if ((onPageIssues || []).length > 0) {
     // Count pages, not issues (issues may be consolidated with multiple affectedPages)
-    const missingTitleIssues = onPageIssues.filter(i => i.message.includes('Missing page title'))
-    const missingMetaIssues = onPageIssues.filter(i => i.message.includes('Missing meta description'))
-    const missingH1Issues = onPageIssues.filter(i => i.message.includes('Missing H1'))
+    const missingTitleIssues = (onPageIssues || []).filter(i => i.message.includes('Missing page title'))
+    const missingMetaIssues = (onPageIssues || []).filter(i => i.message.includes('Missing meta description'))
+    const missingH1Issues = (onPageIssues || []).filter(i => i.message.includes('Missing H1'))
     
     const missingTitleCount = missingTitleIssues.reduce((sum, issue) => sum + (issue.affectedPages?.length || 1), 0)
     const missingMetaCount = missingMetaIssues.reduce((sum, issue) => sum + (issue.affectedPages?.length || 1), 0)
     const missingH1Count = missingH1Issues.reduce((sum, issue) => sum + (issue.affectedPages?.length || 1), 0)
     
-    text += `On-Page SEO: ${onPageIssues.length} issue${onPageIssues.length !== 1 ? 's' : ''} identified. `
+    text += `On-Page SEO: ${(onPageIssues || []).length} issue${(onPageIssues || []).length !== 1 ? 's' : ''} identified. `
     if (missingTitleCount > 0) text += `${missingTitleCount} page${missingTitleCount !== 1 ? 's' : ''} missing titles, `
     if (missingMetaCount > 0) text += `${missingMetaCount} page${missingMetaCount !== 1 ? 's' : ''} missing meta descriptions, `
     if (missingH1Count > 0) text += `${missingH1Count} page${missingH1Count !== 1 ? 's' : ''} missing H1 tags. `
@@ -232,9 +245,9 @@ export function generateDetailedSummary(result: AuditResult): string {
   }
   
   // Content findings
-  if (contentIssues.length > 0) {
-    const thinPages = contentIssues.filter(i => i.message.includes('Thin content')).length
-    text += `Content Quality: ${contentIssues.length} issue${contentIssues.length !== 1 ? 's' : ''} detected. `
+  if ((contentIssues || []).length > 0) {
+    const thinPages = (contentIssues || []).filter(i => i.message.includes('Thin content')).length
+    text += `Content Quality: ${(contentIssues || []).length} issue${(contentIssues || []).length !== 1 ? 's' : ''} detected. `
     if (thinPages > 0) {
       text += `${thinPages} page${thinPages !== 1 ? 's' : ''} contain${thinPages === 1 ? 's' : ''} thin content (less than 300 words), which may limit their SEO value. `
     }
@@ -242,11 +255,11 @@ export function generateDetailedSummary(result: AuditResult): string {
   }
   
   // Accessibility findings
-  if (accessibilityIssues.length > 0) {
-    const missingAlt = accessibilityIssues.filter(i => i.message.includes('alt')).length
+  if ((accessibilityIssues || []).length > 0) {
+    const missingAlt = (accessibilityIssues || []).filter(i => i.message.includes('alt')).length
     const missingViewport = result.pages.filter(p => !p.hasViewport).length
     
-    text += `Accessibility: ${accessibilityIssues.length} issue${accessibilityIssues.length !== 1 ? 's' : ''} found. `
+    text += `Accessibility: ${(accessibilityIssues || []).length} issue${(accessibilityIssues || []).length !== 1 ? 's' : ''} found. `
     if (missingAlt > 0) {
       text += `${missingAlt} page${missingAlt !== 1 ? 's' : ''} have images missing alt text, which impacts both accessibility and SEO. `
     }
@@ -268,15 +281,15 @@ export function generateDetailedSummary(result: AuditResult): string {
     recommendations.push(`Create and submit a sitemap.xml to help search engines discover all pages`)
   }
   
-  if (onPageIssues.filter(i => i.message.includes('Missing')).length > 0) {
+  if ((onPageIssues || []).filter(i => i.message.includes('Missing')).length > 0) {
     recommendations.push(`Add missing page titles, meta descriptions, and H1 tags to all pages`)
   }
   
-  if (contentIssues.filter(i => i.message.includes('Thin content')).length > 0) {
+  if ((contentIssues || []).filter(i => i.message.includes('Thin content')).length > 0) {
     recommendations.push(`Expand thin content pages to at least 300 words to improve their SEO value`)
   }
   
-  if (accessibilityIssues.filter(i => i.message.includes('alt')).length > 0) {
+  if ((accessibilityIssues || []).filter(i => i.message.includes('alt')).length > 0) {
     recommendations.push(`Add descriptive alt text to all images for accessibility and SEO benefits`)
   }
   

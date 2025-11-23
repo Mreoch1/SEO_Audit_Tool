@@ -19,6 +19,7 @@ export interface DuplicateUrlAnalysis {
   duplicateGroups: DuplicateUrlGroup[]
   totalDuplicates: number
   canonicalConflicts: number
+  lowPriorityCanonicalConflicts?: number // CRITICAL FIX #10: Related category page canonicals
   recommendedCanonicals: Map<string, string> // URL -> preferred canonical
 }
 
@@ -96,6 +97,7 @@ export function analyzeDuplicateUrls(
   
   // Check for canonical conflicts
   let canonicalConflicts = 0
+  let lowPriorityConflicts = 0 // CRITICAL FIX #10: Related category page canonicals
   const recommendedCanonicals = new Map<string, string>()
   
   pages.forEach(page => {
@@ -108,7 +110,43 @@ export function analyzeDuplicateUrls(
       const normalizedRecommended = normalizeUrl(recommendedCanonical)
       
       if (normalizedDeclared !== normalizedRecommended) {
-        canonicalConflicts++
+        // CRITICAL FIX #10: Check if canonical links to a related category page
+        // If canonical is on same domain and has similar path structure, it's likely intentional
+        try {
+          const pageUrlObj = new URL(page.url)
+          const declaredUrlObj = new URL(declaredCanonical)
+          
+          // Same domain check
+          const sameDomain = pageUrlObj.hostname === declaredUrlObj.hostname ||
+                            pageUrlObj.hostname.replace(/^www\./, '') === declaredUrlObj.hostname.replace(/^www\./, '')
+          
+          if (sameDomain) {
+            const pagePath = pageUrlObj.pathname
+            const declaredPath = declaredUrlObj.pathname
+            
+            // Check if canonical points to a parent category page (e.g., /category/page -> /category/)
+            // or a closely related page (e.g., /category/page -> /category/other-page)
+            const pagePathParts = pagePath.split('/').filter(Boolean)
+            const declaredPathParts = declaredPath.split('/').filter(Boolean)
+            
+            // If paths share common segments, it's likely a related category page
+            const commonSegments = pagePathParts.filter(seg => declaredPathParts.includes(seg))
+            const isRelatedCategory = commonSegments.length >= 1 && 
+                                     (declaredPathParts.length <= pagePathParts.length + 1)
+            
+            if (isRelatedCategory) {
+              lowPriorityConflicts++
+            } else {
+              canonicalConflicts++
+            }
+          } else {
+            // Different domain - this is a real conflict
+            canonicalConflicts++
+          }
+        } catch {
+          // If URL parsing fails, treat as conflict
+          canonicalConflicts++
+        }
       }
     }
     
@@ -119,6 +157,7 @@ export function analyzeDuplicateUrls(
     duplicateGroups,
     totalDuplicates: duplicateGroups.reduce((sum, g) => sum + g.duplicates.length, 0),
     canonicalConflicts,
+    lowPriorityCanonicalConflicts: lowPriorityConflicts, // CRITICAL FIX #10
     recommendedCanonicals
   }
 }

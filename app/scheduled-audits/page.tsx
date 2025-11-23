@@ -132,7 +132,7 @@ export default function ScheduledAuditsPage() {
       <div className="border-b bg-white">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
+            <Link href="/audits/new" className="text-blue-600 hover:underline">← Create New Audit</Link>
             <h1 className="text-2xl font-bold mt-2">Scheduled Audits</h1>
           </div>
           <Button onClick={() => setShowForm(!showForm)}>

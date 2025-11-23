@@ -33,7 +33,7 @@ export async function GET(
     brandName: settings?.brandName || 'SEO Audit Pro',
     brandSubtitle: settings?.brandSubtitle || undefined,
     primaryColor: settings?.primaryColor || '#3b82f6',
-    logoUrl: settings?.logoUrl || undefined
+    logoUrl: settings?.logoUrl || '/logo.png'
   }
 
   if (!audit.rawJson) {

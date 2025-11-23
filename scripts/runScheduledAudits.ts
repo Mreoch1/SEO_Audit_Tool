@@ -3,7 +3,7 @@
  * Scheduled Audits Runner
  * 
  * This script should be run periodically (e.g., every 15 minutes) via cron:
- *   */15 * * * * cd /path/to/seo-audit-app && npm run runScheduledAudits
+ *   Every 15 minutes: cd /path/to/seo-audit-app && npm run runScheduledAudits
  * 
  * It checks all active scheduled audits and runs them if their cron expression
  * indicates they should run now.
@@ -105,7 +105,7 @@ async function main() {
               brandName: settings?.brandName || 'SEO Audit Pro',
               brandSubtitle: settings?.brandSubtitle || undefined,
               primaryColor: settings?.primaryColor || '#3b82f6',
-              logoUrl: settings?.logoUrl || undefined
+              logoUrl: settings?.logoUrl || '/logo.png'
             }
 
             const pdfBuffer = await generatePDF(auditResult, branding, scheduled.url)

@@ -409,6 +409,48 @@ Tests cover:
 5. Build: `npm run build`
 6. Start: `npm start`
 
+## Running Automated Audits
+
+### CLI Command for Full Audit + Email
+
+To run a complete SEO audit and automatically email the report:
+
+```bash
+npx tsx scripts/runAuditAndEmail.ts \
+  --url="https://example.com" \
+  --email="your-email@example.com" \
+  --tier="standard" \
+  --noAddOns
+```
+
+**Options:**
+- `--url` (required): Target URL to audit
+- `--email` (required): Email address to send report to
+- `--tier`: Audit tier - `starter`, `standard`, `professional`, or `agency` (default: `standard`)
+- `--maxPages`: Maximum pages to crawl (overrides tier default)
+- `--maxDepth`: Maximum crawl depth (overrides tier default)
+- `--noAddOns`: Disable all add-ons
+
+**Example:**
+```bash
+npx tsx scripts/runAuditAndEmail.ts \
+  --url="https://seoauditpro.net" \
+  --email="mreoch82@hotmail.com" \
+  --tier="standard" \
+  --noAddOns
+```
+
+This command will:
+1. Create a new audit record in the database
+2. Run the complete SEO audit (crawling, analysis, scoring)
+3. Generate a PDF report
+4. Email the report with the PDF attached
+
+**Report Storage:**
+- Audit results are stored in the database with the audit ID
+- PDF reports are generated on-demand and attached to emails
+- Audit data can be accessed via the web UI at `/audits/[id]`
+
 ## License
 
 MIT

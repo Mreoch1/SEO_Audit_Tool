@@ -25,36 +25,99 @@ export async function generatePDF(
 ): Promise<Buffer> {
   const html = generateReportHTML(auditResult, branding, url)
   
-  const browser = await puppeteer.launch({
-    headless: true, // Use old headless mode (more stable on macOS)
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu'
-    ],
-    timeout: 60000
-  })
+  let lastError: Error | null = null
+  const maxRetries = 3
   
-  try {
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'networkidle0' })
-    
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: {
-        top: '20mm',
-        right: '15mm',
-        bottom: '20mm',
-        left: '15mm'
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    let browser: any = null
+    try {
+      if (attempt > 0) {
+        const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+        console.log(`[PDF] Retry attempt ${attempt + 1}/${maxRetries}, waiting ${backoffDelay}ms...`)
+        await new Promise(resolve => setTimeout(resolve, backoffDelay))
       }
-    })
-    
-    return Buffer.from(pdf)
-  } finally {
-    await browser.close()
+      
+      // Try to use system Chrome if available
+      const systemChromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+      let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH
+      if (!executablePath) {
+        try {
+          const fs = require('fs')
+          if (fs.existsSync(systemChromePath)) {
+            executablePath = systemChromePath
+          }
+        } catch {
+          // Ignore
+        }
+      }
+      
+      browser = await puppeteer.launch({
+        headless: "new",
+        executablePath,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--no-crash-upload',
+          '--disable-breakpad',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-web-security'
+        ],
+        timeout: 60000,
+        protocolTimeout: 120000
+      })
+      
+      const page = await browser.newPage()
+      
+      // Set timeouts for page operations
+      page.setDefaultTimeout(30000)
+      page.setDefaultNavigationTimeout(30000)
+      
+      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      
+      // Wait a bit for styles to load
+      await page.waitForTimeout(2000)
+      
+      const pdf = await Promise.race([
+        page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: {
+            top: '20mm',
+            right: '15mm',
+            bottom: '20mm',
+            left: '15mm'
+          },
+          timeout: 60000
+        }),
+        new Promise<Buffer>((_, reject) => 
+          setTimeout(() => reject(new Error('PDF generation timed out')), 120000)
+        )
+      ])
+      
+      await page.close().catch(() => {})
+      await browser.close()
+      return Buffer.from(pdf)
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      if (browser) {
+        try {
+          await browser.close()
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+      
+      if (attempt < maxRetries - 1) {
+        console.log(`[PDF] Attempt ${attempt + 1} failed: ${lastError.message}, retrying...`)
+        continue
+      }
+    }
   }
+  
+  throw new Error(`Failed to generate PDF after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`)
 }
 
 /**
@@ -100,8 +163,11 @@ function generateReportHTML(
       padding: 40px;
     }
     .logo {
-      max-width: 200px;
-      margin-bottom: 30px;
+      max-width: 300px;
+      margin-bottom: 40px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
     }
     .brand-name {
       font-size: 36px;
@@ -278,8 +344,7 @@ function generateReportHTML(
 <body>
   <!-- Cover Page -->
   <div class="cover-page">
-    ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="Logo" class="logo">` : ''}
-    <div class="brand-name">${branding.brandName}</div>
+    ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="${branding.brandName}" class="logo">` : `<div class="brand-name">${branding.brandName}</div>`}
     ${branding.brandSubtitle ? `<div class="brand-subtitle">${branding.brandSubtitle}</div>` : ''}
     <div class="report-title">SEO Site Audit Report</div>
     <div class="report-url">${url}</div>
@@ -376,11 +441,11 @@ function generateReportHTML(
   </div>
   
   <!-- Technical Issues -->
-  ${result.technicalIssues.length > 0 ? `
+  ${(result.technicalIssues || []).length > 0 ? `
   <div class="page">
     <h1>Technical SEO Issues</h1>
     <div class="issues-section">
-      ${result.technicalIssues.slice(0, 20).map(issue => `
+      ${(result.technicalIssues || []).slice(0, 20).map(issue => `
         <div class="issue-item ${issue.severity.toLowerCase()}">
           <div class="issue-title">[${issue.severity}] ${issue.message}</div>
           ${issue.details ? `<div class="issue-details">${issue.details}</div>` : ''}
@@ -398,11 +463,11 @@ function generateReportHTML(
   ` : ''}
   
   <!-- On-Page Issues -->
-  ${result.onPageIssues.length > 0 ? `
+  ${(result.onPageIssues || []).length > 0 ? `
   <div class="page">
     <h1>On-Page SEO Issues</h1>
     <div class="issues-section">
-      ${result.onPageIssues.slice(0, 20).map(issue => `
+      ${(result.onPageIssues || []).slice(0, 20).map(issue => `
         <div class="issue-item ${issue.severity.toLowerCase()}">
           <div class="issue-title">[${issue.severity}] ${issue.message}</div>
           ${issue.details ? `<div class="issue-details">${issue.details}</div>` : ''}
@@ -420,11 +485,11 @@ function generateReportHTML(
   ` : ''}
   
   <!-- Content Issues -->
-  ${result.contentIssues.length > 0 ? `
+  ${(result.contentIssues || []).length > 0 ? `
   <div class="page">
     <h1>Content Quality Issues</h1>
     <div class="issues-section">
-      ${result.contentIssues.slice(0, 20).map(issue => `
+      ${(result.contentIssues || []).slice(0, 20).map(issue => `
         <div class="issue-item ${issue.severity.toLowerCase()}">
           <div class="issue-title">[${issue.severity}] ${issue.message}</div>
           ${issue.details ? `<div class="issue-details">${issue.details}</div>` : ''}
@@ -442,11 +507,11 @@ function generateReportHTML(
   ` : ''}
   
   <!-- Accessibility Issues -->
-  ${result.accessibilityIssues.length > 0 ? `
+  ${(result.accessibilityIssues || []).length > 0 ? `
   <div class="page">
     <h1>Accessibility Issues</h1>
     <div class="issues-section">
-      ${result.accessibilityIssues.slice(0, 20).map(issue => `
+      ${(result.accessibilityIssues || []).slice(0, 20).map(issue => `
         <div class="issue-item ${issue.severity.toLowerCase()}">
           <div class="issue-title">[${issue.severity}] ${issue.message}</div>
           ${issue.details ? `<div class="issue-details">${issue.details}</div>` : ''}
@@ -489,31 +554,49 @@ function generateReportHTML(
   ${result.pages.some(p => p.pageSpeedData || p.performanceMetrics) ? `
   <div class="page">
     <h1>Performance Metrics (Core Web Vitals)</h1>
-    <p style="margin-bottom: 20px;">Performance data from Google PageSpeed Insights and page rendering:</p>
+    <p style="margin-bottom: 20px;"><strong>CRITICAL FIX:</strong> Core Web Vitals shown below are from Google PageSpeed Insights API (when available). Crawler load time is shown separately.</p>
     ${generateCoreWebVitalsGraph(result.pages)}
     <div class="issues-section">
       ${result.pages.filter(p => p.pageSpeedData || p.performanceMetrics).slice(0, 10).map(page => {
-        // Use PageSpeed data if available (more accurate), otherwise fall back to performanceMetrics
+        // CRITICAL FIX: ONLY use PageSpeed API scores for Core Web Vitals, NOT Playwright metrics
         const pageSpeed = page.pageSpeedData
-        const mobile = pageSpeed?.mobile
-        const desktop = pageSpeed?.desktop
+        // Handle both full PageSpeedData structure and simplified structure
+        const mobile = (pageSpeed as any)?.mobile
+        const desktop = (pageSpeed as any)?.desktop
         const metrics = page.performanceMetrics
         
-        // Use mobile metrics (stricter) if PageSpeed available
-        // For LCP, only use local rendering metrics if they're > 500ms (somewhat realistic)
-        const lcp = mobile?.lcp || (metrics?.lcp && metrics.lcp > 500 ? metrics.lcp : undefined)
-        const fcp = mobile?.fcp || metrics?.fcp
-        const cls = mobile?.cls !== undefined ? mobile.cls : metrics?.cls
-        const inp = mobile?.inp || metrics?.fid // INP from PageSpeed, FID from metrics
-        const ttfb = mobile?.ttfb || metrics?.ttfb
-        const tbt = metrics?.tbt // TBT only from metrics
+        // CRITICAL FIX: Use ONLY PageSpeed API metrics for Core Web Vitals
+        // Do NOT fall back to performanceMetrics (Playwright) for Core Web Vitals
+        const lcp = mobile?.lcp || (pageSpeed as any)?.lcp || undefined
+        const fcp = mobile?.fcp || (pageSpeed as any)?.fcp || undefined
+        const cls = mobile?.cls !== undefined ? mobile.cls : ((pageSpeed as any)?.cls !== undefined ? (pageSpeed as any).cls : undefined)
+        const inp = mobile?.inp || undefined // INP only from PageSpeed
+        const ttfb = mobile?.ttfb || (pageSpeed as any)?.ttfb || undefined
+        
+        // Crawler load time (separate metric, not Core Web Vitals)
+        const crawlerLoadTime = page.loadTime
+        const tbt = metrics?.tbt // TBT only from metrics (not a Core Web Vital)
         
         return `
         <div class="issue-item">
-          <div class="issue-title">${page.url}</div>
-          <div style="margin-bottom: 15px;">
-            ${pageSpeed ? '<div style="color: #059669; font-weight: bold; margin-bottom: 10px;">📊 Data from Google PageSpeed Insights</div>' : '<div style="color: #666; margin-bottom: 10px;">📊 Data from page rendering</div>'}
+          <div class="issue-title" style="margin-bottom: 5px;">
+            <strong>${page.url}</strong>
+            ${pageSpeed ? '<span style="font-size: 11px; color: #059669; margin-left: 10px;">(Google PageSpeed Insights API)</span>' : '<span style="font-size: 11px; color: #f59e0b; margin-left: 10px;">(No PageSpeed data - Core Web Vitals unavailable)</span>'}
           </div>
+          ${pageSpeed ? `
+          <div style="margin-bottom: 15px; padding: 10px; background: #f0f9ff; border-left: 3px solid #3b82f6; font-size: 12px;">
+            <strong>Core Web Vitals (from PageSpeed API):</strong>
+          </div>
+          ` : `
+          <div style="margin-bottom: 15px; padding: 10px; background: #fef3c7; border-left: 3px solid #f59e0b; font-size: 12px;">
+            <strong>Note:</strong> Core Web Vitals not available from PageSpeed API. Showing crawler load time only.
+          </div>
+          `}
+          ${crawlerLoadTime ? `
+          <div style="margin-bottom: 10px; padding: 8px; background: #f9fafb; font-size: 12px;">
+            <strong>Crawler Load Time:</strong> ${Math.round(crawlerLoadTime)}ms (separate from Core Web Vitals)
+          </div>
+          ` : ''}
           <table style="margin-top: 15px; width: 100%; max-width: 600px;">
             <tbody>
               ${lcp && (cls !== undefined || inp || fcp || ttfb) ? `
@@ -530,7 +613,7 @@ function generateReportHTML(
               ` : ''}
               ${inp ? `
               <tr>
-                <td style="padding: 8px; font-weight: bold;">${pageSpeed ? 'INP' : 'FID'}: ${Math.round(inp)} ms</td>
+                <td style="padding: 8px; font-weight: bold;">INP (Interaction to Next Paint): ${Math.round(inp)} ms</td>
                 <td style="padding: 8px; ${inp > 500 ? 'color: #dc2626;' : inp > 200 ? 'color: #f59e0b;' : 'color: #10b981;'}">${inp > 500 ? 'Poor' : inp > 200 ? 'Needs Improvement' : 'Good'}</td>
               </tr>
               ` : ''}
@@ -552,7 +635,7 @@ function generateReportHTML(
           <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb;">
             <div style="font-weight: bold; margin-bottom: 10px; color: #dc2626;">⚡ Performance Opportunities:</div>
             <ul style="margin-left: 20px; color: #666;">
-              ${mobile.opportunities.slice(0, 5).map(opp => {
+              ${mobile?.opportunities?.slice(0, 5).map((opp: any) => {
                 // Use savings field directly (in milliseconds)
                 const savingsText = opp.savings ? `Potential savings: ${Math.round(opp.savings)}ms` : ''
                 return `
@@ -575,25 +658,97 @@ function generateReportHTML(
   ${result.pages.some(p => p.llmReadability) ? `
   <div class="page">
     <h1>LLM Readability Analysis</h1>
-    <p style="margin-bottom: 20px;">Analysis of dynamically rendered content that may be missed by LLMs:</p>
+    <p style="margin-bottom: 20px;">Analysis of dynamically rendered content that may be missed by LLMs and search engines:</p>
     <div class="issues-section">
       ${result.pages.filter(p => p.llmReadability).slice(0, 10).map(page => {
         const llm = page.llmReadability!
         // Calculate actual percentage (may be higher than displayed cap)
         const actualPercent = ((llm.renderedHtmlLength - llm.initialHtmlLength) / Math.max(llm.initialHtmlLength, 1)) * 100
         const displayPercent = actualPercent >= 10000 ? '10,000%+' : `${llm.renderingPercentage}%`
+        const similarity = llm.similarity !== undefined ? `${llm.similarity}%` : 'N/A'
+        
         return `
-        <div class="issue-item ${llm.hasHighRendering ? 'high' : 'low'}" style="margin-bottom: 20px;">
-          <div class="issue-title" style="font-size: 14px; margin-bottom: 10px;">${page.url}</div>
-          <div class="issue-details" style="font-size: 13px; line-height: 1.8;">
-            <strong>Rendering Percentage:</strong> ${displayPercent}<br>
-            <strong>Initial HTML:</strong> ${llm.initialHtmlLength.toLocaleString()} characters<br>
-            <strong>Rendered HTML:</strong> ${llm.renderedHtmlLength.toLocaleString()} characters
+        <div class="issue-item ${llm.hasHighRendering ? 'high' : 'low'}" style="margin-bottom: 30px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px;">
+          <div class="issue-title" style="font-size: 15px; font-weight: bold; margin-bottom: 15px; color: #1f2937;">${page.url}</div>
+          
+          <div class="issue-details" style="font-size: 13px; line-height: 1.8; margin-bottom: 15px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px;">
+              <div>
+                <strong>Rendering Percentage:</strong> ${displayPercent}<br>
+                <strong>Content Similarity:</strong> ${similarity}<br>
+                <strong>Status:</strong> ${llm.hasHighRendering ? '<span style="color: #dc2626;">⚠️ High Rendering</span>' : '<span style="color: #10b981;">✅ Low Rendering</span>'}
+              </div>
+              <div>
+                <strong>Initial HTML:</strong> ${llm.initialHtmlLength.toLocaleString()} characters<br>
+                <strong>Rendered HTML:</strong> ${llm.renderedHtmlLength.toLocaleString()} characters<br>
+                <strong>Difference:</strong> ${(llm.renderedHtmlLength - llm.initialHtmlLength).toLocaleString()} characters
+              </div>
+            </div>
+            
+            ${llm.contentAnalysis ? `
+            <div style="margin-top: 15px; padding: 10px; background: #f9fafb; border-radius: 6px;">
+              <strong style="display: block; margin-bottom: 8px;">Content Analysis:</strong>
+              <div style="font-size: 12px; line-height: 1.6;">
+                <strong>Text Content:</strong> ${llm.contentAnalysis.textContentInInitial.toLocaleString()} chars (initial) → ${llm.contentAnalysis.textContentInRendered.toLocaleString()} chars (rendered)<br>
+                ${llm.contentAnalysis.criticalElementsMissing.length > 0 ? `
+                <strong style="color: #dc2626;">Missing from Initial HTML:</strong> ${llm.contentAnalysis.criticalElementsMissing.join(', ')}<br>
+                ` : ''}
+                ${llm.contentAnalysis.recommendations.length > 0 ? `
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+                  <strong>Recommendations:</strong>
+                  <ul style="margin: 5px 0; padding-left: 20px;">
+                    ${llm.contentAnalysis.recommendations.map(rec => `<li style="margin: 3px 0;">${rec}</li>`).join('')}
+                  </ul>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+            ` : ''}
+            
+            ${llm.hydrationIssues && llm.hydrationIssues.criticalContentMissing.length > 0 ? `
+            <div style="margin-top: 15px; padding: 10px; background: #fef2f2; border-left: 3px solid #dc2626; border-radius: 4px;">
+              <strong style="color: #dc2626; display: block; margin-bottom: 5px;">⚠️ Critical Content Rendered via JavaScript:</strong>
+              <div style="font-size: 12px; color: #991b1b;">
+                ${llm.hydrationIssues.criticalContentMissing.join(', ')} ${llm.hydrationIssues.criticalContentMissing.length === 1 ? 'is' : 'are'} not present in the initial HTML and only appear after JavaScript execution. This content may not be accessible to LLMs or search engines.
+              </div>
+            </div>
+            ` : ''}
+            
+            ${llm.shadowDOMAnalysis && llm.shadowDOMAnalysis.hasShadowDOM ? `
+            <div style="margin-top: 15px; padding: 10px; background: #fffbeb; border-left: 3px solid #f59e0b; border-radius: 4px;">
+              <strong style="color: #d97706; display: block; margin-bottom: 5px;">⚠️ Shadow DOM Detected:</strong>
+              <div style="font-size: 12px; color: #92400e;">
+                Found ${llm.shadowDOMAnalysis.shadowRootCount} Shadow DOM root(s). Shadow DOM content may not be accessible to search engines and LLMs.
+                ${llm.shadowDOMAnalysis.recommendations.length > 0 ? llm.shadowDOMAnalysis.recommendations[0] : ''}
+              </div>
+            </div>
+            ` : ''}
+            
+            ${llm.scriptBundleAnalysis && (llm.scriptBundleAnalysis.renderBlockingScripts > 0 || llm.scriptBundleAnalysis.largeBundles.length > 0) ? `
+            <div style="margin-top: 15px; padding: 10px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px;">
+              <strong style="color: #1e40af; display: block; margin-bottom: 5px;">📦 Script Analysis:</strong>
+              <div style="font-size: 12px; color: #1e3a8a;">
+                ${llm.scriptBundleAnalysis.renderBlockingScripts > 0 ? `
+                <div style="margin-bottom: 5px;">
+                  <strong>Render-blocking scripts:</strong> ${llm.scriptBundleAnalysis.renderBlockingScripts}. Add 'async' or 'defer' attributes to non-critical scripts.
+                </div>
+                ` : ''}
+                ${llm.scriptBundleAnalysis.largeBundles.length > 0 ? `
+                <div>
+                  <strong>Large bundles:</strong> ${llm.scriptBundleAnalysis.largeBundles.length} bundle(s) detected. Consider code splitting and lazy loading.
+                </div>
+                ` : ''}
+              </div>
+            </div>
+            ` : ''}
           </div>
+          
           ${llm.hasHighRendering ? `
-          <div class="fix-instructions" style="margin-top: 10px;">
-            <div class="fix-instructions-title">⚠️ High Rendering Detected</div>
-            <div class="fix-instructions-content">Your page has a high level of rendering (changes to the HTML). Dynamically rendering a lot of page content risks some important information being missed by LLMs that generally do not read this content. Consider server-side rendering for critical content.</div>
+          <div class="fix-instructions" style="margin-top: 15px; padding: 12px; background: #fef2f2; border-radius: 6px;">
+            <div class="fix-instructions-title" style="font-weight: bold; color: #dc2626; margin-bottom: 8px;">⚠️ High Rendering Detected</div>
+            <div class="fix-instructions-content" style="font-size: 12px; line-height: 1.6; color: #991b1b;">
+              Your page has a high level of JavaScript rendering (significant HTML changes after page load). Dynamically rendered content may be missed by LLMs and search engines. Consider server-side rendering (SSR) or static site generation (SSG) for critical content.
+            </div>
           </div>
           ` : ''}
         </div>
@@ -655,19 +810,101 @@ function generateReportHTML(
             ${links.instagram ? `<strong>Instagram:</strong> <a href="${escapeHtml(links.instagram)}" style="color: #3b82f6;">${escapeHtml(links.instagram)}</a><br>` : ''}
             ${links.youtube ? `<strong>YouTube:</strong> <a href="${escapeHtml(links.youtube)}" style="color: #3b82f6;">${escapeHtml(links.youtube)}</a><br>` : ''}
             ${links.linkedin ? `<strong>LinkedIn:</strong> <a href="${escapeHtml(links.linkedin)}" style="color: #3b82f6;">${escapeHtml(links.linkedin)}</a><br>` : ''}
+            ${links.tiktok ? `<strong>TikTok:</strong> <a href="${escapeHtml(links.tiktok)}" style="color: #3b82f6;">${escapeHtml(links.tiktok)}</a><br>` : ''}
+            ${links.pinterest ? `<strong>Pinterest:</strong> <a href="${escapeHtml(links.pinterest)}" style="color: #3b82f6;">${escapeHtml(links.pinterest)}</a><br>` : ''}
+            ${links.github ? `<strong>GitHub:</strong> <a href="${escapeHtml(links.github)}" style="color: #3b82f6;">${escapeHtml(links.github)}</a><br>` : ''}
+            ${links.snapchat ? `<strong>Snapchat:</strong> <a href="${escapeHtml(links.snapchat)}" style="color: #3b82f6;">${escapeHtml(links.snapchat)}</a><br>` : ''}
           </div>
         </div>
         `
         
-        // Facebook Pixel section
+        // Enhanced Pixel Tracking section (Agency tier)
         html += `
-        <div class="issue-item ${social.hasFacebookPixel ? 'good' : 'low'}">
-          <div class="issue-title">Facebook Pixel</div>
+        <div class="issue-item ${(social.hasFacebookPixel || social.hasGoogleAnalytics || social.hasGoogleTagManager) ? 'good' : 'low'}">
+          <div class="issue-title">Tracking Pixels & Analytics</div>
           <div class="issue-details">
-            <strong>Status:</strong> ${social.hasFacebookPixel ? '✅ Detected' : '⚠️ Not detected'}
+            <strong>Facebook Pixel:</strong> ${social.hasFacebookPixel ? '✅ Detected' : '⚠️ Not detected'}<br>
+            <strong>Google Analytics (GA4):</strong> ${social.hasGoogleAnalytics ? '✅ Detected' : '⚠️ Not detected'}<br>
+            <strong>Google Tag Manager:</strong> ${social.hasGoogleTagManager ? '✅ Detected' : '⚠️ Not detected'}<br>
+            ${social.pixelTracking ? `
+              ${social.pixelTracking.facebookPixel ? `<strong>FB Pixel ID:</strong> ${escapeHtml(social.pixelTracking.facebookPixel)}<br>` : ''}
+              ${social.pixelTracking.googleAnalytics ? `<strong>GA ID:</strong> ${escapeHtml(social.pixelTracking.googleAnalytics)}<br>` : ''}
+              ${social.pixelTracking.googleTagManager ? `<strong>GTM ID:</strong> ${escapeHtml(social.pixelTracking.googleTagManager)}<br>` : ''}
+              ${social.pixelTracking.linkedinInsightsTag ? `<strong>LinkedIn Insights Tag:</strong> ${escapeHtml(social.pixelTracking.linkedinInsightsTag)}<br>` : ''}
+              ${social.pixelTracking.tiktokPixel ? `<strong>TikTok Pixel:</strong> ${escapeHtml(social.pixelTracking.tiktokPixel)}<br>` : ''}
+              ${social.pixelTracking.pinterestTag ? `<strong>Pinterest Tag:</strong> ${escapeHtml(social.pixelTracking.pinterestTag)}<br>` : ''}
+              ${social.pixelTracking.otherPixels && social.pixelTracking.otherPixels.length > 0 ? `
+                <strong>Other Pixels:</strong> ${social.pixelTracking.otherPixels.map((p: string) => escapeHtml(p)).join(', ')}<br>
+              ` : ''}
+            ` : ''}
           </div>
         </div>
         `
+        
+        // Social Schema section (Agency tier)
+        if (social.socialSchema) {
+          html += `
+          <div class="issue-item ${social.socialSchema.hasOrganizationSchema ? 'good' : 'medium'}">
+            <div class="issue-title">Social Schema Markup</div>
+            <div class="issue-details">
+              <strong>Organization Schema:</strong> ${social.socialSchema.hasOrganizationSchema ? '✅ Detected' : '⚠️ Missing'}<br>
+              <strong>Social Profile Links:</strong> ${social.socialSchema.hasSocialProfileLinks ? '✅ Detected' : '⚠️ Missing'}<br>
+              ${social.socialSchema.schemaTypes && social.socialSchema.schemaTypes.length > 0 ? `
+                <strong>Schema Types:</strong> ${social.socialSchema.schemaTypes.map((t: string) => escapeHtml(t)).join(', ')}<br>
+              ` : ''}
+            </div>
+          </div>
+          `
+        }
+        
+        // Share Image Validation section (Agency tier)
+        if (social.shareImageValidation) {
+          html += `
+          <div class="issue-item ${social.shareImageValidation.isValidSize && social.shareImageValidation.isValidRatio ? 'good' : 'medium'}">
+            <div class="issue-title">Share Image Validation</div>
+            <div class="issue-details">
+              <strong>Size Valid:</strong> ${social.shareImageValidation.isValidSize ? '✅ Yes' : '⚠️ Check recommended'}<br>
+              <strong>Ratio Valid:</strong> ${social.shareImageValidation.isValidRatio ? '✅ Yes' : '⚠️ Check recommended'}<br>
+              ${social.shareImageValidation.ogImageSize ? `
+                <strong>OG Image Size:</strong> ${social.shareImageValidation.ogImageSize.width}×${social.shareImageValidation.ogImageSize.height}px<br>
+              ` : ''}
+              ${social.shareImageValidation.twitterImageSize ? `
+                <strong>Twitter Image Size:</strong> ${social.shareImageValidation.twitterImageSize.width}×${social.shareImageValidation.twitterImageSize.height}px<br>
+              ` : ''}
+              ${social.shareImageValidation.recommendations && social.shareImageValidation.recommendations.length > 0 ? `
+                <strong>Recommendations:</strong><br>
+                <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 11px;">
+                  ${social.shareImageValidation.recommendations.map((rec: string) => `<li>${escapeHtml(rec)}</li>`).join('')}
+                </ul>
+              ` : ''}
+            </div>
+          </div>
+          `
+        }
+        
+        // Social Markup Consistency section (Agency tier)
+        if (social.socialMarkupConsistency) {
+          html += `
+        <div class="issue-item ${!social.socialMarkupConsistency.hasConflicts ? 'good' : 'medium'}">
+          <div class="issue-title">Social Markup Consistency</div>
+          <div class="issue-details">
+            <strong>Status:</strong> ${!social.socialMarkupConsistency.hasConflicts ? '✅ Consistent' : '⚠️ Conflicts detected'}<br>
+            ${social.socialMarkupConsistency.conflicts && social.socialMarkupConsistency.conflicts.length > 0 ? `
+              <strong>Conflicts:</strong><br>
+              <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 11px;">
+                ${social.socialMarkupConsistency.conflicts.map((conflict: string) => `<li>${escapeHtml(conflict)}</li>`).join('')}
+              </ul>
+            ` : ''}
+            ${social.socialMarkupConsistency.recommendations && social.socialMarkupConsistency.recommendations.length > 0 ? `
+              <strong>Recommendations:</strong><br>
+              <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 11px;">
+                ${social.socialMarkupConsistency.recommendations.map((rec: string) => `<li>${escapeHtml(rec)}</li>`).join('')}
+              </ul>
+            ` : ''}
+          </div>
+        </div>
+        `
+        }
         
         // Favicon section
         html += `
@@ -808,9 +1045,15 @@ function generateReportHTML(
   ` : ''}
   
   <!-- Internal Link Graph (Agency tier) -->
-  ${result.internalLinkGraph && result.raw.options.tier === 'agency' && result.summary.totalPages >= 10 ? `
+  ${result.internalLinkGraph && result.raw.options.tier === 'agency' ? `
   <div class="page">
     <h1>Internal Link Graph Analysis</h1>
+    ${result.summary.totalPages < 10 ? `
+      <div style="padding: 20px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px; margin-bottom: 20px;">
+        <p style="margin: 0; font-weight: bold; color: #92400e;">⚠️ Insufficient Pages for Full Internal Link Graph</p>
+        <p style="margin: 8px 0 0 0; color: #78350f;">This audit analyzed ${result.summary.totalPages} page(s). A comprehensive internal link graph requires at least 10 pages to provide meaningful insights. Below is the orphan page analysis based on available pages.</p>
+      </div>
+    ` : ''}
     ${generateInternalLinkGraphVisualization(result)}
   </div>
   ` : ''}
@@ -856,6 +1099,15 @@ function generateReportHTML(
   </div>
   ` : ''}
   
+  <!-- Page-Level Issue Mapping (Agency tier) -->
+  ${result.raw.options.tier === 'agency' ? `
+  <div class="page">
+    <h1>Page-Level Issue Mapping</h1>
+    <p style="margin-bottom: 20px;">Detailed breakdown of issues per page for Agency-tier analysis:</p>
+    ${generatePageLevelIssueMapping(result)}
+  </div>
+  ` : ''}
+  
   <!-- Page-Level Findings -->
   <div class="page">
     <h1>Page-Level Findings</h1>
@@ -892,7 +1144,8 @@ function generateReportHTML(
           const loadTimeMs = page.loadTime || 0
           const loadTimeText = escapeHtml(`${loadTimeMs} ms`)
           // Prioritize PageSpeed Insights data (real-world) over local rendering metrics
-          const lcpValue = page.pageSpeedData?.mobile?.lcp || page.pageSpeedData?.desktop?.lcp || page.performanceMetrics?.lcp
+          const pageSpeed = page.pageSpeedData as any
+          const lcpValue = pageSpeed?.mobile?.lcp || pageSpeed?.desktop?.lcp || pageSpeed?.lcp || page.performanceMetrics?.lcp
           // Only show LCP if it's from PageSpeed (realistic) or if it's > 500ms (somewhat realistic from local rendering)
           const lcpText = (lcpValue && lcpValue > 500) ? `<br><small style="font-size: 9px;">${escapeHtml(`LCP: ${Math.round(lcpValue)} ms`)}</small>` : ''
           
@@ -1211,22 +1464,28 @@ function getFixInstructions(issue: { message: string; details?: string; category
  * Generate priority action plan based on issues
  */
 function generatePriorityActionPlan(result: AuditResult): string {
-  const { technicalIssues, onPageIssues, contentIssues, accessibilityIssues, performanceIssues } = result
+  const { 
+    technicalIssues = [], 
+    onPageIssues = [], 
+    contentIssues = [], 
+    accessibilityIssues = [], 
+    performanceIssues = [] 
+  } = result
   
   const highPriority = [
-    ...technicalIssues.filter(i => i.severity === 'High'),
-    ...onPageIssues.filter(i => i.severity === 'High'),
-    ...contentIssues.filter(i => i.severity === 'High'),
-    ...accessibilityIssues.filter(i => i.severity === 'High'),
-    ...performanceIssues.filter(i => i.severity === 'High')
+    ...(technicalIssues || []).filter(i => i.severity === 'High'),
+    ...(onPageIssues || []).filter(i => i.severity === 'High'),
+    ...(contentIssues || []).filter(i => i.severity === 'High'),
+    ...(accessibilityIssues || []).filter(i => i.severity === 'High'),
+    ...(performanceIssues || []).filter(i => i.severity === 'High')
   ]
   
   const mediumPriority = [
-    ...technicalIssues.filter(i => i.severity === 'Medium'),
-    ...onPageIssues.filter(i => i.severity === 'Medium'),
-    ...performanceIssues.filter(i => i.severity === 'Medium'),
-    ...contentIssues.filter(i => i.severity === 'Medium'),
-    ...accessibilityIssues.filter(i => i.severity === 'Medium')
+    ...(technicalIssues || []).filter(i => i.severity === 'Medium'),
+    ...(onPageIssues || []).filter(i => i.severity === 'Medium'),
+    ...(performanceIssues || []).filter(i => i.severity === 'Medium'),
+    ...(contentIssues || []).filter(i => i.severity === 'Medium'),
+    ...(accessibilityIssues || []).filter(i => i.severity === 'Medium')
   ]
   
   let html = ''
@@ -1267,8 +1526,21 @@ function generatePriorityActionPlan(result: AuditResult): string {
     html += `</ol></div>`
   }
   
-  if (highPriority.length === 0 && mediumPriority.length === 0) {
+  // Check both filtered arrays AND summary counts to avoid false positives
+  const hasHighFromSummary = result.summary.highSeverityIssues > 0
+  const hasMediumFromSummary = result.summary.mediumSeverityIssues > 0
+  const hasHighFromArray = highPriority.length > 0
+  const hasMediumFromArray = mediumPriority.length > 0
+  
+  // Only show "no issues" if BOTH the arrays AND summary confirm no issues
+  if (!hasHighFromArray && !hasMediumFromArray && !hasHighFromSummary && !hasMediumFromSummary) {
     html += `<p style="color: #10b981; font-weight: bold;">✅ No high or medium priority issues found. Your site is in excellent shape!</p>`
+  } else if (hasHighFromSummary || hasMediumFromSummary) {
+    // If summary shows issues but arrays are empty, log a warning and show a message
+    if (!hasHighFromArray && !hasMediumFromArray) {
+      console.warn('[PDF] Priority Action Plan: Summary shows issues but filtered arrays are empty. This may indicate a severity categorization issue.')
+      html += `<p style="color: #f59e0b; font-weight: bold;">⚠️ ${result.summary.highSeverityIssues + result.summary.mediumSeverityIssues} priority issue(s) detected. See detailed issues sections below.</p>`
+    }
   }
   
   // Add keywords section if available
@@ -1307,13 +1579,13 @@ function generatePriorityActionPlan(result: AuditResult): string {
 function getTierDescription(tier: string): string {
   switch (tier) {
     case 'starter':
-      return 'Deep crawl (up to 50 pages), JavaScript rendering, Core Web Vitals, Technical SEO, On-Page SEO, Content Quality, Accessibility, Local SEO signals, Schema detection, Broken links, Internal linking overview.'
+      return 'Deep crawl (up to 5 pages), JavaScript rendering, Core Web Vitals, Technical SEO, On-Page SEO, Content Quality, Accessibility, Local SEO signals, Schema detection, Broken links, Internal linking overview.'
     case 'standard':
-      return 'Everything in Starter + Larger crawl (up to 200 pages), Advanced Local SEO, Full Schema Validation, Mobile Responsiveness, Thin Content Detection, Keyword Extraction (NLP), Readability Diagnostics, Security Checks, Platform Detection, Automated Fix Recommendations.'
+      return 'Everything in Starter + Larger crawl (up to 20 pages), Advanced Local SEO, Full Schema Validation, Mobile Responsiveness, Thin Content Detection, Keyword Extraction (NLP), Readability Diagnostics, Security Checks, Platform Detection, Automated Fix Recommendations.'
     case 'professional':
-      return 'Everything in Standard + Deep crawl (up to 500 pages), Multi-level Internal Link Mapping, Crawl Diagnostics, Enhanced Accessibility, Full Keyword Opportunity Mapping, Content Structure Map, JS/CSS Payload Analysis, Core Web Vitals Opportunity Report, Priority Fix Action Plan.'
+      return 'Everything in Standard + Deep crawl (up to 50 pages), Multi-level Internal Link Mapping, Crawl Diagnostics, Enhanced Accessibility, Full Keyword Opportunity Mapping, Content Structure Map, JS/CSS Payload Analysis, Core Web Vitals Opportunity Report, Priority Fix Action Plan.'
     case 'agency':
-      return 'Everything in Professional + Unlimited pages, 3 Competitor Crawls + Keyword Gap Analysis, Full Local SEO Suite, Social Signals Audit, JS Rendering Diagnostics, Full Internal Link Graph, Crawl Error Exclusion, Duplicate URL Cleaning, Blank Report included (free).'
+      return 'Everything in Professional + Large crawl (up to 200 pages), 3 Competitor Crawls + Keyword Gap Analysis, Full Local SEO Suite, Social Signals Audit, JS Rendering Diagnostics, Full Internal Link Graph, Crawl Error Exclusion, Duplicate URL Cleaning, Blank Report included (free).'
     default:
       return ''
   }
@@ -1473,11 +1745,13 @@ function generateIssueDistributionChart(summary: AuditResult['summary']): string
  * Generate Core Web Vitals graph - Agency tier visual
  */
 function generateCoreWebVitalsGraph(pages: AuditResult['pages']): string {
-  const pageWithMetrics = pages.find(p => p.pageSpeedData || p.performanceMetrics)
+  // CRITICAL FIX: ONLY use PageSpeed API data, NOT performanceMetrics
+  const pageWithMetrics = pages.find(p => p.pageSpeedData)
   if (!pageWithMetrics) return ''
   
-  const metrics = pageWithMetrics.pageSpeedData?.mobile || pageWithMetrics.performanceMetrics
-  if (!metrics) return ''
+  const pageSpeed = pageWithMetrics.pageSpeedData as any
+  const metrics = pageSpeed?.mobile || pageSpeed
+  if (!metrics || (!metrics.lcp && !metrics.fcp && metrics.cls === undefined)) return ''
   
   const lcp = metrics.lcp ? Math.min(metrics.lcp, 10000) : 0
   const fcp = metrics.fcp ? Math.min(metrics.fcp, 5000) : 0
@@ -1534,7 +1808,7 @@ function generateCoreWebVitalsGraph(pages: AuditResult['pages']): string {
         </div>
       </div>
       <p style="margin-top: 15px; font-size: 11px; color: #666;">
-        Green: Good | Yellow: Needs Improvement | Red: Poor
+        <strong>Data Source:</strong> Google PageSpeed Insights API | Green: Good | Yellow: Needs Improvement | Red: Poor
       </p>
     </div>
   `
@@ -1550,30 +1824,93 @@ function generateCompetitorComparisonTable(result: AuditResult): string {
   
   const competitors = result.competitorAnalysis.competitorCrawls
   const sitePages = result.summary.totalPages
+  const crawlSummary = result.competitorAnalysis.crawlSummary
+  const isAgencyTier = result.raw.options.tier === 'agency'
+  
+  // Calculate site averages for comparison
+  const siteAvgWordCount = result.pages.length > 0
+    ? result.pages.reduce((sum, p) => sum + p.wordCount, 0) / result.pages.length
+    : 0
   
   return `
     <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
-      <h3 style="margin-bottom: 15px; color: #333;">Competitor Comparison</h3>
-      <table style="width: 100%; border-collapse: collapse;">
+      <h3 style="margin-bottom: 15px; color: #333;">${isAgencyTier ? 'Competitor Crawl Summary' : 'Competitor Comparison'}</h3>
+      ${crawlSummary ? `
+        <div style="background: #eff6ff; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+          <p style="margin: 0 0 8px 0;"><strong>📊 Crawl Statistics:</strong></p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 13px;">
+            <li><strong>Total Competitors Analyzed:</strong> ${crawlSummary.totalCompetitorsAnalyzed}</li>
+            <li><strong>Total Pages Crawled:</strong> ${crawlSummary.totalPagesCrawled}</li>
+            <li><strong>Average Pages per Competitor:</strong> ${Math.round(crawlSummary.averagePageCount)}</li>
+          </ul>
+        </div>
+      ` : ''}
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
         <thead>
           <tr style="background: #3b82f6; color: white;">
             <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Competitor</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Pages Analyzed</th>
-            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Keywords Found</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Pages</th>
+            <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Keywords</th>
+            ${isAgencyTier ? `
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Avg Words</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Schema</th>
+              <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Depth</th>
+            ` : ''}
             <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Your Site</th>
           </tr>
         </thead>
         <tbody>
-          ${competitors.map((comp, idx) => `
+          ${competitors.map((comp, idx) => {
+            const structure = crawlSummary?.siteStructureComparison?.find(s => s.competitor === comp.url)
+            const authoritySignals = comp.authoritySignals
+            return `
             <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f9fafb'};">
-              <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${escapeHtml(comp.url)}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">
+                <a href="${comp.url}" style="color: #3b82f6; text-decoration: none;">${escapeHtml(comp.url.replace(/^https?:\/\/(www\.)?/, ''))}</a>
+              </td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${comp.pageCount || 1}</td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${comp.keywords?.length || 0}</td>
+              ${isAgencyTier ? `
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${structure?.avgWordCount ? Math.round(structure.avgWordCount) : 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${structure?.schemaTypes?.length || 0}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${structure?.maxDepth !== undefined ? structure.maxDepth : 'N/A'}</td>
+              ` : ''}
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px; font-weight: bold; color: #3b82f6;">${sitePages} pages</td>
             </tr>
-          `).join('')}
+          `
+          }).join('')}
+          ${isAgencyTier ? `
+            <tr style="background: #f0f9ff; font-weight: bold;">
+              <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">Your Site</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${sitePages}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${result.competitorAnalysis.sharedKeywords?.length || 0}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${Math.round(siteAvgWordCount)}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${result.pages.filter(p => p.hasSchemaMarkup).length}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">-</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px; color: #3b82f6;">Baseline</td>
+            </tr>
+          ` : ''}
         </tbody>
       </table>
+      ${isAgencyTier && competitors.some(c => c.authoritySignals) ? `
+        <div style="margin-top: 20px; padding: 15px; background: #f0fdf4; border-radius: 6px;">
+          <h4 style="margin: 0 0 10px 0; color: #166534;">Site Structure Insights</h4>
+          ${competitors.map(comp => {
+            const signals = comp.authoritySignals
+            if (!signals || signals.hubPages === undefined) return ''
+            return `
+              <div style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 4px;">
+                <strong>${escapeHtml(comp.url.replace(/^https?:\/\/(www\.)?/, ''))}:</strong>
+                <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 12px;">
+                  <li>Hub Pages: ${signals.hubPages || 0}</li>
+                  <li>Avg Internal Links: ${signals.avgInternalLinks ? Math.round(signals.avgInternalLinks) : 'N/A'}</li>
+                  <li>Max Depth: ${signals.maxDepth || 'N/A'}</li>
+                </ul>
+              </div>
+            `
+          }).join('')}
+        </div>
+      ` : ''}
     </div>
   `
 }
@@ -1628,48 +1965,94 @@ function generateInternalLinkGraphVisualization(result: AuditResult): string {
 function generateDuplicateUrlReport(duplicateReport: any): string {
   if (!duplicateReport) return ''
   
+  // Handle both old format (duplicates array) and new format (duplicateGroups)
+  const duplicateGroups = duplicateReport.duplicateGroups || duplicateReport.duplicates || []
+  const totalDuplicates = duplicateReport.totalDuplicates || duplicateGroups.reduce((sum: number, g: any) => sum + (g.duplicates?.length || g.variations?.length || 0), 0)
+  const canonicalConflicts = typeof duplicateReport.canonicalConflicts === 'number' 
+    ? duplicateReport.canonicalConflicts 
+    : (duplicateReport.canonicalConflicts?.length || 0)
+  
+  if (duplicateGroups.length === 0) {
+    return `
+      <div style="padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
+        <p style="margin: 0; font-weight: bold; color: #166534;">✓ No duplicate URLs detected</p>
+        <p style="margin: 8px 0 0 0; color: #666;">Your site has proper URL structure with no duplicate variations detected.</p>
+      </div>
+    `
+  }
+  
+  // Group by type for better organization
+  const groupsByType = new Map<string, any[]>()
+  duplicateGroups.forEach((group: any) => {
+    const type = group.type || 'unknown'
+    if (!groupsByType.has(type)) {
+      groupsByType.set(type, [])
+    }
+    groupsByType.get(type)!.push(group)
+  })
+  
   return `
     <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
       <h3 style="margin-bottom: 15px; color: #333;">Duplicate URL Analysis</h3>
       
-      ${duplicateReport.duplicates && duplicateReport.duplicates.length > 0 ? `
-        <div style="margin-bottom: 20px;">
-          <h4 style="color: #ef4444; margin-bottom: 10px;">Duplicate URL Groups: ${duplicateReport.duplicates.length}</h4>
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr style="background: #ef4444; color: white;">
-                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Canonical URL</th>
-                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Duplicate Variations</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${duplicateReport.duplicates.slice(0, 10).map((dup: any) => `
-                <tr>
-                  <td style="padding: 8px; border: 1px solid #ddd; font-size: 12px;">${escapeHtml(dup.canonical)}</td>
-                  <td style="padding: 8px; border: 1px solid #ddd; font-size: 12px;">
-                    ${dup.variations.slice(0, 3).map((v: string) => escapeHtml(v)).join('<br>')}
-                    ${dup.variations.length > 3 ? `<br>... and ${dup.variations.length - 3} more` : ''}
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      ` : '<p style="color: #10b981;">✓ No duplicate URLs detected</p>'}
+      <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin-bottom: 20px; border-radius: 6px;">
+        <p style="margin: 0 0 8px 0; font-weight: bold; color: #dc2626;">⚠️ Duplicate URL Issues Detected</p>
+        <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 13px;">
+          <li><strong>Total Duplicate Groups:</strong> ${duplicateGroups.length}</li>
+          <li><strong>Total Duplicate URLs:</strong> ${totalDuplicates}</li>
+          <li><strong>Canonical Conflicts:</strong> ${canonicalConflicts}</li>
+        </ul>
+      </div>
       
-      ${duplicateReport.canonicalConflicts && duplicateReport.canonicalConflicts.length > 0 ? `
-        <div>
-          <h4 style="color: #f59e0b; margin-bottom: 10px;">Canonical Conflicts: ${duplicateReport.canonicalConflicts.length}</h4>
-          <ul style="padding-left: 20px;">
-            ${duplicateReport.canonicalConflicts.slice(0, 10).map((conflict: any) => `
-              <li style="margin-bottom: 8px; font-size: 12px;">
-                <strong>${escapeHtml(conflict.affectedPages?.[0] || 'Unknown')}:</strong> 
-                ${escapeHtml(conflict.details || conflict.message || '')}
-              </li>
-            `).join('')}
-          </ul>
+      <h4 style="margin-top: 30px; margin-bottom: 15px;">Duplicate URL Groups by Type</h4>
+      
+      ${Array.from(groupsByType.entries()).map(([type, groups]) => `
+        <div style="margin-bottom: 30px;">
+          <h5 style="color: #dc2626; margin-bottom: 10px; text-transform: capitalize; font-size: 14px;">${type.replace(/-/g, ' ')} Variations (${groups.length} group${groups.length !== 1 ? 's' : ''})</h5>
+          ${groups.map((group: any) => {
+            const duplicates = group.duplicates || group.variations || []
+            return `
+            <div style="margin-bottom: 15px; padding: 15px; background: white; border-radius: 6px; border-left: 4px solid #ef4444;">
+              <p style="margin: 0 0 8px 0;"><strong>Preferred Canonical:</strong> <a href="${group.canonical}" style="color: #3b82f6; word-break: break-all; font-size: 12px;">${escapeHtml(group.canonical)}</a></p>
+              <p style="margin: 0 0 8px 0; font-size: 12px;"><strong>Duplicate Variations (${duplicates.length}):</strong></p>
+              <ul style="margin: 5px 0 0 0; padding-left: 20px;">
+                ${duplicates.map((dup: string) => `
+                  <li style="color: #666; font-size: 11px; margin-bottom: 4px;">
+                    <a href="${dup}" style="color: #991b1b; word-break: break-all;">${escapeHtml(dup)}</a>
+                  </li>
+                `).join('')}
+              </ul>
+              ${group.recommendation ? `
+                <div style="margin-top: 10px; padding: 10px; background: #fffbeb; border-radius: 4px;">
+                  <p style="margin: 0; font-size: 11px; color: #92400e;"><strong>💡 Recommendation:</strong> ${escapeHtml(group.recommendation)}</p>
+                </div>
+              ` : ''}
+            </div>
+          `
+          }).join('')}
+        </div>
+      `).join('')}
+      
+      ${canonicalConflicts > 0 ? `
+        <div style="margin-top: 30px; padding: 15px; background: #fef2f2; border-radius: 6px; border-left: 4px solid #ef4444;">
+          <h4 style="margin: 0 0 10px 0; color: #dc2626;">Canonical Tag Conflicts</h4>
+          <p style="margin: 0; font-size: 13px; color: #666;">
+            Found ${canonicalConflicts} page(s) with canonical tags that conflict with recommended canonicals. 
+            Review and update canonical tags to point to the preferred URL format.
+          </p>
         </div>
       ` : ''}
+      
+      <div style="margin-top: 30px; padding: 15px; background: #f0f9ff; border-radius: 8px;">
+        <h4 style="margin: 0 0 10px 0; color: #3b82f6;">How to Fix Duplicate URLs</h4>
+        <ol style="margin: 0; padding-left: 20px; font-size: 13px;">
+          <li style="margin-bottom: 8px;">Choose one preferred URL format (HTTPS, with/without www, with/without trailing slash)</li>
+          <li style="margin-bottom: 8px;">Add canonical tags to all duplicate variations pointing to the preferred URL</li>
+          <li style="margin-bottom: 8px;">Set up 301 redirects from duplicate URLs to the preferred URL</li>
+          <li style="margin-bottom: 8px;">Update internal links to use the preferred URL format consistently</li>
+          <li style="margin-bottom: 8px;">Submit the preferred URLs to Google Search Console</li>
+        </ol>
+      </div>
     </div>
   `
 }
@@ -1843,6 +2226,222 @@ function generateEnhancedLocalSEODisplay(localSEO: any): string {
             <li>GBP Link: ${localSEO.gbpIndicators.hasGBPLink ? '✓ Yes' : '✗ No'}</li>
             <li>Opening Hours: ${localSEO.gbpIndicators.hasOpeningHours ? '✓ Yes' : '✗ No'}</li>
           </ul>
+        </div>
+      ` : ''}
+      
+      ${localSEO.schema ? `
+        <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 6px;">
+          <h4 style="color: #3b82f6; margin-bottom: 10px;">LocalBusiness Schema Completeness</h4>
+          <ul style="padding-left: 20px; font-size: 12px;">
+            <li>LocalBusiness Schema: ${localSEO.schema.hasLocalBusiness ? '✓ Yes' : '✗ No'}</li>
+            <li>Address: ${localSEO.schema.hasAddress ? '✓ Yes' : '✗ No'}</li>
+            <li>Phone: ${localSEO.schema.hasPhone ? '✓ Yes' : '✗ No'}</li>
+            <li>Geo Coordinates: ${localSEO.schema.hasGeo ? '✓ Yes' : '✗ No'} ${localSEO.schema.geoCoordinates ? `(${localSEO.schema.geoCoordinates.latitude}, ${localSEO.schema.geoCoordinates.longitude})` : ''}</li>
+            <li>Opening Hours: ${localSEO.schema.hasOpeningHours ? '✓ Yes' : '✗ No'}</li>
+            <li>Review Markup: ${localSEO.schema.hasReviewMarkup ? '✓ Yes' : '✗ No'} ${localSEO.schema.reviewCount ? `(${localSEO.schema.reviewCount} review${localSEO.schema.reviewCount > 1 ? 's' : ''})` : ''} ${localSEO.schema.reviewRating ? `(${localSEO.schema.reviewRating.toFixed(1)}★)` : ''}</li>
+            <li>Driving Directions: ${localSEO.schema.hasDrivingDirections ? '✓ Yes' : '✗ No'}</li>
+            <li>Price Range: ${localSEO.schema.hasPriceRange ? '✓ Yes' : '✗ No'}</li>
+          </ul>
+          ${localSEO.schema.missingFields && localSEO.schema.missingFields.length > 0 ? `
+            <div style="margin-top: 10px; padding: 10px; background: #fef2f2; border-radius: 4px;">
+              <strong style="font-size: 12px; color: #dc2626;">Missing Fields:</strong>
+              <p style="margin: 5px 0 0 0; font-size: 11px; color: #666;">${escapeHtml(localSEO.schema.missingFields.join(', '))}</p>
+            </div>
+          ` : ''}
+          ${localSEO.schema.openingHoursSchema && localSEO.schema.openingHoursSchema.length > 0 ? `
+            <div style="margin-top: 10px; padding: 10px; background: #f0fdf4; border-radius: 4px;">
+              <strong style="font-size: 12px; color: #166534;">Opening Hours Schema:</strong>
+              <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 11px; color: #666;">
+                ${localSEO.schema.openingHoursSchema.map((hours: string) => `<li>${escapeHtml(hours)}</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
+      
+      ${localSEO.serviceAreaPages && localSEO.serviceAreaPages.length > 0 ? `
+        <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 6px;">
+          <h4 style="color: #3b82f6; margin-bottom: 10px;">City/Service-Area Landing Pages (${localSEO.serviceAreaPages.length})</h4>
+          <ul style="padding-left: 20px; font-size: 12px;">
+            ${localSEO.serviceAreaPages.slice(0, 10).map((page: any) => `
+              <li>
+                <a href="${escapeHtml(page.url)}" style="color: #3b82f6;">${escapeHtml(page.title || page.url)}</a>
+                ${page.city ? ` - ${escapeHtml(page.city)}` : ''}
+                ${page.service ? ` (${escapeHtml(page.service)})` : ''}
+                ${page.wordCount ? ` - ${page.wordCount} words` : ''}
+              </li>
+            `).join('')}
+            ${localSEO.serviceAreaPages.length > 10 ? `<li>... and ${localSEO.serviceAreaPages.length - 10} more pages</li>` : ''}
+          </ul>
+        </div>
+      ` : ''}
+      
+      ${localSEO.keywords ? `
+        <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 6px;">
+          <h4 style="color: #3b82f6; margin-bottom: 10px;">Local Keywords</h4>
+          <p style="font-size: 12px; margin-bottom: 5px;"><strong>Location Keywords:</strong> ${localSEO.keywords.hasLocationKeywords ? '✓ Yes' : '✗ No'}</p>
+          <p style="font-size: 12px; margin-bottom: 5px;"><strong>Service Keywords:</strong> ${localSEO.keywords.hasServiceKeywords ? '✓ Yes' : '✗ No'}</p>
+          ${localSEO.keywords.detectedLocations && localSEO.keywords.detectedLocations.length > 0 ? `
+            <p style="font-size: 12px; margin-bottom: 5px;"><strong>Detected Locations:</strong> ${escapeHtml(localSEO.keywords.detectedLocations.slice(0, 10).join(', '))}${localSEO.keywords.detectedLocations.length > 10 ? ` (and ${localSEO.keywords.detectedLocations.length - 10} more)` : ''}</p>
+          ` : ''}
+          ${localSEO.keywords.detectedServices && localSEO.keywords.detectedServices.length > 0 ? `
+            <p style="font-size: 12px; margin-bottom: 5px;"><strong>Detected Services:</strong> ${escapeHtml(localSEO.keywords.detectedServices.slice(0, 10).join(', '))}${localSEO.keywords.detectedServices.length > 10 ? ` (and ${localSEO.keywords.detectedServices.length - 10} more)` : ''}</p>
+          ` : ''}
+        </div>
+      ` : ''}
+    </div>
+  `
+}
+
+/**
+ * Generate page-level issue mapping (Agency tier)
+ * Shows per-page breakdown of all issues affecting each page
+ */
+function generatePageLevelIssueMapping(result: AuditResult): string {
+  // Build a map of page URL -> issues affecting that page
+  const pageIssueMap = new Map<string, Array<{ issue: any; severity: string }>>()
+  
+  // Initialize map with all pages
+  result.pages.forEach(page => {
+    pageIssueMap.set(page.url, [])
+  })
+  
+  // Map issues to pages - collect all issues from categorized sections
+  const allIssues = [
+    ...(result.technicalIssues || []),
+    ...(result.onPageIssues || []),
+    ...(result.contentIssues || []),
+    ...(result.accessibilityIssues || [])
+  ]
+  
+  allIssues.forEach(issue => {
+    if (issue.affectedPages && issue.affectedPages.length > 0) {
+      issue.affectedPages.forEach(pageUrl => {
+        const existing = pageIssueMap.get(pageUrl) || []
+        existing.push({ issue, severity: issue.severity })
+        pageIssueMap.set(pageUrl, existing)
+      })
+    } else {
+      // Site-wide issue - affects all pages
+      result.pages.forEach(page => {
+        const existing = pageIssueMap.get(page.url) || []
+        existing.push({ issue, severity: issue.severity })
+        pageIssueMap.set(page.url, existing)
+      })
+    }
+  })
+  
+  // Calculate page scores
+  const pageScores = new Map<string, { score: number; highIssues: number; mediumIssues: number; lowIssues: number }>()
+  
+  pageIssueMap.forEach((issues, pageUrl) => {
+    let score = 100
+    let highIssues = 0
+    let mediumIssues = 0
+    let lowIssues = 0
+    
+    issues.forEach(({ issue, severity }) => {
+      if (severity === 'High') {
+        score -= 10
+        highIssues++
+      } else if (severity === 'Medium') {
+        score -= 5
+        mediumIssues++
+      } else {
+        score -= 2
+        lowIssues++
+      }
+    })
+    
+    pageScores.set(pageUrl, {
+      score: Math.max(0, Math.min(100, score)),
+      highIssues,
+      mediumIssues,
+      lowIssues
+    })
+  })
+  
+  // Sort pages by issue count (most issues first)
+  const pagesWithIssues = result.pages
+    .map(page => ({
+      page,
+      issueCount: (pageIssueMap.get(page.url) || []).length,
+      score: pageScores.get(page.url) || { score: 100, highIssues: 0, mediumIssues: 0, lowIssues: 0 }
+    }))
+    .sort((a, b) => b.issueCount - a.issueCount)
+    .slice(0, 20) // Show top 20 pages with most issues
+  
+  return `
+    <div style="margin-top: 20px;">
+      ${pagesWithIssues.map(({ page, issueCount, score }) => {
+        const issues = pageIssueMap.get(page.url) || []
+        const scoreColor = score.score >= 80 ? '#10b981' : score.score >= 60 ? '#f59e0b' : '#ef4444'
+        
+        return `
+          <div style="margin-bottom: 25px; padding: 15px; background: #f9fafb; border-radius: 6px; border-left: 4px solid ${scoreColor};">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+              <div style="flex: 1;">
+                <h3 style="margin: 0 0 5px 0; font-size: 14px; color: #333;">
+                  <a href="${page.url}" style="color: #3b82f6; text-decoration: none; word-break: break-all;">${escapeHtml(page.url)}</a>
+                </h3>
+                <p style="margin: 0; font-size: 11px; color: #666;">
+                  ${page.title ? escapeHtml(page.title.substring(0, 80)) + (page.title.length > 80 ? '...' : '') : 'No title'}
+                </p>
+              </div>
+              <div style="text-align: right; margin-left: 15px;">
+                <div style="font-size: 20px; font-weight: bold; color: ${scoreColor};">
+                  ${score.score}/100
+                </div>
+                <div style="font-size: 10px; color: #666;">Page Score</div>
+              </div>
+            </div>
+            
+            <div style="display: flex; gap: 15px; margin-bottom: 15px; font-size: 11px;">
+              <div>
+                <strong style="color: #ef4444;">High:</strong> ${score.highIssues}
+              </div>
+              <div>
+                <strong style="color: #f59e0b;">Medium:</strong> ${score.mediumIssues}
+              </div>
+              <div>
+                <strong style="color: #10b981;">Low:</strong> ${score.lowIssues}
+              </div>
+              <div>
+                <strong>Total Issues:</strong> ${issueCount}
+              </div>
+            </div>
+            
+            ${issues.length > 0 ? `
+              <div style="margin-top: 10px;">
+                <strong style="font-size: 12px; color: #333;">Issues Affecting This Page:</strong>
+                <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 11px;">
+                  ${issues.map(({ issue, severity }) => {
+                    const severityColor = severity === 'High' ? '#ef4444' : severity === 'Medium' ? '#f59e0b' : '#10b981'
+                    return `
+                      <li style="margin-bottom: 5px; color: #666;">
+                        <span style="color: ${severityColor}; font-weight: bold;">[${severity}]</span> 
+                        ${escapeHtml(issue.title || issue.message)}
+                        ${issue.category ? ` <span style="color: #999;">(${issue.category})</span>` : ''}
+                      </li>
+                    `
+                  }).join('')}
+                </ul>
+              </div>
+            ` : `
+              <div style="margin-top: 10px; padding: 10px; background: #f0fdf4; border-radius: 4px;">
+                <p style="margin: 0; font-size: 11px; color: #166534;">✓ No issues detected on this page</p>
+              </div>
+            `}
+          </div>
+        `
+      }).join('')}
+      
+      ${result.pages.length > 20 ? `
+        <div style="margin-top: 20px; padding: 15px; background: #f0f9ff; border-radius: 6px;">
+          <p style="margin: 0; font-size: 12px; color: #666;">
+            Showing top 20 pages with most issues. Total pages analyzed: ${result.pages.length}. 
+            Full page-level issue mapping available in web interface.
+          </p>
         </div>
       ` : ''}
     </div>

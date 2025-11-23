@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
-import { Download, Mail, Copy, AlertCircle, CheckCircle, Info, Archive, ArchiveRestore, Trash2, ChevronDown, ChevronUp, Wrench } from 'lucide-react'
+import { Download, Mail, Copy, AlertCircle, CheckCircle, Info, Archive, ArchiveRestore, Trash2, ChevronDown, ChevronUp, Wrench, RefreshCw } from 'lucide-react'
 
 interface AuditData {
   id: string
@@ -182,6 +182,67 @@ export default function AuditDetailPage() {
     }
   }
 
+  const handleRunAgain = () => {
+    if (!audit) return
+    
+    // Extract options from rawJson if available
+    let options: any = {
+      url: audit.url
+    }
+    
+    if (audit.rawJson) {
+      try {
+        const rawData = typeof audit.rawJson === 'string' ? JSON.parse(audit.rawJson) : audit.rawJson
+        
+        // Extract tier and addOns from raw.options
+        if (rawData.raw?.options) {
+          options.tier = rawData.raw.options.tier
+          options.addOns = rawData.raw.options.addOns || {}
+        }
+        
+        // Extract competitor URLs (prefer user-provided, fallback to AI-detected)
+        const competitorUrls: string[] = []
+        if (rawData.competitorAnalysis?.userProvidedCompetitors) {
+          competitorUrls.push(...rawData.competitorAnalysis.userProvidedCompetitors)
+        } else if (rawData.competitorAnalysis?.aiDetectedCompetitors) {
+          competitorUrls.push(...rawData.competitorAnalysis.aiDetectedCompetitors)
+        } else if (rawData.competitorAnalysis?.competitorUrl) {
+          // Fallback for older audit format
+          competitorUrls.push(rawData.competitorAnalysis.competitorUrl)
+        }
+        options.competitorUrls = competitorUrls
+      } catch (e) {
+        console.warn('Could not parse rawJson for options:', e)
+      }
+    }
+    
+    // Navigate to new audit page with options in query params
+    const params = new URLSearchParams()
+    if (options.url) params.set('url', options.url)
+    if (options.tier) params.set('tier', options.tier)
+    if (options.addOns) {
+      Object.entries(options.addOns).forEach(([key, value]) => {
+        if (value) {
+          if (typeof value === 'boolean' && value) {
+            params.set(`addOns.${key}`, 'true')
+          } else if (typeof value === 'number' && value > 0) {
+            params.set(`addOns.${key}`, value.toString())
+          }
+        }
+      })
+    }
+    if (options.competitorUrls && options.competitorUrls.length > 0) {
+      // Support up to 10 competitor URLs
+      options.competitorUrls.slice(0, 10).forEach((url: string, idx: number) => {
+        if (url && url.trim()) {
+          params.set(`competitorUrl${idx}`, url)
+        }
+      })
+    }
+    
+    router.push(`/audits/new?${params.toString()}`)
+  }
+
   const handleDelete = async () => {
     if (!audit) return
     if (!confirm(`Are you sure you want to delete the audit for "${audit.url}"? This action cannot be undone.`)) {
@@ -227,7 +288,7 @@ export default function AuditDetailPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="border-b bg-white">
           <div className="container mx-auto px-4 py-4">
-            <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
+            <Link href="/audits" className="text-blue-600 hover:underline">← Back to Audits</Link>
             <h1 className="text-2xl font-bold mt-2">{audit.url}</h1>
           </div>
         </div>
@@ -251,7 +312,7 @@ export default function AuditDetailPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="border-b bg-white">
           <div className="container mx-auto px-4 py-4">
-            <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
+            <Link href="/audits" className="text-blue-600 hover:underline">← Back to Audits</Link>
             <h1 className="text-2xl font-bold mt-2">{audit.url}</h1>
           </div>
         </div>
@@ -292,7 +353,7 @@ export default function AuditDetailPage() {
       <div className="border-b bg-white">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex-1">
-            <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
+            <Link href="/audits" className="text-blue-600 hover:underline">← Back to Audits</Link>
             <div className="flex items-center gap-2 mt-2">
               <h1 className="text-2xl font-bold">{audit.url}</h1>
               {audit.archived && (
@@ -352,6 +413,12 @@ export default function AuditDetailPage() {
             )}
           </div>
           <div className="flex gap-2">
+            {audit.status === 'completed' && (
+              <Button onClick={handleRunAgain} variant="default" size="sm">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Run Again
+              </Button>
+            )}
             <Button onClick={handleCopySummary} variant="outline" size="sm">
               <Copy className="mr-2 h-4 w-4" />
               Copy Summary

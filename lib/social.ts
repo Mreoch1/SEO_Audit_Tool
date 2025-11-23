@@ -32,6 +32,9 @@ export interface SocialMediaLinks {
   youtube?: string
   linkedin?: string
   tiktok?: string
+  pinterest?: string // NEW: Pinterest
+  github?: string // NEW: GitHub
+  snapchat?: string // NEW: Snapchat
 }
 
 export interface SocialMediaData {
@@ -55,10 +58,18 @@ export interface SocialMediaData {
     isValidRatio: boolean
     recommendations: string[]
   }
+  socialMarkupConsistency?: {
+    hasConflicts: boolean
+    conflicts: string[]
+    recommendations: string[]
+  }
   pixelTracking?: {
     facebookPixel?: string
     googleAnalytics?: string
     googleTagManager?: string
+    linkedinInsightsTag?: string // NEW: LinkedIn Insights Tag
+    tiktokPixel?: string // NEW: TikTok Pixel
+    pinterestTag?: string // NEW: Pinterest Tag
     otherPixels: string[]
   }
 }
@@ -122,6 +133,9 @@ export function checkSocialMediaPresence(html: string, baseUrl: string): SocialM
   // NEW: Agency tier - Pixel tracking details
   const pixelTracking = extractPixelTracking(html)
   
+  // NEW: Agency tier - Social markup consistency check
+  const socialMarkupConsistency = checkSocialMarkupConsistency(ogTitle, ogDescription, twitterTitle, twitterDescription)
+  
   return {
     metaTags: {
       openGraph: {
@@ -151,7 +165,8 @@ export function checkSocialMediaPresence(html: string, baseUrl: string): SocialM
     faviconUrl,
     socialSchema,
     shareImageValidation,
-    pixelTracking
+    pixelTracking,
+    socialMarkupConsistency
   }
 }
 
@@ -179,14 +194,17 @@ function extractMetaName(html: string, name: string): string | undefined {
 function extractSocialLinks(html: string, baseUrl: string): SocialMediaLinks {
   const links: SocialMediaLinks = {}
   
-  // Patterns for different social platforms
+  // Patterns for different social platforms (Enhanced for Agency tier)
   const patterns = {
     facebook: /(?:https?:\/\/)?(?:www\.)?(?:facebook\.com|fb\.com)\/([a-zA-Z0-9.]+)/gi,
     twitter: /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]+)/gi,
     instagram: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)/gi,
     youtube: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:channel\/|user\/|@)?|youtu\.be\/)([a-zA-Z0-9_-]+)/gi,
     linkedin: /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:company|in)\/([a-zA-Z0-9-]+)/gi,
-    tiktok: /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([a-zA-Z0-9_.]+)/gi
+    tiktok: /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([a-zA-Z0-9_.]+)/gi,
+    pinterest: /(?:https?:\/\/)?(?:www\.)?pinterest\.com\/([a-zA-Z0-9_.]+)/gi, // NEW
+    github: /(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_.-]+)/gi, // NEW
+    snapchat: /(?:https?:\/\/)?(?:www\.)?snapchat\.com\/add\/([a-zA-Z0-9_.]+)/gi // NEW
   }
   
   // Search in all <a> tags and plain text
@@ -367,12 +385,32 @@ function extractPixelTracking(html: string): SocialMediaData['pixelTracking'] {
     tracking.googleTagManager = gtmMatch[1]
   }
   
+  // LinkedIn Insights Tag
+  const linkedinMatch = html.match(/_linkedin_partner_id\s*=\s*['"]?([^'",\s)]+)/i) ||
+    html.match(/linkedin\.com\/px\?pid=([^"'\s&]+)/i)
+  if (linkedinMatch) {
+    tracking.linkedinInsightsTag = linkedinMatch[1]
+  }
+  
+  // TikTok Pixel
+  const tiktokMatch = html.match(/tiktok\.com\/pixel\?id=([^"'\s&]+)/i) ||
+    html.match(/ttq\.load\(['"]?([^'",\s)]+)/i)
+  if (tiktokMatch) {
+    tracking.tiktokPixel = tiktokMatch[1]
+  }
+  
+  // Pinterest Tag
+  const pinterestMatch = html.match(/pinterest\.com\/ct\.html\?id=([^"'\s&]+)/i) ||
+    html.match(/pintrk\(['"]load['"]\s*,\s*['"]?([^'",\s)]+)/i)
+  if (pinterestMatch) {
+    tracking.pinterestTag = pinterestMatch[1]
+  }
+  
   // Other tracking pixels (basic detection)
   const otherPixels = [
-    /pinterest\.com\/ct\.html/i,
-    /linkedin\.com\/px/i,
     /snapchat\.com\/pixel/i,
-    /tiktok\.com\/pixel/i
+    /reddit\.com\/pixel/i,
+    /quora\.com\/pixel/i
   ]
   
   otherPixels.forEach(pattern => {
@@ -385,5 +423,48 @@ function extractPixelTracking(html: string): SocialMediaData['pixelTracking'] {
   })
   
   return tracking
+}
+
+/**
+ * Check social markup consistency (Agency tier)
+ * Detects conflicts between Open Graph and Twitter Card tags
+ */
+function checkSocialMarkupConsistency(
+  ogTitle?: string,
+  ogDescription?: string,
+  twitterTitle?: string,
+  twitterDescription?: string
+): SocialMediaData['socialMarkupConsistency'] {
+  const conflicts: string[] = []
+  const recommendations: string[] = []
+  
+  // Check for title conflicts
+  if (ogTitle && twitterTitle && ogTitle !== twitterTitle) {
+    conflicts.push('Title mismatch: Open Graph and Twitter Card titles differ')
+    recommendations.push('Consider using the same title for both Open Graph and Twitter Cards for consistency')
+  }
+  
+  // Check for description conflicts
+  if (ogDescription && twitterDescription && ogDescription !== twitterDescription) {
+    conflicts.push('Description mismatch: Open Graph and Twitter Card descriptions differ')
+    recommendations.push('Consider using the same description for both Open Graph and Twitter Cards, or optimize each for platform-specific best practices')
+  }
+  
+  // Check for missing Twitter tags when OG tags exist
+  if (ogTitle && !twitterTitle) {
+    conflicts.push('Missing Twitter title: Open Graph title exists but Twitter Card title is missing')
+    recommendations.push('Add twitter:title tag to match your og:title for better Twitter sharing')
+  }
+  
+  if (ogDescription && !twitterDescription) {
+    conflicts.push('Missing Twitter description: Open Graph description exists but Twitter Card description is missing')
+    recommendations.push('Add twitter:description tag to match your og:description for better Twitter sharing')
+  }
+  
+  return {
+    hasConflicts: conflicts.length > 0,
+    conflicts,
+    recommendations
+  }
 }
 

@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
       data: {
         id: 'singleton',
         brandName: 'SEO Audit Pro',
-        primaryColor: '#3b82f6'
+        primaryColor: '#3b82f6',
+        logoUrl: '/logo.png'
       }
     })
   }
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
         brandName: brandName || 'SEO Audit Pro',
         brandSubtitle,
         primaryColor: primaryColor || '#3b82f6',
-        logoUrl,
+        logoUrl: logoUrl || '/logo.png',
         smtpHost,
         smtpPort,
         smtpUser,

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,8 +11,9 @@ import { useToast } from '@/components/ui/use-toast'
 import { Loader2, Check, Plus, Minus } from 'lucide-react'
 import type { AuditTier, AuditAddOns } from '@/lib/types'
 
-export default function NewAuditPage() {
+function NewAuditPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [url, setUrl] = useState('')
   const [selectedTier, setSelectedTier] = useState<AuditTier | null>(null)
@@ -21,13 +22,63 @@ export default function NewAuditPage() {
   const [competitorUrls, setCompetitorUrls] = useState<string[]>([]) // Competitor URLs array
   const [urlError, setUrlError] = useState('')
   
+  // Pre-fill form from query params (for "Run Again" functionality)
+  useEffect(() => {
+    const urlParam = searchParams.get('url')
+    const tierParam = searchParams.get('tier') as AuditTier | null
+    const competitorUrl0 = searchParams.get('competitorUrl0')
+    const competitorUrl1 = searchParams.get('competitorUrl1')
+    const competitorUrl2 = searchParams.get('competitorUrl2')
+    const competitorUrl3 = searchParams.get('competitorUrl3')
+    
+    if (urlParam) {
+      setUrl(urlParam)
+    }
+    
+    if (tierParam && ['starter', 'standard', 'professional', 'agency'].includes(tierParam)) {
+      setSelectedTier(tierParam)
+    }
+    
+    // Parse add-ons from query params
+    const parsedAddOns: AuditAddOns = {}
+    searchParams.forEach((value, key) => {
+      if (key.startsWith('addOns.')) {
+        const addOnKey = key.replace('addOns.', '') as keyof AuditAddOns
+        // Type guard: check if this is a boolean property
+        const booleanAddOns: (keyof AuditAddOns)[] = ['blankReport', 'competitorAnalysis', 'schemaDeepDive', 'extraCrawlDepth', 'expedited']
+        const numberAddOns: (keyof AuditAddOns)[] = ['additionalPages', 'additionalKeywords', 'additionalCompetitors']
+        
+        if (value === 'true' && booleanAddOns.includes(addOnKey)) {
+          (parsedAddOns[addOnKey] as boolean) = true
+        } else if (!isNaN(Number(value)) && numberAddOns.includes(addOnKey)) {
+          (parsedAddOns[addOnKey] as number) = Number(value)
+        }
+      }
+    })
+    if (Object.keys(parsedAddOns).length > 0) {
+      setAddOns(parsedAddOns)
+    }
+    
+    // Parse competitor URLs (support up to 10)
+    const competitorUrlsList: string[] = []
+    for (let i = 0; i < 10; i++) {
+      const url = searchParams.get(`competitorUrl${i}`)
+      if (url && url.trim()) {
+        competitorUrlsList.push(url)
+      }
+    }
+    if (competitorUrlsList.length > 0) {
+      setCompetitorUrls(competitorUrlsList)
+    }
+  }, [searchParams])
+  
   const tierInfo = {
     starter: { 
-      maxPages: 50, 
+      maxPages: 5, 
       maxDepth: 2, 
       price: '$19', 
       name: 'Starter', 
-      description: 'Deep crawl (up to 50 pages), JavaScript rendering, Core Web Vitals, Technical SEO, On-Page SEO, Content Quality, Accessibility, Local SEO signals, Schema detection, Broken links, Internal linking overview.',
+      description: 'Deep crawl (up to 5 pages), JavaScript rendering, Core Web Vitals, Technical SEO, On-Page SEO, Content Quality, Accessibility, Local SEO signals, Schema detection, Broken links, Internal linking overview.',
       deliveryDays: 2, // 2 business days
       keywords: 0,
       includes: {
@@ -40,11 +91,11 @@ export default function NewAuditPage() {
       }
     },
     standard: { 
-      maxPages: 200, 
+      maxPages: 20, 
       maxDepth: 3, 
       price: '$39', 
       name: 'Standard', 
-      description: 'Everything in Starter + Larger crawl (up to 200 pages), Advanced Local SEO, Full Schema Validation, Mobile Responsiveness, Thin Content Detection, Keyword Extraction (NLP), Readability Diagnostics, Security Checks, Platform Detection, Automated Fix Recommendations.',
+      description: 'Everything in Starter + Larger crawl (up to 20 pages), Advanced Local SEO, Full Schema Validation, Mobile Responsiveness, Thin Content Detection, Keyword Extraction (NLP), Readability Diagnostics, Security Checks, Platform Detection, Automated Fix Recommendations.',
       deliveryDays: 3, // 3 business days
       keywords: 5,
       includes: {
@@ -57,11 +108,11 @@ export default function NewAuditPage() {
       }
     },
     professional: { 
-      maxPages: 500, 
+      maxPages: 50, 
       maxDepth: 5, 
       price: '$59', 
       name: 'Professional', 
-      description: 'Everything in Standard + Deep crawl (up to 500 pages), Multi-level Internal Link Mapping, Crawl Diagnostics, Enhanced Accessibility, Full Keyword Opportunity Mapping, Content Structure Map, JS/CSS Payload Analysis, Core Web Vitals Opportunity Report, Priority Fix Action Plan.',
+      description: 'Everything in Standard + Deep crawl (up to 50 pages), Multi-level Internal Link Mapping, Crawl Diagnostics, Enhanced Accessibility, Full Keyword Opportunity Mapping, Content Structure Map, JS/CSS Payload Analysis, Core Web Vitals Opportunity Report, Priority Fix Action Plan.',
       deliveryDays: 4, // 4 business days
       keywords: 10,
       includes: {
@@ -74,11 +125,11 @@ export default function NewAuditPage() {
       }
     },
     agency: { 
-      maxPages: 10000, 
+      maxPages: 200, 
       maxDepth: 10, 
       price: '$99', 
       name: 'Agency / Enterprise', 
-      description: 'Everything in Professional + Unlimited pages, 3 Competitor Crawls + Keyword Gap Analysis, Full Local SEO Suite, Social Signals Audit, JS Rendering Diagnostics, Full Internal Link Graph, Crawl Error Exclusion, Duplicate URL Cleaning, Blank Report included (free).',
+      description: 'Everything in Professional + Large crawl (up to 200 pages), 3 Competitor Crawls + Keyword Gap Analysis, Full Local SEO Suite, Social Signals Audit, JS Rendering Diagnostics, Full Internal Link Graph, Crawl Error Exclusion, Duplicate URL Cleaning, Blank Report included (free).',
       deliveryDays: 5, // 5 business days
       keywords: 1000, // Effectively unlimited
       includes: {
@@ -369,8 +420,9 @@ export default function NewAuditPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="border-b bg-white">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <Link href="/audits" className="text-blue-600 hover:underline">← Back to Audits</Link>
+          <Link href="/audits" className="text-blue-600 hover:underline text-sm">View All Audits</Link>
         </div>
       </div>
 
@@ -977,7 +1029,7 @@ export default function NewAuditPage() {
                     `Run ${selectedTier ? tierInfo[selectedTier].name : ''} Audit`
                   )}
                 </Button>
-                <Link href="/">
+                <Link href="/audits">
                   <Button type="button" variant="outline" disabled={loading}>
                     Cancel
                   </Button>
@@ -988,6 +1040,21 @@ export default function NewAuditPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function NewAuditPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <NewAuditPageContent />
+    </Suspense>
   )
 }
 

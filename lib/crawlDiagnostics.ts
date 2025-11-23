@@ -206,22 +206,43 @@ function detectPlatform(pages: PageData[], startUrl: string): CrawlDiagnostics['
     return 'shopify'
   }
   
-  // Check page content for platform signatures
+  // Check page content for platform signatures (more strict detection)
   for (const page of pages) {
     const content = JSON.stringify(page).toLowerCase()
     
-    if (content.includes('wix.com') || content.includes('wixstatic')) {
+    // Wix detection - look for specific Wix patterns
+    if (content.includes('wix.com') || content.includes('wixstatic') || content.includes('wixpress.com')) {
       return 'wix'
     }
-    if (content.includes('wp-content') || content.includes('wordpress')) {
+    
+    // WordPress detection - must have clear WordPress signatures
+    // Only detect if we see wp-content URLs, wp-includes, wp-admin, or WordPress generator meta tag
+    const hasWpContent = content.includes('/wp-content/') || content.includes('wp-content')
+    const hasWpIncludes = content.includes('/wp-includes/') || content.includes('wp-includes')
+    const hasWpAdmin = content.includes('/wp-admin/') || content.includes('wp-admin')
+    const hasWpGenerator = content.includes('generator') && content.includes('wordpress')
+    
+    if (hasWpContent || hasWpIncludes || hasWpAdmin || hasWpGenerator) {
       return 'wordpress'
     }
-    if (content.includes('squarespace')) {
+    
+    // Squarespace detection
+    if (content.includes('.squarespace.com') || content.includes('squarespace-cdn')) {
       return 'squarespace'
     }
-    if (content.includes('shopify') || content.includes('cdn.shopify')) {
+    
+    // Shopify detection
+    if (content.includes('.myshopify.com') || content.includes('cdn.shopify.com') || content.includes('shopifycdn')) {
       return 'shopify'
     }
+  }
+  
+  // Check for government/education sites - these should never be WordPress
+  const urlLower = startUrl.toLowerCase()
+  if (urlLower.includes('.gov') || urlLower.includes('.edu') || urlLower.includes('.org')) {
+    // Additional check: if it's a .gov/.edu/.org and we didn't detect a clear CMS signature, it's custom
+    // This prevents false WordPress detection on government sites
+    return 'custom'
   }
   
   return 'custom'

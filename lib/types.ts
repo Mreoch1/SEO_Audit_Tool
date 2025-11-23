@@ -4,6 +4,14 @@
 
 import { PageSpeedData } from './pagespeed'
 
+// Simplified PageSpeedData structure (used after validation)
+export interface SimplifiedPageSpeedData {
+  lcp?: number
+  fcp?: number
+  cls?: number
+  ttfb?: number
+}
+
 export type IssueCategory = 
   | "Technical" 
   | "On-page" 
@@ -42,6 +50,7 @@ export interface PageData {
   missingAltCount: number
   internalLinkCount: number
   externalLinkCount: number
+  internalLinks?: string[] // Array of actual internal link URLs (for link graph analysis)
   hasNoindex: boolean
   hasNofollow: boolean
   hasViewport: boolean
@@ -63,9 +72,44 @@ export interface PageData {
   }
   llmReadability?: {
     renderingPercentage: number
+    similarity?: number // Similarity percentage between initial and rendered HTML
     initialHtmlLength: number
     renderedHtmlLength: number
     hasHighRendering: boolean
+    hydrationIssues?: {
+      hasHydrationMismatch: boolean
+      missingContentWithJSDisabled: boolean
+      criticalContentMissing: string[]
+    }
+    shadowDOMAnalysis?: {
+      hasShadowDOM: boolean
+      shadowRootCount: number
+      recommendations: string[]
+    }
+    scriptBundleAnalysis?: {
+      totalScriptSize: number
+      largeBundles: Array<{ src?: string; size: number; inline: boolean }>
+      renderBlockingScripts: number
+      recommendations: string[]
+    }
+    preRenderedVsPostRendered?: {
+      h1InInitial: boolean
+      h1InRendered: boolean
+      mainContentInInitial: boolean
+      mainContentInRendered: boolean
+      navigationInInitial: boolean
+      navigationInRendered: boolean
+    }
+    contentAnalysis?: {
+      textContentInInitial: number
+      textContentInRendered: number
+      criticalElementsMissing: string[]
+      recommendations: string[]
+    }
+  }
+  readability?: {
+    fleschScore: number
+    averageSentenceLength?: number
   }
   httpVersion?: 'http/1.1' | 'http/2' | 'http/3' | 'unknown'
   compression?: {
@@ -75,7 +119,7 @@ export interface PageData {
     compressedSize?: number
     savingsPercent?: number
   }
-  pageSpeedData?: PageSpeedData
+  pageSpeedData?: PageSpeedData | SimplifiedPageSpeedData
   error?: string
 }
 
@@ -110,6 +154,9 @@ export interface CompetitorData {
     backlinks?: number
     domainAge?: number
     socialShares?: number
+    hubPages?: number
+    avgInternalLinks?: number
+    maxDepth?: number
   }
 }
 
@@ -135,6 +182,7 @@ export interface CompetitorAnalysis {
       pageCount: number
       avgWordCount: number
       schemaTypes: string[]
+      maxDepth: number
     }[]
   }
 }

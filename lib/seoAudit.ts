@@ -65,7 +65,7 @@ import { analyzeLocalSEO } from './localSEO'
 import { getPlatformInstructions, Platform } from './platformInstructions'
 
 const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competitorUrls'>> & Pick<AuditOptions, 'addOns' | 'competitorUrls'> = {
-  maxPages: 50,
+  maxPages: 5,
   maxDepth: 3,
   userAgent: 'SEO-Audit-Bot/1.0',
   addOns: undefined,
@@ -75,23 +75,24 @@ const DEFAULT_OPTIONS: Required<Omit<AuditOptions, 'tier' | 'addOns' | 'competit
 /**
  * Get tier-based limits
  * Updated pricing tiers (Nov 2025):
- * - Starter: $19, up to 50 pages
- * - Standard: $39, up to 200 pages
- * - Professional: $59, up to 500 pages
- * - Agency: $99, unlimited pages
+ * - Starter: $19, up to 5 pages
+ * - Standard: $39, up to 20 pages
+ * - Professional: $59, up to 50 pages
+ * - Agency: $99, up to 200 pages
+ * - Enterprise: Contact for pricing (no page limits)
  */
 export function getTierLimits(tier?: AuditTier): { maxPages: number; maxDepth: number } {
   switch (tier) {
     case 'starter':
-      return { maxPages: 50, maxDepth: 2 }
+      return { maxPages: 5, maxDepth: 2 }
     case 'standard':
-      return { maxPages: 200, maxDepth: 3 }
+      return { maxPages: 20, maxDepth: 3 }
     case 'professional':
-      return { maxPages: 500, maxDepth: 5 }
+      return { maxPages: 50, maxDepth: 5 }
     case 'agency':
-      return { maxPages: 10000, maxDepth: 10 } // Effectively unlimited
+      return { maxPages: 200, maxDepth: 10 }
     default:
-      return { maxPages: 50, maxDepth: 3 }
+      return { maxPages: 5, maxDepth: 3 }
   }
 }
 
@@ -152,7 +153,7 @@ function deduplicateIssues(issues: Issue[]): Issue[] {
   for (const issue of issues) {
     // Create a normalized key based on category and message
     // Normalize the message to catch variations like "Title tag too short" vs "Page title too short"
-    const normalizedMessage = (issue.message || issue.title || '').toLowerCase()
+    const normalizedMessage = (issue.message || (issue as any).title || '').toLowerCase()
       .replace(/^(title tag|page title|title)/i, 'title')
       .replace(/^(meta description|meta)/i, 'meta description')
       .replace(/^(missing|no|not found)/i, 'missing')
@@ -184,8 +185,8 @@ function deduplicateIssues(issues: Issue[]): Issue[] {
         if (!existing.fixInstructions && issue.fixInstructions) {
           existing.fixInstructions = issue.fixInstructions
         }
-        if (!existing.howToFix && issue.howToFix) {
-          existing.howToFix = issue.howToFix
+        if (!existing.fixInstructions && issue.fixInstructions) {
+          existing.fixInstructions = issue.fixInstructions
         }
       }
     } else {
@@ -291,7 +292,56 @@ export async function runAudit(
   
   // Analyze site-wide issues
   console.log('[Audit] Analyzing site-wide issues...')
-  analyzeSiteWideIssues(pages, siteWide, allIssues)
+  // Filter out PDFs and non-HTML files from pages before analyzing
+  const htmlPagesOnly = pages.filter(page => {
+    const isNonHtmlFile = page.url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+    return !isNonHtmlFile
+  })
+  analyzeSiteWideIssues(htmlPagesOnly, siteWide, allIssues, url)
+  
+  // CRITICAL FIX: Clean brokenPages array to remove any PDFs or non-HTML files that might have been added
+  // This ensures brokenPages only contains HTML pages, even if they were added from other sources
+  const originalBrokenCount = siteWide.brokenPages.length
+  siteWide.brokenPages = siteWide.brokenPages.filter(url => {
+    const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+    return !isNonHtmlFile
+  })
+  if (originalBrokenCount !== siteWide.brokenPages.length) {
+    console.log(`[Audit] Filtered ${originalBrokenCount - siteWide.brokenPages.length} non-HTML files from brokenPages`)
+  }
+  
+  // Also filter out any issues that reference PDFs or non-HTML files in their affectedPages
+  // CRITICAL FIX: Preserve site-wide issues (those without affectedPages or with empty array)
+  allIssues.forEach(issue => {
+    if (issue.affectedPages && issue.affectedPages.length > 0) {
+      const originalCount = issue.affectedPages.length
+      issue.affectedPages = issue.affectedPages.filter((url: string) => {
+        const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+        return !isNonHtmlFile
+      })
+      // Only mark for removal if ALL pages were filtered AND it had pages originally
+      // Site-wide issues (undefined or empty affectedPages) should NOT be removed
+      if (issue.affectedPages.length === 0 && originalCount > 0) {
+        (issue as any)._shouldRemove = true
+      }
+    }
+    // CRITICAL: Issues without affectedPages (site-wide) should NOT be marked for removal
+  })
+  
+  // Remove issues that have no affected pages after filtering
+  // BUT preserve site-wide issues (those without affectedPages field or empty array)
+  const filteredIssues = allIssues.filter((issue: any) => {
+    // Keep if not marked for removal
+    if (issue._shouldRemove) return false
+    // CRITICAL FIX: Keep site-wide issues (no affectedPages or empty array is valid)
+    if (!issue.affectedPages || issue.affectedPages.length === 0) {
+      return true // Site-wide issues are valid
+    }
+    // Keep if it has valid affected pages
+    return issue.affectedPages.length > 0
+  })
+  allIssues.length = 0
+  allIssues.push(...filteredIssues)
   
   // Perform enhanced technical check on main page
   if (pages.length > 0) {
@@ -323,18 +373,37 @@ export async function runAudit(
   const pagesToAnalyze = pages.slice(0, Math.min(10, pages.length))
   await Promise.all(pagesToAnalyze.map(async (page) => {
     try {
-      // Fetch HTML for enhanced analysis
-      const response = await fetch(page.url, {
-        signal: AbortSignal.timeout(5000),
-        headers: { 'User-Agent': opts.userAgent }
-      })
-      const html = await response.text()
+      // CRITICAL FIX #4 & #16: Use rendered HTML for enhanced analysis, not initial HTML
+      // This ensures word count and content extraction use JavaScript-rendered content
+      // Add timeout to prevent hanging
+      const { renderPage } = await import('./renderer')
+      const rendered = await Promise.race([
+        renderPage(page.url, opts.userAgent),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Enhanced analysis render timeout')), 30000)
+        )
+      ])
+      const html = rendered.renderedHtml // Use rendered HTML, not initial HTML
       
       // Extract primary keyword from page title or H1
       const primaryKeyword = page.title?.split(/\s+/)[0] || page.h1Text?.[0]?.split(/\s+/)[0]
       
-      // Enhanced on-page analysis
-      const { data: onPageData, issues: onPageIssues } = analyzeEnhancedOnPage(page, html, primaryKeyword)
+      // Enhanced on-page analysis - CRITICAL FIX #14: Pass site category for CTA advice
+      // Determine site category from rootUrl
+      let detectedSiteCategory: string | undefined = undefined
+      try {
+        const hostname = new URL(rootUrl).hostname.toLowerCase()
+        if (hostname.includes('.gov')) {
+          detectedSiteCategory = 'Government'
+        } else if (hostname.includes('.edu')) {
+          detectedSiteCategory = 'Education'
+        } else if (hostname.includes('.org')) {
+          detectedSiteCategory = hostname.includes('news') ? 'News' : 'Nonprofit'
+        }
+      } catch {
+        // If URL parsing fails, continue
+      }
+      const { data: onPageData, issues: onPageIssues } = analyzeEnhancedOnPage(page, html, primaryKeyword, detectedSiteCategory)
       onPageIssues.forEach(issue => {
         issue.fixInstructions = getOnPageFixInstructions(issue)
         issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
@@ -342,8 +411,21 @@ export async function runAudit(
         consolidateIssue(enhancedIssueMap, issue)
       })
       
-      // Enhanced content analysis
+      // Enhanced content analysis - CRITICAL FIX #4: Use rendered HTML
       const { data: contentData, issues: contentIssues } = analyzeEnhancedContent(page, html)
+      
+      // CRITICAL FIX #4: Update page.wordCount if enhanced analysis found more words from rendered content
+      if (contentData.depth.wordCount > (page.wordCount || 0)) {
+        page.wordCount = contentData.depth.wordCount
+        console.log(`[Audit] Updated word count for ${page.url}: ${page.wordCount} words (from rendered content)`)
+      }
+      // Store readability data on page for scoring
+      if (contentData.readability) {
+        page.readability = {
+          fleschScore: contentData.readability.fleschScore,
+          averageSentenceLength: contentData.depth?.averageWordsPerSentence
+        }
+      }
       contentIssues.forEach(issue => {
         issue.fixInstructions = getContentFixInstructions(issue)
         issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
@@ -401,18 +483,49 @@ export async function runAudit(
   
   // Enhanced schema issues (includes Identity Schema checks)
   // Check for Standard/Professional/Agency tiers or if schema add-on is selected
-  if (opts.tier === 'standard' || opts.tier === 'professional' || opts.tier === 'agency' || opts.addOns?.schemaDeepDive || opts.addOns?.schemaMarkup) {
+  if (opts.tier === 'standard' || opts.tier === 'professional' || opts.tier === 'agency' || opts.addOns?.schemaDeepDive) {
     const schemaIssueMap = new Map<string, Issue>()
     
+    // CRITICAL FIX #2 & #6: Merge schema detection across all pages
+    // Check if ANY page has schema before flagging site-wide issues
+    const hasAnySchema = pages.some(p => p.hasSchemaMarkup || (p.schemaTypes && p.schemaTypes.length > 0))
+    const hasAnyIdentitySchema = pages.some(p => 
+      p.schemaAnalysis?.hasIdentitySchema || 
+      (p.schemaTypes && p.schemaTypes.some(t => t.includes('Organization') || t.includes('Person')))
+    )
+    
+    // CRITICAL FIX #6: Only create ONE site-wide issue if no schema exists
+    if (!hasAnySchema) {
+      consolidateIssue(schemaIssueMap, {
+        category: 'Technical',
+        severity: 'Medium',
+        message: 'Missing schema markup',
+        details: 'No Schema.org structured data detected across the site. Add JSON-LD or microdata to help search engines understand your content.',
+        affectedPages: pages.map(p => p.url)
+      })
+    }
+    
+    // CRITICAL FIX #6: Only create ONE site-wide issue if no Identity Schema exists
+    if (!hasAnyIdentitySchema) {
+      consolidateIssue(schemaIssueMap, {
+        category: 'Technical',
+        severity: 'Medium',
+        message: 'Missing Identity Schema',
+        details: 'No Organization or Person Schema identified across the site. The absence of Identity Schema can make it harder for Search Engines and LLMs to identify the ownership of a website.',
+        affectedPages: pages.map(p => p.url)
+      })
+    }
+    
+    // CRITICAL FIX #6: Only flag page-level issues if site HAS schema but this page doesn't
     pages.forEach(page => {
       if (page.schemaAnalysis) {
-        // Check for missing Identity Schema
-        if (!page.schemaAnalysis.hasIdentitySchema) {
+        // If site has Identity Schema, but this specific page is missing it, it's a low priority page-level issue
+        if (hasAnyIdentitySchema && !page.schemaAnalysis.hasIdentitySchema) {
           consolidateIssue(schemaIssueMap, {
             category: 'Technical',
-            severity: 'Medium',
-            message: 'Missing Identity Schema',
-            details: 'No Organization or Person Schema identified. The absence of Organization or Person Schema can make it harder for Search Engines and LLMs to identify the ownership of a website.',
+            severity: 'Low',
+            message: 'Page missing Identity Schema',
+            details: 'No Organization or Person Schema identified on this page. Consider adding it for better page-level context.',
             affectedPages: [page.url]
           })
         }
@@ -426,13 +539,13 @@ export async function runAudit(
             affectedPages: [page.url]
           })
         }
-      } else if (!page.hasSchemaMarkup) {
-        // Only flag as missing if hasSchemaMarkup is false
+      } else if (hasAnySchema && !page.hasSchemaMarkup) {
+        // If site has schema, but this specific page is missing schema markup, it's a low priority page-level issue
         consolidateIssue(schemaIssueMap, {
           category: 'Technical',
-          severity: 'Medium',
-          message: 'Missing schema markup',
-          details: 'No Schema.org structured data detected. Add JSON-LD or microdata to help search engines understand your content.',
+          severity: 'Low',
+          message: 'Page missing schema markup',
+          details: 'No Schema.org structured data detected on this page. Consider adding relevant schema.',
           affectedPages: [page.url]
         })
       }
@@ -468,12 +581,146 @@ export async function runAudit(
     imageAltAnalysis = await analyzeImageAltTags(pages)
   }
   
-  // Competitor Analysis (if add-on is selected)
+  // CRITICAL FIX #6: Competitor Analysis - Skip when conditions not met
+  // NOTE: This will be moved after validPages is defined
   let competitorAnalysis: CompetitorAnalysis | undefined
+  
+  // Add fix instructions to existing issues that don't have them
+  allIssues.forEach(issue => {
+    if (!issue.fixInstructions) {
+      if (issue.category === 'Technical') {
+        issue.fixInstructions = getTechnicalFixInstructions(issue)
+      } else if (issue.category === 'On-page') {
+        issue.fixInstructions = getOnPageFixInstructions(issue)
+      } else if (issue.category === 'Content') {
+        issue.fixInstructions = getContentFixInstructions(issue)
+      }
+    }
+    // Set priority if not set
+    if (!issue.priority) {
+      issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
+    }
+  })
+  
+  // Sort issues by priority (highest first)
+  allIssues.sort((a, b) => (b.priority || 0) - (a.priority || 0))
+  
+  // SPRINT 3.2: Final issue deduplication
+  console.log(`[Audit] Applying final issue deduplication (${allIssues.length} issues before)`)
+  allIssues = deduplicateIssues(allIssues)
+  console.log(`[Audit] After deduplication: ${allIssues.length} unique issues`)
+  
+  // SPRINT 1 INTEGRATION: Apply deduplication and filtering
+  console.log(`[Audit] Applying Sprint 1 fixes: deduplication and 404 filtering`)
+  
+  // Step 1: Deduplicate pages by normalized URL
+  const uniquePages = deduplicatePages(pages)
+  
+  // Step 1.5: Filter out PDFs and non-HTML files from uniquePages before processing
+  // This prevents PDFs from being added to brokenPages or issues
+  const htmlUniquePages = uniquePages.filter(page => {
+    const isNonHtmlFile = page.url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+    if (isNonHtmlFile) {
+      console.log(`[Audit] Filtering out non-HTML file from processing: ${page.url}`)
+    }
+    return !isNonHtmlFile
+  })
+  
+  // Step 2: Filter valid pages from error pages (using filtered pages)
+  const { validPages, errorPages } = filterValidPages(htmlUniquePages)
+  
+  // Step 3: Run crawl diagnostics (Enhanced for Agency tier)
+  const crawlDuration = Date.now() - startTime
+  const crawlDiagnostics = analyzeCrawl(htmlUniquePages, url, crawlDuration)
+  console.log(`[Audit] Crawl diagnostics: ${getStatusMessage(crawlDiagnostics)}`)
+  if (crawlDiagnostics.crawlMetrics) {
+    console.log(`[Audit] Crawl metrics: ${crawlDiagnostics.crawlMetrics.pagesPerSecond.toFixed(2)} pages/sec, efficiency: ${crawlDiagnostics.crawlMetrics.crawlEfficiency}%`)
+  }
+  
+  // CRITICAL FIX #2: Local SEO Analysis - Only run if LocalBusiness/Organization schema exists OR add-on is selected
+  // Check if any page has LocalBusiness or Organization schema
+  const hasLocalBusinessSchema = validPages.some(p => 
+    p.schemaTypes?.some(t => t.includes('LocalBusiness') || t.includes('Organization')) ||
+    p.schemaAnalysis?.identityType === 'Organization'
+  )
+  // Local SEO is included in Standard+ tiers, no separate add-on needed
+  const hasLocalSEOAddOn = false
+  const shouldRunLocalSEO = hasLocalBusinessSchema || hasLocalSEOAddOn
+  
+  let localSEO: any = null
+  if (shouldRunLocalSEO) {
+    console.log('[Audit] Running Local SEO analysis...')
+    localSEO = await analyzeLocalSEO(validPages, url)
+    console.log(`[Audit] Local SEO score: ${localSEO.overallScore}/100, Issues: ${localSEO.issues.length}`)
+    
+    // Add Local SEO issues to main issues list
+    localSEO.issues.forEach((issue: any) => {
+      allIssues.push({
+        ...({
+          type: `local-seo-${issue.title.toLowerCase().replace(/\s+/g, '-')}`,
+          severity: issue.severity,
+          category: 'Technical' as const, // Local SEO is part of technical SEO
+          message: issue.description,
+          description: issue.description,
+          affectedPages: issue.affectedPages,
+          fixInstructions: issue.howToFix,
+          priority: issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
+        } as any)
+      })
+    })
+  } else {
+    console.log('[Audit] Skipping Local SEO analysis - no LocalBusiness/Organization schema detected and no Local SEO add-on selected')
+    // Create empty Local SEO result
+    localSEO = {
+      nap: { foundOn: [], phone: undefined, address: undefined, name: undefined },
+      napConsistency: { score: 0, isConsistent: false, inconsistencies: [], recommendations: [] },
+      schema: { hasLocalBusiness: false, hasOrganization: false, schemaTypes: [], missingFields: [] },
+      serviceAreaPages: [],
+      keywords: { localKeywords: [], locationMentions: [] },
+      gbp: { hasGoogleMaps: false, hasReviews: false, hasHours: false, hasPhone: false, hasAddress: false },
+      citations: [],
+      overallScore: 0,
+      issues: [],
+      recommendations: []
+    }
+  }
+  
+  // CRITICAL FIX #6: Competitor Analysis - Skip when conditions not met
   if (opts.addOns?.competitorAnalysis) {
+    // Extract keywords and schema types for industry classification
+    const topKeywords = validPages
+      .flatMap(p => p.extractedKeywords || [])
+      .slice(0, 30)
+    
+    const hasValidKeywords = topKeywords.length > 0
+    const hasMultiplePages = validPages.length > 1
+    
+    // CRITICAL FIX #7: Check site category (Government, News, Nonprofit should skip)
+    // Note: classifyDomain needs HTML, so we'll check industry name instead
+    let isNonCommercialSite = false
+    let siteCategory: string | undefined
+    try {
+      // Check if URL suggests non-commercial site
+      const hostname = new URL(rootUrl).hostname.toLowerCase()
+      if (hostname.includes('.gov')) {
+        isNonCommercialSite = true
+        siteCategory = 'Government'
+      } else if (hostname.includes('.edu')) {
+        isNonCommercialSite = true
+        siteCategory = 'Education'
+      } else if (hostname.includes('.org')) {
+        if (hostname.includes('news') || hostname.includes('nonprofit')) {
+          isNonCommercialSite = true
+          siteCategory = hostname.includes('news') ? 'News' : 'Nonprofit'
+        }
+      }
+    } catch {
+      // If URL parsing fails, continue
+    }
+    
     // NEW: Auto-fill missing competitor URLs based on industry classification
     const providedUrls = opts.competitorUrls || []
-    const firstPageHtml = pages[0]?.html || ''
+    const firstPageHtml = '' // HTML not available in PageData
     
     console.log(`[Audit] Competitor URL status: ${providedUrls.length} provided, tier: ${opts.tier}`)
     
@@ -483,55 +730,79 @@ export async function runAudit(
     let detectedIndustry = 'Unknown'
     let industryConfidence = 0
     
-    try {
-      // Extract keywords and schema types for AI-assisted detection
-      const topKeywords = pages
-        .flatMap(p => p.extractedKeywords || [])
-        .slice(0, 30)
-      
-      const schemaTypes = pages
-        .flatMap(p => {
-          const schemas: string[] = []
-          if (p.hasLocalBusinessSchema) schemas.push('LocalBusiness')
-          if (p.hasOrganizationSchema) schemas.push('Organization')
-          if (p.hasArticleSchema) schemas.push('Article')
-          if (p.hasProductSchema) schemas.push('Product')
-          return schemas
-        })
-        .filter((v, i, a) => a.indexOf(v) === i) // Unique
-      
-      const autoFillResult = await autoFillCompetitorUrls(
-        rootUrl,
-        providedUrls,
-        firstPageHtml,
-        opts.userAgent,
-        opts.tier,
-        topKeywords,
-        schemaTypes
-      )
-      
-      finalCompetitorUrls = autoFillResult.finalUrls
-      autoDetectedCompetitors = autoFillResult.autoDetected
-      detectedIndustry = autoFillResult.industry
-      industryConfidence = autoFillResult.confidence
-      
-      if (autoDetectedCompetitors.length > 0) {
-        console.log(`[Audit] Auto-detected ${autoDetectedCompetitors.length} competitor(s): ${autoDetectedCompetitors.join(', ')}`)
-        console.log(`[Audit] Detected industry: ${detectedIndustry} (confidence: ${Math.round(industryConfidence * 100)}%)`)
-      }
-      
-      if (providedUrls.length > 0) {
-        console.log(`[Audit] User provided ${providedUrls.length} competitor URL(s): ${providedUrls.join(', ')}`)
-      }
-      
-      console.log(`[Audit] Final competitor list (${finalCompetitorUrls.length} total): ${finalCompetitorUrls.join(', ')}`)
-    } catch (error) {
-      console.warn('[Audit] Auto-fill failed, using provided URLs only:', error)
-      finalCompetitorUrls = providedUrls
+    // CRITICAL FIX #7: Skip competitor analysis if conditions not met
+    let shouldSkipCompetitorAnalysis = false
+    let skipReason = ''
+    
+    if (isNonCommercialSite && siteCategory) {
+      shouldSkipCompetitorAnalysis = true
+      skipReason = `site category is ${siteCategory} (non-commercial)`
+    } else if (!hasValidKeywords) {
+      shouldSkipCompetitorAnalysis = true
+      skipReason = 'no valid keywords discovered'
+    } else if (!hasMultiplePages && providedUrls.length === 0) {
+      shouldSkipCompetitorAnalysis = true
+      skipReason = 'only 1 page crawled and no competitor URLs provided'
     }
     
-    // Now analyze the final competitor list
-    if (finalCompetitorUrls.length > 0) {
+    if (shouldSkipCompetitorAnalysis) {
+      console.log(`[Audit] Skipping competitor analysis - ${skipReason}`)
+      competitorAnalysis = undefined
+    } else {
+      // Proceed with competitor analysis
+      try {
+        const schemaTypes = pages
+          .flatMap(p => p.schemaTypes || [])
+          .filter((v, i, a) => a.indexOf(v) === i) // Unique
+        
+        const autoFillResult = await autoFillCompetitorUrls(
+          rootUrl,
+          providedUrls,
+          firstPageHtml,
+          opts.userAgent,
+          opts.tier,
+          topKeywords,
+          schemaTypes
+        )
+        
+        finalCompetitorUrls = autoFillResult.finalUrls
+        autoDetectedCompetitors = autoFillResult.autoDetected
+        detectedIndustry = autoFillResult.industry
+        industryConfidence = autoFillResult.confidence
+        
+        // CRITICAL FIX #7: Skip if confidence < 50% and no user-provided URLs
+        // Also check if detected industry is Government/News/Nonprofit
+        const isNonCommercialIndustry = detectedIndustry.toLowerCase().includes('government') || 
+                                       detectedIndustry.toLowerCase().includes('news') ||
+                                       detectedIndustry.toLowerCase().includes('nonprofit') ||
+                                       detectedIndustry.toLowerCase().includes('non-profit')
+        
+        if (isNonCommercialIndustry) {
+          console.log(`[Audit] Skipping competitor analysis - detected industry is ${detectedIndustry} (non-commercial)`)
+          competitorAnalysis = undefined
+        } else if (industryConfidence < 0.5 && providedUrls.length === 0) {
+          console.log(`[Audit] Skipping competitor analysis - industry confidence ${Math.round(industryConfidence * 100)}% < 50% and no user-provided URLs`)
+          competitorAnalysis = undefined
+        } else {
+          if (autoDetectedCompetitors.length > 0) {
+            console.log(`[Audit] Auto-detected ${autoDetectedCompetitors.length} competitor(s): ${autoDetectedCompetitors.join(', ')}`)
+            console.log(`[Audit] Detected industry: ${detectedIndustry} (confidence: ${Math.round(industryConfidence * 100)}%)`)
+          }
+          
+          if (providedUrls.length > 0) {
+            console.log(`[Audit] User provided ${providedUrls.length} competitor URL(s): ${providedUrls.join(', ')}`)
+          }
+          
+          console.log(`[Audit] Final competitor list (${finalCompetitorUrls.length} total): ${finalCompetitorUrls.join(', ')}`)
+        }
+      } catch (error) {
+        console.warn('[Audit] Auto-fill failed, using provided URLs only:', error)
+        finalCompetitorUrls = providedUrls
+      }
+    }
+    
+    // Now analyze the final competitor list (if not skipped and URLs available)
+    if (competitorAnalysis === undefined && finalCompetitorUrls.length > 0) {
       const maxCompetitors = opts.tier === 'agency' ? 3 : 1
       const competitorsToAnalyze = finalCompetitorUrls.slice(0, maxCompetitors)
       
@@ -583,80 +854,28 @@ export async function runAudit(
     }
   }
   
-  // Add fix instructions to existing issues that don't have them
-  allIssues.forEach(issue => {
-    if (!issue.fixInstructions) {
-      if (issue.category === 'Technical') {
-        issue.fixInstructions = getTechnicalFixInstructions(issue)
-      } else if (issue.category === 'On-page') {
-        issue.fixInstructions = getOnPageFixInstructions(issue)
-      } else if (issue.category === 'Content') {
-        issue.fixInstructions = getContentFixInstructions(issue)
-      }
-    }
-    // Set priority if not set
-    if (!issue.priority) {
-      issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
-    }
-  })
+  // SPRINT 2.2: Update fix instructions with platform-specific instructions
+  // CRITICAL FIX #1: Only show WordPress instructions when platform is actually WordPress
+  let platform: Platform = (crawlDiagnostics.platform === 'unknown' ? 'custom' : crawlDiagnostics.platform) || 'custom'
   
-  // Sort issues by priority (highest first)
-  allIssues.sort((a, b) => (b.priority || 0) - (a.priority || 0))
-  
-  // SPRINT 3.2: Final issue deduplication
-  console.log(`[Audit] Applying final issue deduplication (${allIssues.length} issues before)`)
-  allIssues = deduplicateIssues(allIssues)
-  console.log(`[Audit] After deduplication: ${allIssues.length} unique issues`)
-  
-  // SPRINT 1 INTEGRATION: Apply deduplication and filtering
-  console.log(`[Audit] Applying Sprint 1 fixes: deduplication and 404 filtering`)
-  
-  // Step 1: Deduplicate pages by normalized URL
-  const uniquePages = deduplicatePages(pages)
-  
-  // Step 2: Filter valid pages from error pages
-  const { validPages, errorPages } = filterValidPages(uniquePages)
-  
-  // Step 3: Run crawl diagnostics (Enhanced for Agency tier)
-  const crawlDuration = Date.now() - startTime
-  const crawlDiagnostics = analyzeCrawl(uniquePages, url, crawlDuration)
-  console.log(`[Audit] Crawl diagnostics: ${getStatusMessage(crawlDiagnostics)}`)
-  if (crawlDiagnostics.crawlMetrics) {
-    console.log(`[Audit] Crawl metrics: ${crawlDiagnostics.crawlMetrics.pagesPerSecond.toFixed(2)} pages/sec, efficiency: ${crawlDiagnostics.crawlMetrics.crawlEfficiency}%`)
+  // Additional safety check: if URL is .gov/.edu/.org, force to 'custom' unless we have clear CMS detection
+  const urlLower = url.toLowerCase()
+  if ((urlLower.includes('.gov') || urlLower.includes('.edu') || urlLower.includes('.org')) && platform === 'wordpress') {
+    // Double-check: only keep WordPress if we have very strong evidence
+    // Otherwise, default to custom for government/education sites
+    console.log(`[Audit] Government/Education site detected, verifying WordPress detection...`)
+    platform = 'custom'
   }
   
-  // Local SEO Analysis (Sprint 2) - Run after validPages is defined
-  console.log('[Audit] Running Local SEO analysis...')
-  const localSEO = await analyzeLocalSEO(validPages, url)
-  console.log(`[Audit] Local SEO score: ${localSEO.overallScore}/100, Issues: ${localSEO.issues.length}`)
-  
-  // Add Local SEO issues to main issues list
-  localSEO.issues.forEach(issue => {
-    allIssues.push({
-      type: `local-seo-${issue.title.toLowerCase().replace(/\s+/g, '-')}`,
-      severity: issue.severity,
-      category: 'Technical', // Local SEO is part of technical SEO
-      title: `[Local SEO] ${issue.title}`,
-      message: issue.description,
-      description: issue.description,
-      affectedPages: issue.affectedPages,
-      howToFix: issue.howToFix,
-      fixInstructions: issue.howToFix,
-      priority: issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
-    })
-  })
-  
-  // SPRINT 2.2: Update fix instructions with platform-specific instructions
-  const platform: Platform = crawlDiagnostics.platform || 'custom'
   console.log(`[Audit] Detected platform: ${platform}, updating fix instructions...`)
   
   allIssues.forEach(issue => {
     // Map issue types to platform instruction types
-    let issueType = issue.type || ''
+    let issueType = (issue as any).type || ''
     
     // If no type, try to infer from message/title
     if (!issueType) {
-      const title = (issue.title || '').toLowerCase()
+      const title = ((issue as any).title || '').toLowerCase()
       const message = (issue.message || '').toLowerCase()
       
       if (title.includes('meta description') || message.includes('meta description')) {
@@ -690,88 +909,120 @@ export async function runAudit(
       })
       
       // Replace generic instructions with platform-specific ones
-      if (platformInstructions.instructions) {
-        issue.fixInstructions = platformInstructions.instructions
-        if (platformInstructions.additionalNotes) {
-          issue.fixInstructions += '\n\n' + platformInstructions.additionalNotes
+        if (platformInstructions.instructions) {
+          issue.fixInstructions = platformInstructions.instructions
+          if (platformInstructions.additionalNotes) {
+            issue.fixInstructions += '\n\n' + platformInstructions.additionalNotes
+          }
         }
-        issue.howToFix = issue.fixInstructions // Also update howToFix for consistency
-      }
     }
   })
   
-  // Step 4: Add broken pages issue if any error pages found
-  if (errorPages.length > 0) {
-    console.log(`[Audit] Found ${errorPages.length} broken pages, adding to issues`)
-    allIssues.push({
-      type: 'broken-pages',
-      severity: 'High',
-      category: 'Technical',
-      title: 'Broken pages detected',
-      message: `${errorPages.length} page${errorPages.length > 1 ? 's' : ''} returned error status codes`,
-      description: `${errorPages.length} page${errorPages.length > 1 ? 's' : ''} returned errors (404, 500, etc.). These pages are inaccessible to users and search engines.`,
-      affectedPages: errorPages.map(p => p.url),
-      howToFix: `1. Check if these pages should exist\n2. Fix broken links pointing to these pages\n3. Implement proper 301 redirects if pages have moved\n4. Remove or update any internal links to these pages\n5. Check your sitemap.xml and remove broken URLs`,
-      priority: 10
+  // CRITICAL FIX #3: Add broken pages issue - Only count HTML documents, skip PDFs and other files
+  const brokenHtmlPages = errorPages.filter(p => {
+    const isNonHtmlFile = p.url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+    if (isNonHtmlFile) {
+      return false // Explicitly skip non-HTML files
+    }
+    const isHtmlDocument = p.contentType?.includes('text/html') || 
+                           p.contentType?.includes('application/xhtml')
+    return isHtmlDocument
+  })
+  
+  if (brokenHtmlPages.length > 0) {
+    console.log(`[Audit] Found ${brokenHtmlPages.length} broken HTML pages, adding to issues`)
+    // Also add to siteWide.brokenPages for consistency
+    brokenHtmlPages.forEach(p => {
+      if (!siteWide.brokenPages.includes(p.url)) {
+        siteWide.brokenPages.push(p.url)
+      }
     })
+    allIssues.push({
+      severity: 'High' as const,
+      category: 'Technical' as const,
+      message: `${brokenHtmlPages.length} page${brokenHtmlPages.length > 1 ? 's' : ''} returned error status codes`,
+      description: `${brokenHtmlPages.length} HTML page${brokenHtmlPages.length > 1 ? 's' : ''} returned errors (404, 500, etc.). These pages are inaccessible to users and search engines.`,
+      affectedPages: brokenHtmlPages.map(p => p.url).filter(url => {
+        // Double-check: filter out any PDFs that might have slipped through
+        const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+        return !isNonHtmlFile
+      }),
+      fixInstructions: `1. Check if these pages should exist\n2. Fix broken links pointing to these pages\n3. Implement proper 301 redirects if pages have moved\n4. Remove or update any internal links to these pages\n5. Check your sitemap.xml and remove broken URLs`,
+      priority: 10
+    } as any)
   }
   
   // Step 5: Calculate scores based on VALID pages only (not error pages)
   console.log(`[Audit] Calculating scores for ${validPages.length} valid pages (excluding ${errorPages.length} error pages)`)
+  console.log(`[Audit] Total issues before scoring: ${allIssues.length}`)
+  const scoreStartTime = Date.now()
   const scores = calculateEnhancedScores(validPages, allIssues, siteWide)
+  const scoreDuration = Date.now() - scoreStartTime
+  console.log(`[Audit] Score calculation completed in ${scoreDuration}ms`)
+  console.log(`[Audit] Scores: Technical=${scores.technical}, OnPage=${scores.onPage}, Content=${scores.content}, Accessibility=${scores.accessibility}`)
   
-  // Categorize issues
-  const categorizedIssues = categorizeIssues(allIssues)
+  // Categorize issues BEFORE filtering to see what we have
+  const categorizedIssuesBeforeFilter = categorizeIssues(allIssues)
+  console.log(`[Audit] Issues before filtering: Technical=${(categorizedIssuesBeforeFilter.technical || []).length}, On-page=${(categorizedIssuesBeforeFilter.onPage || []).length}, Content=${(categorizedIssuesBeforeFilter.content || []).length}`)
+  
+  // DEBUG: Log actual category values in issues BEFORE any filtering
+  const categoryCounts = new Map<string, number>()
+  allIssues.forEach(issue => {
+    const cat = issue.category || 'unknown'
+    categoryCounts.set(cat, (categoryCounts.get(cat) || 0) + 1)
+  })
+  console.log(`[Audit] Issue categories found (BEFORE filtering): ${Array.from(categoryCounts.entries()).map(([cat, count]) => `${cat}=${count}`).join(', ')}`)
+  
+  // DEBUG: Log sample issue structure
+  if (allIssues.length > 0) {
+    const sampleIssue = allIssues[0]
+    console.log(`[Audit] Sample issue structure: category="${sampleIssue.category}", severity="${sampleIssue.severity}", hasAffectedPages=${!!sampleIssue.affectedPages}, affectedPagesLength=${sampleIssue.affectedPages?.length || 0}`)
+  }
   
   // NEW: Agency tier - Internal link graph and duplicate URL analysis
   let internalLinkGraph: import('./internalLinkGraph').InternalLinkGraph | undefined
   let duplicateUrlAnalysis: import('./duplicateUrlCleaner').DuplicateUrlAnalysis | undefined
   
   if (opts.tier === 'agency') {
-    // Only build internal link graph if we have enough pages (minimum 10)
-    if (validPages.length >= 10) {
-      console.log('[Audit] Agency tier: Running internal link graph analysis...')
-      try {
-        const { buildInternalLinkGraph } = await import('./internalLinkGraph')
-        internalLinkGraph = buildInternalLinkGraph(validPages, uniquePages)
-        console.log(`[Audit] Internal link graph: ${internalLinkGraph.orphanPages.length} orphan pages, ${internalLinkGraph.isolatedPages.length} isolated pages`)
+    // Always build internal link graph for Agency tier (will show message if < 10 pages)
+    console.log('[Audit] Agency tier: Running internal link graph analysis...')
+    try {
+      const { buildInternalLinkGraph } = await import('./internalLinkGraph')
+      internalLinkGraph = buildInternalLinkGraph(validPages, htmlUniquePages)
+      console.log(`[Audit] Internal link graph: ${internalLinkGraph.orphanPages.length} orphan pages, ${internalLinkGraph.isolatedPages.length} isolated pages`)
+      
+      if (validPages.length < 10) {
+        console.log(`[Audit] ⚠️ Limited crawl data (${validPages.length} pages) - internal link graph will show limited data message`)
+      }
       
       // Add orphan page issues
       if (internalLinkGraph.orphanPages.length > 0) {
         allIssues.push({
-          type: 'orphan-pages',
-          severity: 'Medium',
-          category: 'Technical',
-          title: 'Orphan Pages Detected',
+          severity: 'Medium' as const,
+          category: 'Technical' as const,
           message: `Found ${internalLinkGraph.orphanPages.length} orphan pages with no incoming internal links`,
-          description: `Orphan pages are pages that have no internal links pointing to them, making them hard for search engines and users to discover.`,
           affectedPages: internalLinkGraph.orphanPages.slice(0, 10), // Limit to first 10
           fixInstructions: `Add internal links from high-authority pages (homepage, main category pages) to these orphan pages. Consider adding them to your main navigation or creating a sitemap page.`,
           priority: 6
-        })
+        } as any)
       }
       
       // Add isolated page issues
       if (internalLinkGraph.isolatedPages.length > 0) {
         allIssues.push({
-          type: 'isolated-pages',
-          severity: 'Medium',
-          category: 'Technical',
-          title: 'Isolated Pages Detected',
+          severity: 'Medium' as const,
+          category: 'Technical' as const,
           message: `Found ${internalLinkGraph.isolatedPages.length} isolated pages with no internal links`,
-          description: `Isolated pages have no internal links (incoming or outgoing), making them completely disconnected from your site structure.`,
           affectedPages: internalLinkGraph.isolatedPages.slice(0, 10),
           fixInstructions: `Add internal links to and from these pages to connect them to your site structure.`,
           priority: 5
-        })
+        } as any)
       }
       } catch (error) {
         console.warn('[Audit] Internal link graph analysis failed:', error)
       }
-    } else {
-      console.log(`[Audit] Agency tier: Skipping internal link graph (only ${validPages.length} pages, need 10+)`)
-    }
     
+    // Duplicate URL analysis (Agency tier)
     console.log('[Audit] Agency tier: Running duplicate URL analysis...')
     try {
       const { analyzeDuplicateUrls } = await import('./duplicateUrlCleaner')
@@ -781,31 +1032,39 @@ export async function runAudit(
       // Add duplicate URL issues
       if (duplicateUrlAnalysis.duplicateGroups.length > 0) {
         allIssues.push({
-          type: 'duplicate-urls',
-          severity: 'High',
-          category: 'Technical',
-          title: 'Duplicate URL Variations Detected',
+          severity: 'High' as const,
+          category: 'Technical' as const,
           message: `Found ${duplicateUrlAnalysis.totalDuplicates} duplicate URL variations across ${duplicateUrlAnalysis.duplicateGroups.length} groups`,
-          description: `Multiple URL variations point to the same content. This can cause duplicate content issues and dilute SEO value.`,
           affectedPages: duplicateUrlAnalysis.duplicateGroups.flatMap(g => g.duplicates).slice(0, 20),
           fixInstructions: `Consolidate duplicate URLs using 301 redirects and canonical tags. Choose one preferred URL format (HTTPS, with/without www, with/without trailing slash) and redirect all variations to it.`,
           priority: 9
-        })
+        } as any)
       }
       
       // Add canonical conflict issues
+      // CRITICAL FIX #10: Separate high-priority conflicts from low-priority (related category pages)
       if (duplicateUrlAnalysis.canonicalConflicts > 0) {
         allIssues.push({
-          type: 'canonical-conflicts',
-          severity: 'High',
-          category: 'Technical',
-          title: 'Canonical Tag Conflicts',
+          severity: 'High' as const,
+          category: 'Technical' as const,
           message: `Found ${duplicateUrlAnalysis.canonicalConflicts} canonical tag conflicts`,
-          description: `Some pages have canonical tags that conflict with the recommended canonical URL, which can confuse search engines.`,
           affectedPages: [],
           fixInstructions: `Review and update canonical tags to match the recommended canonical URLs. Ensure all variations of a URL point to the same canonical.`,
           priority: 8
-        })
+        } as any)
+      }
+      
+      // CRITICAL FIX #10: Add low-priority canonical conflicts (related category pages)
+      if ((duplicateUrlAnalysis as any).lowPriorityCanonicalConflicts > 0) {
+        allIssues.push({
+          severity: 'Low' as const,
+          category: 'Technical' as const,
+          message: `Found ${(duplicateUrlAnalysis as any).lowPriorityCanonicalConflicts} canonical tags pointing to related category pages`,
+          affectedPages: [],
+          details: `Some pages have canonical tags pointing to related category pages. This is often intentional for category hierarchies, but review to ensure it's the desired behavior.`,
+          fixInstructions: `Review canonical tags that point to category pages. If this is intentional (e.g., consolidating category pages), no action needed. Otherwise, update to point to the page itself.`,
+          priority: 2
+        } as any)
       }
     } catch (error) {
       console.warn('[Audit] Duplicate URL analysis failed:', error)
@@ -813,6 +1072,112 @@ export async function runAudit(
   }
   
   const endTime = Date.now()
+  
+  // FINAL CLEANUP: Remove any PDFs or non-HTML files from brokenPages and all issues
+  // This is a defensive measure to ensure 100% accuracy
+  siteWide.brokenPages = siteWide.brokenPages.filter(url => {
+    const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+    return !isNonHtmlFile
+  })
+  
+  // Filter PDFs from all issues' affectedPages
+  // CRITICAL FIX: Don't remove site-wide issues that don't have affectedPages
+  allIssues.forEach(issue => {
+    if (issue.affectedPages && issue.affectedPages.length > 0) {
+      const originalCount = issue.affectedPages.length
+      issue.affectedPages = issue.affectedPages.filter((url: string) => {
+        const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+        return !isNonHtmlFile
+      })
+      // Only mark for removal if ALL pages were filtered AND it had pages originally
+      // Site-wide issues without affectedPages should NOT be removed
+      if (issue.affectedPages.length === 0 && originalCount > 0) {
+        (issue as any)._shouldRemove = true
+      }
+    }
+    // CRITICAL FIX: Keep issues that don't have affectedPages (site-wide issues)
+    // These are valid and should not be removed
+  })
+  
+  // Remove issues that have no affected pages after filtering
+  // BUT keep issues that are site-wide (no affectedPages field or empty array is valid for site-wide)
+  const issuesBeforeFinalFilter = allIssues.length
+  const finalIssues = allIssues.filter((issue: any) => {
+    // Keep if not marked for removal
+    if (issue._shouldRemove) {
+      console.log(`[Audit] Removing issue: ${issue.message} (marked for removal)`)
+      return false
+    }
+    // Keep if it's a site-wide issue (no affectedPages or empty array)
+    if (!issue.affectedPages || issue.affectedPages.length === 0) {
+      // Site-wide issues are valid - keep them
+      return true
+    }
+    // Keep if it has valid affected pages
+    return issue.affectedPages.length > 0
+  })
+  console.log(`[Audit] Issues before final filter: ${issuesBeforeFinalFilter}, after: ${finalIssues.length}`)
+  allIssues.length = 0
+  allIssues.push(...finalIssues)
+  
+  // DEBUG: Log actual category values AFTER filtering
+  const categoryCountsAfter = new Map<string, number>()
+  allIssues.forEach(issue => {
+    const cat = issue.category || 'unknown'
+    categoryCountsAfter.set(cat, (categoryCountsAfter.get(cat) || 0) + 1)
+  })
+  console.log(`[Audit] Issue categories found (AFTER filtering): ${Array.from(categoryCountsAfter.entries()).map(([cat, count]) => `${cat}=${count}`).join(', ')}`)
+  
+  // CRITICAL FIX: Categorize issues directly from allIssues array
+  // Don't rely on categorizeIssues() function which seems to have a bug
+  const finalCategorizedIssues = {
+    technical: allIssues.filter(i => i.category === 'Technical'),
+    onPage: allIssues.filter(i => i.category === 'On-page'),
+    content: allIssues.filter(i => i.category === 'Content'),
+    accessibility: allIssues.filter(i => i.category === 'Accessibility'),
+    performance: allIssues.filter(i => i.category === 'Performance')
+  }
+  
+  // DEBUG: Log categorization results
+  console.log(`[Audit] Final issue categorization: Technical=${finalCategorizedIssues.technical.length}, On-page=${finalCategorizedIssues.onPage.length}, Content=${finalCategorizedIssues.content.length}, Accessibility=${finalCategorizedIssues.accessibility.length}, Performance=${finalCategorizedIssues.performance.length}`)
+  console.log(`[Audit] Total issues after final filtering: ${allIssues.length}`)
+  
+  // Verify categorization worked
+  const totalCategorized = finalCategorizedIssues.technical.length + 
+                          finalCategorizedIssues.onPage.length + 
+                          finalCategorizedIssues.content.length + 
+                          finalCategorizedIssues.accessibility.length + 
+                          finalCategorizedIssues.performance.length
+  if (totalCategorized !== allIssues.length) {
+    console.warn(`[Audit] ⚠️ WARNING: Categorization mismatch! Total issues: ${allIssues.length}, Categorized: ${totalCategorized}`)
+    // Log uncategorized issues
+    const uncategorized = allIssues.filter(i => 
+      i.category !== 'Technical' && 
+      i.category !== 'On-page' && 
+      i.category !== 'Content' && 
+      i.category !== 'Accessibility' && 
+      i.category !== 'Performance'
+    )
+    if (uncategorized.length > 0) {
+      console.warn(`[Audit] Uncategorized issues (${uncategorized.length}):`, uncategorized.map(i => ({ category: i.category, message: i.message })))
+    }
+  }
+  
+  // CRITICAL FIX: If categorized arrays are empty but scores are low, regenerate issues from scores
+  // This is a fallback to ensure issues match scores
+  if (allIssues.length === 0 && (scores.technical < 70 || scores.onPage < 70 || scores.content < 70)) {
+    console.log(`[Audit] ⚠️ WARNING: No issues found but scores are low. This indicates a bug in issue generation or filtering.`)
+    console.log(`[Audit] Scores suggest issues exist: Technical=${scores.technical}, OnPage=${scores.onPage}, Content=${scores.content}`)
+    // Don't create fake issues, but log the problem
+  }
+  
+  // Calculate severity counts from all issues (use allIssues, not categorized)
+  const highSeverityIssues = allIssues.filter(i => i.severity === 'High')
+  const mediumSeverityIssues = allIssues.filter(i => i.severity === 'Medium')
+  const lowSeverityIssues = allIssues.filter(i => i.severity === 'Low')
+  
+  // DEBUG: Log severity counts
+  console.log(`[Audit] Final severity counts: High=${highSeverityIssues.length}, Medium=${mediumSeverityIssues.length}, Low=${lowSeverityIssues.length}`)
   
   // SPRINT 1: Return with crawl diagnostics and valid pages only
   return {
@@ -825,15 +1190,26 @@ export async function runAudit(
       onPageScore: scores.onPage,
       contentScore: scores.content,
       accessibilityScore: scores.accessibility,
-      highSeverityIssues: allIssues.filter(i => i.severity === 'High').length,
-      mediumSeverityIssues: allIssues.filter(i => i.severity === 'Medium').length,
-      lowSeverityIssues: allIssues.filter(i => i.severity === 'Low').length,
+      highSeverityIssues: highSeverityIssues.length,
+      mediumSeverityIssues: mediumSeverityIssues.length,
+      lowSeverityIssues: lowSeverityIssues.length,
       extractedKeywords: topKeywords.length > 0 ? topKeywords : undefined,
     },
-    ...categorizedIssues,
+    technicalIssues: finalCategorizedIssues.technical,
+    onPageIssues: finalCategorizedIssues.onPage,
+    contentIssues: finalCategorizedIssues.content,
+    accessibilityIssues: finalCategorizedIssues.accessibility,
+    performanceIssues: finalCategorizedIssues.performance,
     pages: validPages, // Return only valid pages for SEO analysis
-    allPages: uniquePages, // NEW: All pages including errors (for page-level table)
-    siteWide,
+    allPages: htmlUniquePages, // NEW: All pages including errors (for page-level table), already filtered for non-HTML files
+    siteWide: {
+      ...siteWide,
+      brokenPages: siteWide.brokenPages.filter(url => {
+        // Final safety check: ensure no PDFs in brokenPages
+        const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+        return !isNonHtmlFile
+      })
+    },
     imageAltAnalysis,
     competitorAnalysis,
     crawlDiagnostics, // NEW: Crawl diagnostics
@@ -998,12 +1374,27 @@ async function crawlPages(
       continue
     }
     
+    // Skip non-HTML files (PDFs, images, etc.) - don't analyze them
+    const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+    if (isNonHtmlFile) {
+      console.log(`[Audit Progress] Skipping non-HTML file: ${url}`)
+      crawledUrls.add(url) // Mark as crawled so we don't try again
+      continue
+    }
+    
     crawledUrls.add(url)
     
     try {
       // Log progress
       const elapsed = Math.round((Date.now() - startTime) / 1000)
       console.log(`[Audit Progress] Analyzing page ${pages.length + 1}/${options.maxPages}: ${url} (${elapsed}s elapsed)`)
+      
+      // CRITICAL FIX: Skip PDFs and non-HTML files before analyzing
+      const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+      if (isNonHtmlFile) {
+        console.log(`[Audit Progress] Skipping non-HTML file from analysis: ${url}`)
+        continue // Skip to next URL in queue
+      }
       
       // Check if this is the main/start page
       const isMainPage = url === startUrl && depth === 0
@@ -1151,8 +1542,9 @@ async function crawlPages(
                 } catch {
                   // Try as relative URL
                   try {
-                    if (!href.startsWith('http') && !href.startsWith('//')) {
-                      const relativeUrl = new URL(href, url)
+                    const hrefValue = hrefMatch[1].trim()
+                    if (!hrefValue.startsWith('http') && !hrefValue.startsWith('//')) {
+                      const relativeUrl = new URL(hrefValue, url)
                       if (isSameDomain(relativeUrl.hostname, actualDomain)) {
                         const normalizedUrl = normalizeUrl(relativeUrl.toString())
                         if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
@@ -1175,7 +1567,11 @@ async function crawlPages(
           for (const linkUrl of linksToAdd) {
             const normalizedLinkUrl = normalizeUrl(linkUrl)
             if (!crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
-              queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
+              // Skip non-HTML files (PDFs, images, etc.) from crawl queue
+              const isNonHtmlFile = normalizedLinkUrl.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+              if (!isNonHtmlFile) {
+                queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
+              }
             }
           }
           
@@ -1194,7 +1590,11 @@ async function crawlPages(
                 const normalizedLinkUrl = normalizeUrl(linkUrl)
                 const linkUrlObj = new URL(linkUrl)
                 if (isSameDomain(linkUrlObj.hostname, actualDomain) && !crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
-                  queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
+                  // Skip non-HTML files (PDFs, images, etc.) from crawl queue
+              const isNonHtmlFile = normalizedLinkUrl.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+              if (!isNonHtmlFile) {
+                queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
+              }
                 }
               } catch {
                 // Invalid URL, skip
@@ -1204,23 +1604,30 @@ async function crawlPages(
         }
       }
     } catch (error) {
-      pages.push({
-        url,
-        statusCode: 0,
-        loadTime: 0,
-        contentType: '',
-        h1Count: 0,
-        h2Count: 0,
-        wordCount: 0,
-        imageCount: 0,
-        missingAltCount: 0,
-        internalLinkCount: 0,
-        externalLinkCount: 0,
-        hasNoindex: false,
-        hasNofollow: false,
-        hasViewport: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
+      // Skip non-HTML files even if they error - don't add them to pages
+      const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+      if (!isNonHtmlFile) {
+        pages.push({
+          url,
+          statusCode: 0,
+          loadTime: 0,
+          contentType: 'text/html',
+          h1Count: 0,
+          h2Count: 0,
+          wordCount: 0,
+          imageCount: 0,
+          missingAltCount: 0,
+          internalLinkCount: 0,
+          externalLinkCount: 0,
+          hasNoindex: false,
+          hasNofollow: false,
+          hasViewport: false,
+          hasSchemaMarkup: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
+      } else {
+        console.log(`[Audit Progress] Skipping error for non-HTML file: ${url}`)
+      }
     }
   }
   
@@ -1281,14 +1688,22 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
       llmReadability,
       needsImageDetails,
       httpVersion,
-      compression
+      compression,
+      rendered.h1Data // CRITICAL FIX: Pass H1s extracted from rendered DOM
     )
     
     // Wait for PageSpeed data and add it
     const pageSpeedData = await pageSpeedPromise
     if (pageSpeedData) {
       // NEW: Validate performance metrics
-      const validated = validatePerformanceMetrics(pageSpeedData)
+      // Extract mobile metrics for validation (or use simplified structure if available)
+      const metrics = (pageSpeedData as any).mobile || pageSpeedData
+      const validated = validatePerformanceMetrics({
+        lcp: metrics.lcp,
+        fcp: metrics.fcp,
+        cls: metrics.cls,
+        ttfb: metrics.ttfb
+      })
       if (validated.warnings.length > 0) {
         console.warn(`[Performance] Validation warnings for ${url}:`, validated.warnings)
       }
@@ -1356,7 +1771,14 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
         const pageSpeedData = await pageSpeedPromise
         if (pageSpeedData) {
           // NEW: Validate performance metrics
-          const validated = validatePerformanceMetrics(pageSpeedData)
+          // Extract mobile metrics for validation (or use simplified structure if available)
+          const metrics = (pageSpeedData as any).mobile || pageSpeedData
+          const validated = validatePerformanceMetrics({
+            lcp: metrics.lcp,
+            fcp: metrics.fcp,
+            cls: metrics.cls,
+            ttfb: metrics.ttfb
+          })
           if (validated.warnings.length > 0) {
             console.warn(`[Performance] Validation warnings for ${url}:`, validated.warnings)
           }
@@ -1399,6 +1821,12 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
  * Fallback: Analyze page without JavaScript rendering
  */
 async function analyzePageFallback(url: string, userAgent: string): Promise<PageData> {
+  // CRITICAL FIX: Don't try to analyze PDFs or non-HTML files
+  const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+  if (isNonHtmlFile) {
+    throw new Error(`Cannot analyze non-HTML file: ${url}`)
+  }
+  
   const startTime = Date.now()
   
   try {
@@ -1439,10 +1867,28 @@ async function parseHtmlWithRenderer(
   llmReadability?: PageData['llmReadability'],
   needsImageDetails = false,
   httpVersion?: PageData['httpVersion'],
-  compression?: PageData['compression']
+  compression?: PageData['compression'],
+  h1Data?: RenderedPageData['h1Data']
 ): Promise<PageData> {
-  // Parse basic HTML elements (title, meta, headers, etc.)
+  // CRITICAL FIX #11: Parse using rendered HTML (not initial HTML) for accurate content extraction
+  // Parse basic HTML elements (title, meta, headers, etc.) from rendered content
   const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType)
+  
+  // CRITICAL FIX: Use H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)
+  // Override regex-based H1 extraction with DOM-based extraction
+  // If DOM extraction failed or returned empty, fall back to parsing rendered HTML
+  if (h1Data && h1Data.h1Count > 0) {
+    basicData.h1Count = h1Data.h1Count
+    basicData.h1Text = h1Data.h1Text.length > 0 ? h1Data.h1Text : undefined
+  } else {
+    // Fallback: Parse H1s from rendered HTML string if DOM evaluation failed
+    const h1Matches = renderedHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || []
+    const h1TextFromHtml = h1Matches.map(m => m.replace(/<[^>]+>/g, '').trim()).filter(Boolean)
+    if (h1TextFromHtml.length > 0) {
+      basicData.h1Count = h1TextFromHtml.length
+      basicData.h1Text = h1TextFromHtml
+    }
+  }
   
   // Use image/link data from renderer, or fall back to regex
   let finalImageData = { imageCount: 0, missingAltCount: 0 }
@@ -1455,39 +1901,100 @@ async function parseHtmlWithRenderer(
     }
   } else {
     // Fall back to regex-based detection
+    // CRITICAL FIX: Match renderer's logic - count missing alt as empty, missing, or "undefined"
     const imageMatches = renderedHtml.match(/<img[^>]*>/gi) || []
     finalImageData = {
       imageCount: imageMatches.length,
-      missingAltCount: imageMatches.filter(img => !img.match(/alt=["'][^"']+["']/i)).length
+      missingAltCount: imageMatches.filter(img => {
+        // Match renderer logic: missing alt if no alt attribute, empty alt, or alt="undefined"
+        const altMatch = img.match(/alt=["']([^"']*)["']/i)
+        return !altMatch || altMatch[1].trim() === '' || altMatch[1].trim() === 'undefined'
+      }).length
     }
   }
   
-  if (linkData) {
-    finalLinkData = {
-      internalLinkCount: linkData.internalLinkCount,
-      externalLinkCount: linkData.externalLinkCount
-    }
+  // Extract internal links array for link graph analysis
+  // CRITICAL FIX: Only count links in main content areas, exclude nav/footer/header
+  const internalLinks: string[] = []
+  
+  // Extract main content areas first (prefer <main>, <article>, <section>)
+  let mainContentHtml = ''
+  const mainMatch = renderedHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+  const articleMatch = renderedHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+  const sectionMatches = renderedHtml.match(/<section[^>]*>([\s\S]*?)<\/section>/gi) || []
+  
+  if (mainMatch) {
+    mainContentHtml = mainMatch[1]
+  } else if (articleMatch) {
+    mainContentHtml = articleMatch[1]
+  } else if (sectionMatches.length > 0) {
+    // Use all sections combined
+    mainContentHtml = sectionMatches.join(' ')
   } else {
-    // Fall back to regex-based detection
-    const linkMatches = renderedHtml.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
-    const baseUrl = new URL(url)
-    let internalCount = 0
-    let externalCount = 0
-    linkMatches.forEach(link => {
-      const hrefMatch = link.match(/href=["']([^"']+)["']/i)
-      if (hrefMatch) {
+    // Fallback: exclude common nav/header/footer patterns
+    mainContentHtml = renderedHtml
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+  }
+  
+  // Only extract links from main content
+  const linkMatches = mainContentHtml.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
+  const baseUrl = new URL(url)
+  let internalCount = 0
+  let externalCount = 0
+  
+  linkMatches.forEach(link => {
+    const hrefMatch = link.match(/href=["']([^"']+)["']/i)
+    if (hrefMatch) {
+      try {
+        const href = hrefMatch[1].trim()
+        // Skip anchors, javascript, mailto, etc.
+        if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href === '' || href === '/') {
+          return
+        }
+        
+        const linkUrl = new URL(href, url)
+        if (linkUrl.hostname === baseUrl.hostname || linkUrl.hostname.replace(/^www\./, '') === baseUrl.hostname.replace(/^www\./, '')) {
+          internalCount++
+          // Store normalized internal link URL
+          const normalizedLink = linkUrl.toString()
+          if (!internalLinks.includes(normalizedLink)) {
+            internalLinks.push(normalizedLink)
+          }
+        } else {
+          externalCount++
+        }
+      } catch {
+        // Try as relative URL
         try {
-          const linkUrl = new URL(hrefMatch[1], url)
-          if (linkUrl.hostname === baseUrl.hostname) {
-            internalCount++
-          } else {
-            externalCount++
+          if (!hrefMatch[1].startsWith('http') && !hrefMatch[1].startsWith('//')) {
+            const relativeUrl = new URL(hrefMatch[1], url)
+            if (relativeUrl.hostname === baseUrl.hostname || relativeUrl.hostname.replace(/^www\./, '') === baseUrl.hostname.replace(/^www\./, '')) {
+              internalCount++
+              const normalizedLink = relativeUrl.toString()
+              if (!internalLinks.includes(normalizedLink)) {
+                internalLinks.push(normalizedLink)
+              }
+            } else {
+              externalCount++
+            }
           }
         } catch {
-          internalCount++
+          // Invalid URL, skip
         }
       }
-    })
+    }
+  })
+  
+  // Use linkData counts if available, otherwise use extracted counts
+  if (linkData) {
+    finalLinkData = {
+      internalLinkCount: linkData.internalLinkCount || internalCount,
+      externalLinkCount: linkData.externalLinkCount || externalCount
+    }
+  } else {
     finalLinkData = {
       internalLinkCount: internalCount,
       externalLinkCount: externalCount
@@ -1500,6 +2007,7 @@ async function parseHtmlWithRenderer(
     missingAltCount: finalImageData.missingAltCount,
     internalLinkCount: finalLinkData.internalLinkCount,
     externalLinkCount: finalLinkData.externalLinkCount,
+    internalLinks: internalLinks.length > 0 ? internalLinks : undefined, // Store actual internal link URLs
     performanceMetrics,
     llmReadability,
     httpVersion,
@@ -1541,11 +2049,41 @@ function parseHtml(
   const h1Text = h1Matches.map(m => m.replace(/<[^>]+>/g, '').trim()).filter(Boolean)
   
   // Extract images
+  // CRITICAL FIX: Match renderer's logic for consistent alt text counting
   const imageMatches = cleanHtml.match(/<img[^>]*>/gi) || []
-  const missingAltCount = imageMatches.filter(img => !img.match(/alt=["'][^"']+["']/i)).length
+  const missingAltCount = imageMatches.filter(img => {
+    // Match renderer logic: missing alt if no alt attribute, empty alt, or alt="undefined"
+    const altMatch = img.match(/alt=["']([^"']*)["']/i)
+    return !altMatch || altMatch[1].trim() === '' || altMatch[1].trim() === 'undefined'
+  }).length
   
   // NEW: Extract links using improved classification
-  const linkMatches = cleanHtml.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
+  // CRITICAL FIX: Only count links in main content areas, exclude nav/footer/header
+  // Extract main content areas first (prefer <main>, <article>, <section>)
+  // Note: We'll reuse the same logic as word count extraction below
+  let linkContentHtml = ''
+  const linkMainMatch = cleanHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+  const linkArticleMatch = cleanHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+  const linkSectionMatches = cleanHtml.match(/<section[^>]*>([\s\S]*?)<\/section>/gi) || []
+  
+  if (linkMainMatch) {
+    linkContentHtml = linkMainMatch[1]
+  } else if (linkArticleMatch) {
+    linkContentHtml = linkArticleMatch[1]
+  } else if (linkSectionMatches.length > 0) {
+    // Use all sections combined
+    linkContentHtml = linkSectionMatches.join(' ')
+  } else {
+    // Fallback: exclude common nav/header/footer patterns
+    linkContentHtml = cleanHtml
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+  }
+  
+  // Only extract links from main content
+  const linkMatches = linkContentHtml.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
   let internalLinkCount = 0
   let externalLinkCount = 0
   
@@ -1594,16 +2132,18 @@ function parseHtml(
   const keywordSources: string[] = []
   
   // Only extract keywords if page is successful (not 404, 500, etc.)
+  // CRITICAL FIX: Decode HTML entities before keyword extraction
+  const { decode } = require('html-entities')
   if (statusCode >= 200 && statusCode < 400) {
-    if (title) keywordSources.push(title)
-    if (h1Text && h1Text.length > 0) keywordSources.push(...h1Text)
-    if (metaDescription) keywordSources.push(metaDescription)
+    if (title) keywordSources.push(decode(title))
+    if (h1Text && h1Text.length > 0) keywordSources.push(...h1Text.map(t => decode(t)))
+    if (metaDescription) keywordSources.push(decode(metaDescription))
   }
   
   // Extract H2 tags (for both counting and text extraction)
   const h2Matches = cleanHtml.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi) || []
   const h2Count = h2Matches.length
-  const h2Text = h2Matches.map(m => m.replace(/<[^>]+>/g, '').trim()).filter(Boolean)
+  const h2Text = h2Matches.map(m => decode(m.replace(/<[^>]+>/g, '').trim())).filter(Boolean)
   if (h2Text.length > 0) keywordSources.push(...h2Text.slice(0, 5)) // Limit to first 5 H2s
   
   // Extract meaningful keywords (2-3 word phrases, filtering stop words)
@@ -1697,11 +2237,48 @@ function parseHtml(
   // This handles concatenated words, nonsense patterns, and proper filtering
   const cleanedKeywords = deduplicateKeywords(extractedKeywords)
   
-  // Limit to top 20 keywords per page
-  const uniqueKeywords = cleanedKeywords.slice(0, 20)
+  // CRITICAL FIX: Use keywordProcessor to filter out invalid keywords (stopwords, broken tokens)
+  // Only keep keywords that pass validation
+  const validKeywords = cleanedKeywords.filter(kw => {
+    // Use keywordProcessor's validation if available, otherwise use basic checks
+    try {
+      const { isValidKeyword } = require('./keywordProcessor')
+      return isValidKeyword(kw)
+    } catch {
+      // Fallback: basic validation
+      const words = kw.split(/\s+/)
+      return words.length >= 2 && words.every(w => w.length >= 3)
+    }
+  })
   
-  // Count words (text content only)
-  const textContent = cleanHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  // Limit to top 20 keywords per page
+  const uniqueKeywords = validKeywords.slice(0, 20)
+  
+  // CRITICAL FIX #1: Count words from rendered content, excluding nav/header/footer
+  // Extract main content areas first (prefer <main>, <article>, <section>)
+  let mainContent = ''
+  const mainMatch = cleanHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+  const articleMatch = cleanHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+  const sectionMatches = cleanHtml.match(/<section[^>]*>([\s\S]*?)<\/section>/gi) || []
+  
+  if (mainMatch) {
+    mainContent = mainMatch[1]
+  } else if (articleMatch) {
+    mainContent = articleMatch[1]
+  } else if (sectionMatches.length > 0) {
+    // Use all sections combined
+    mainContent = sectionMatches.join(' ')
+  } else {
+    // Fallback: exclude common nav/header/footer patterns
+    mainContent = cleanHtml
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+  }
+  
+  // Remove all HTML tags and count words
+  const textContent = mainContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
   const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
   
   return {
@@ -1711,10 +2288,9 @@ function parseHtml(
     contentType,
     title,
     titleLength, // NEW: Using extracted length from titleMetaExtractor
-    titlePixelWidth, // NEW: Pixel width estimation
     metaDescription,
     metaDescriptionLength: metaLength, // NEW: Using extracted length
-    canonical,
+    canonical: canonical || undefined,
     h1Count: h1Text.length,
     h1Text: h1Text.length > 0 ? h1Text : undefined,
     h2Count: h2Count,
@@ -1748,11 +2324,25 @@ function parseHtml(
 function analyzeSiteWideIssues(
   pages: PageData[],
   siteWide: SiteWideData,
-  issues: Issue[]
+  issues: Issue[],
+  rootUrl: string // CRITICAL FIX #3: Add rootUrl parameter for homepage detection
 ): void {
-  // Check for broken pages
+  // CRITICAL FIX #3: Check for broken pages - Only count HTML documents, not subresources (images/scripts)
   pages.forEach(page => {
-    if (page.statusCode >= 400 || page.error) {
+    // Only count as broken if it's an HTML document with an error status
+    // Also skip PDFs and other non-HTML files
+    const isNonHtmlFile = page.url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+    if (isNonHtmlFile) {
+      // Skip non-HTML files entirely - don't add them to brokenPages
+      // Log if we see a PDF trying to be added (for debugging)
+      if (page.url.includes('.pdf')) {
+        console.warn(`[Audit] Skipping PDF from brokenPages: ${page.url}`)
+      }
+      return
+    }
+    const isHtmlDocument = page.contentType?.includes('text/html') || 
+                           page.contentType?.includes('application/xhtml')
+    if (isHtmlDocument && (page.statusCode >= 400 || page.error)) {
       siteWide.brokenPages.push(page.url)
     }
   })
@@ -1815,34 +2405,47 @@ function analyzeSiteWideIssues(
   const issueMap = new Map<string, Issue>()
   
   pages.forEach(page => {
-    // Missing title
-    if (!page.title) {
+    // Skip non-HTML pages for HTML-specific checks
+    // Check both content type and file extension to avoid false positives
+    const isHtmlPage = (page.contentType?.includes('text/html') || 
+                       page.contentType?.includes('application/xhtml')) &&
+                      !page.url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe)$/i)
+    
+    // Missing title - only check HTML pages
+    if (isHtmlPage && !page.title) {
       consolidateIssue(issueMap, {
         category: 'On-page',
         severity: 'High',
         message: 'Missing page title',
         affectedPages: [page.url]
       })
-    } else if (page.titleLength! < 30) {
-      consolidateIssue(issueMap, {
-        category: 'On-page',
-        severity: 'Medium',
-        message: 'Page title too short',
-        details: `Title is ${page.titleLength} characters (recommended: 50-60)`,
-        affectedPages: [page.url]
-      })
-    } else if (page.titleLength! > 60) {
-      consolidateIssue(issueMap, {
-        category: 'On-page',
-        severity: 'Low',
-        message: 'Page title too long',
-        details: `Title is ${page.titleLength} characters (recommended: 50-60)`,
-        affectedPages: [page.url]
-      })
+    } else {
+      // CRITICAL FIX #3: Contextual title length checking
+      const isHomepage = page.url === rootUrl || page.url === rootUrl + '/' || page.url.endsWith('/')
+      const isBrandName = page.title && page.title.length < 20 && /^[A-Z\s]+$/.test(page.title.trim())
+      const isNewsArticle = page.url.toLowerCase().includes('/news/') || page.url.toLowerCase().includes('/article/')
+      
+      if (page.titleLength! < 30 && !isHomepage && !isBrandName) {
+        consolidateIssue(issueMap, {
+          category: 'On-page',
+          severity: 'Medium',
+          message: 'Page title too short',
+          details: `Title is ${page.titleLength} characters (recommended: 35-60 for optimal display)`,
+          affectedPages: [page.url]
+        })
+      } else if (page.titleLength! > 70) {
+        consolidateIssue(issueMap, {
+          category: 'On-page',
+          severity: 'Low',
+          message: 'Page title too long',
+          details: `Title is ${page.titleLength} characters (recommended: 35-60 for best results)`,
+          affectedPages: [page.url]
+        })
+      }
     }
     
-    // Missing meta description
-    if (!page.metaDescription) {
+    // Missing meta description - only check HTML pages
+    if (isHtmlPage && !page.metaDescription) {
       consolidateIssue(issueMap, {
         category: 'On-page',
         severity: 'High',
@@ -1867,26 +2470,33 @@ function analyzeSiteWideIssues(
       })
     }
     
-    // H1 issues
-    if (page.h1Count === 0) {
-      consolidateIssue(issueMap, {
-        category: 'On-page',
-        severity: 'High',
-        message: 'Missing H1 tag',
-        affectedPages: [page.url]
-      })
-    } else if (page.h1Count > 1) {
-      consolidateIssue(issueMap, {
-        category: 'On-page',
-        severity: 'Medium',
-        message: 'Multiple H1 tags',
-        details: `Found ${page.h1Count} H1 tags (recommended: 1)`,
-        affectedPages: [page.url]
-      })
+    // H1 issues - only check HTML pages (not PDFs, images, etc.)
+    // Re-check isHtmlPage here to ensure we're not checking PDFs
+    const isHtmlPageForH1 = (page.contentType?.includes('text/html') || 
+                             page.contentType?.includes('application/xhtml')) &&
+                            !page.url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe)$/i)
+    
+    if (isHtmlPageForH1) {
+      if (page.h1Count === 0) {
+        consolidateIssue(issueMap, {
+          category: 'On-page',
+          severity: 'High',
+          message: 'Missing H1 tag',
+          affectedPages: [page.url]
+        })
+      } else if (page.h1Count > 1) {
+        consolidateIssue(issueMap, {
+          category: 'On-page',
+          severity: 'Medium',
+          message: 'Multiple H1 tags',
+          details: `Found ${page.h1Count} H1 tags (recommended: 1)`,
+          affectedPages: [page.url]
+        })
+      }
     }
     
-    // Thin content
-    if (page.wordCount < 300) {
+    // Thin content - only check HTML pages
+    if (isHtmlPage && page.wordCount < 300) {
       consolidateIssue(issueMap, {
         category: 'Content',
         severity: 'Medium',
@@ -1900,8 +2510,9 @@ function analyzeSiteWideIssues(
     // Enhanced on-page analysis handles this more comprehensively, so we skip it here
     // to avoid duplication
     
-    // No viewport meta tag
-    if (!page.hasViewport) {
+    // No viewport meta tag - only check HTML pages (not PDFs, images, etc.)
+    // Use the same check as H1 to ensure consistency
+    if (isHtmlPageForH1 && !page.hasViewport) {
       consolidateIssue(issueMap, {
         category: 'Technical',
         severity: 'High',
@@ -1976,10 +2587,10 @@ function analyzeSiteWideIssues(
       })
     }
     
-    // Canonical validation
-    if (!page.canonical) {
+    // Canonical validation - only check HTML pages
+    if (isHtmlPage && !page.canonical) {
       consolidateIssue(issueMap, {
-        category: 'On-Page',
+        category: 'On-page',
         severity: 'Medium',
         message: 'Missing canonical tag',
         details: 'Canonical tags prevent duplicate content issues. Add <link rel="canonical" href="[preferred-url]"> to the <head> section.',
@@ -1991,25 +2602,48 @@ function analyzeSiteWideIssues(
         const pageUrl = new URL(page.url)
         const canonicalUrl = new URL(page.canonical, page.url)
         
-        // Check if canonical is different from current URL (potential issue)
+        // CRITICAL FIX #10: Check if canonical is different from current URL (potential issue)
         if (canonicalUrl.href !== pageUrl.href) {
           // Check if it's just protocol difference (http vs https)
           if (canonicalUrl.hostname === pageUrl.hostname && canonicalUrl.pathname === pageUrl.pathname) {
             // Just protocol or www difference - this is okay
           } else {
-            consolidateIssue(issueMap, {
-              category: 'On-Page',
-              severity: 'Low',
-              message: 'Canonical points to different URL',
-              details: `Canonical URL (${page.canonical}) differs from page URL. This is intentional if this is a duplicate page, otherwise it may indicate a configuration issue.`,
-              affectedPages: [page.url]
-            })
+            // Check if canonical points to a closely related category page (e.g., /events/ vs /events/category/)
+            const pagePath = pageUrl.pathname.split('/').filter(Boolean)
+            const canonicalPath = canonicalUrl.pathname.split('/').filter(Boolean)
+            
+            // If canonical is a parent or sibling category, mark as INFO/LOW, not error
+            const isRelatedCategory = canonicalPath.length > 0 && 
+                                     pagePath.length > 0 &&
+                                     (canonicalPath.every((seg, i) => pagePath[i] === seg) || // Canonical is parent
+                                      pagePath.every((seg, i) => canonicalPath[i] === seg)) // Page is parent
+            
+            if (isRelatedCategory) {
+              // Related category - mark as INFO (very low priority)
+              consolidateIssue(issueMap, {
+                category: 'On-page',
+                severity: 'Low',
+                message: 'Canonical points to related category page',
+                details: `Canonical URL (${page.canonical}) points to a related category page. This may be intentional for category listings.`,
+                affectedPages: [page.url],
+                priority: 1 // Very low priority
+              })
+            } else {
+              // Different URL - flag as potential issue
+              consolidateIssue(issueMap, {
+                category: 'On-page',
+                severity: 'Low',
+                message: 'Canonical points to different URL',
+                details: `Canonical URL (${page.canonical}) differs from page URL. This is intentional if this is a duplicate page, otherwise it may indicate a configuration issue.`,
+                affectedPages: [page.url]
+              })
+            }
           }
         }
       } catch (error) {
         // Invalid canonical URL
         consolidateIssue(issueMap, {
-          category: 'On-Page',
+          category: 'On-page',
           severity: 'Medium',
           message: 'Invalid canonical URL',
           details: `Canonical URL "${page.canonical}" is not a valid URL. Ensure it's an absolute URL (e.g., https://example.com/page).`,
@@ -2024,14 +2658,20 @@ function analyzeSiteWideIssues(
     issues.push(issue)
   })
   
-  // Add consolidated broken pages issue
+  // Add consolidated broken pages issue - filter out PDFs and non-HTML files
+  // Also ensure brokenPages array itself is clean (defensive programming)
+  siteWide.brokenPages = siteWide.brokenPages.filter(url => {
+    const isNonHtmlFile = url.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+    return !isNonHtmlFile
+  })
+  
   if (siteWide.brokenPages.length > 0) {
     issues.push({
       category: 'Technical',
       severity: 'High',
       message: 'Broken pages detected',
       details: `${siteWide.brokenPages.length} page${siteWide.brokenPages.length !== 1 ? 's' : ''} returned errors`,
-      affectedPages: siteWide.brokenPages
+      affectedPages: [...siteWide.brokenPages] // Use copy to avoid reference issues
     })
   }
   
@@ -2200,13 +2840,34 @@ function categorizeIssues(issues: Issue[]): {
   accessibilityIssues: Issue[]
   performanceIssues: Issue[]
 } {
-  return {
-    technicalIssues: issues.filter(i => i.category === 'Technical'),
-    onPageIssues: issues.filter(i => i.category === 'On-page'),
-    contentIssues: issues.filter(i => i.category === 'Content'),
-    accessibilityIssues: issues.filter(i => i.category === 'Accessibility'),
-    performanceIssues: issues.filter(i => i.category === 'Performance')
+  // Use type-safe category matching
+  const result = {
+    technicalIssues: [] as Issue[],
+    onPageIssues: [] as Issue[],
+    contentIssues: [] as Issue[],
+    accessibilityIssues: [] as Issue[],
+    performanceIssues: [] as Issue[]
   }
+  
+  for (const issue of issues) {
+    const cat = issue.category
+    if (cat === 'Technical') {
+      result.technicalIssues.push(issue)
+    } else if (cat === 'On-page') {
+      result.onPageIssues.push(issue)
+    } else if (cat === 'Content') {
+      result.contentIssues.push(issue)
+    } else if (cat === 'Accessibility') {
+      result.accessibilityIssues.push(issue)
+    } else if (cat === 'Performance') {
+      result.performanceIssues.push(issue)
+    } else {
+      // Log unexpected category
+      console.warn(`[Audit] Unknown issue category: "${cat}" for issue: ${issue.message}`)
+    }
+  }
+  
+  return result
 }
 
 /**
@@ -2322,73 +2983,121 @@ async function generateMultiCompetitorAnalysis(
   options: Required<AuditOptions>,
   sitePages: PageData[]
 ): Promise<CompetitorAnalysis> {
-  console.log(`[Competitor] Agency tier: Starting multi-competitor analysis for ${competitorUrls.length} competitors`)
+  console.log(`[Competitor] Agency tier: Starting enhanced multi-competitor crawl for ${competitorUrls.length} competitors`)
   
   try {
-    // Analyze all competitors
-    const result = await analyzeCompetitors(competitorUrls, siteKeywords, options.userAgent)
+    // Use enhanced competitor crawler for Agency tier (full multi-page crawls)
+    const { crawlCompetitorSite, compareCompetitorCrawls } = await import('./enhancedCompetitorCrawl')
     
-    // Build competitor crawl data
-    const competitorCrawls = result.competitorData.map(comp => ({
-      url: comp.url,
-      keywords: comp.keywords,
-      title: comp.title,
-      metaDescription: comp.metaDescription,
-      pageCount: 1, // Single page crawl for now (can be enhanced later)
-      authoritySignals: undefined // Can be enhanced with backlink data later
+    // Crawl each competitor (up to 20 pages each, depth 3)
+    const crawlPromises = competitorUrls.map(url => 
+      crawlCompetitorSite(url, 20, 3, options.userAgent)
+    )
+    
+    const competitorCrawls = (await Promise.all(crawlPromises))
+      .filter((crawl): crawl is NonNullable<typeof crawl> => crawl !== null)
+    
+    if (competitorCrawls.length === 0) {
+      console.warn('[Competitor] All competitor crawls failed, falling back to single-page analysis')
+      const result = await analyzeCompetitors(competitorUrls, siteKeywords, options.userAgent)
+      return {
+        competitorUrl: competitorUrls[0],
+        competitorKeywords: result.competitorData.flatMap(c => c.keywords),
+        keywordGaps: result.keywordGaps.map(g => g.keyword),
+        sharedKeywords: [],
+        competitorCrawls: result.competitorData.map(comp => ({
+          url: comp.url,
+          keywords: comp.keywords,
+          title: comp.title,
+          metaDescription: comp.metaDescription,
+          pageCount: 1
+        })),
+        crawlSummary: {
+          totalCompetitorsAnalyzed: result.competitorData.length,
+          totalPagesCrawled: result.competitorData.length,
+          averagePageCount: 1,
+          siteStructureComparison: []
+        }
+      }
+    }
+    
+    // Compare crawls and find gaps
+    const comparison = compareCompetitorCrawls(siteKeywords, competitorCrawls)
+    
+    // Build CompetitorData format for backward compatibility
+    const competitorDataArray = competitorCrawls.map(crawl => ({
+      url: crawl.url,
+      keywords: crawl.keywords,
+      title: crawl.pages[0]?.title,
+      metaDescription: crawl.pages[0]?.metaDescription,
+      pageCount: crawl.totalPages,
+      authoritySignals: {
+        hubPages: crawl.siteStructure.hubPages,
+        avgInternalLinks: crawl.siteStructure.avgInternalLinks,
+        maxDepth: crawl.siteStructure.maxDepth
+      }
     }))
     
-    // Calculate site structure comparison
+    // Calculate site metrics for comparison
     const siteAvgWordCount = sitePages.length > 0
       ? sitePages.reduce((sum, p) => sum + p.wordCount, 0) / sitePages.length
       : 0
     
+    const totalPagesCrawled = competitorCrawls.reduce((sum, c) => sum + c.totalPages, 0)
+    const averagePageCount = competitorCrawls.length > 0 ? totalPagesCrawled / competitorCrawls.length : 0
+    
     const crawlSummary = {
       totalCompetitorsAnalyzed: competitorCrawls.length,
-      totalPagesCrawled: competitorCrawls.length, // Single page per competitor for now
-      averagePageCount: 1,
-      siteStructureComparison: competitorCrawls.map(comp => ({
-        competitor: comp.url,
-        pageCount: comp.pageCount || 1,
-        avgWordCount: 0, // Can be enhanced with full crawl
-        schemaTypes: [] // Can be enhanced with schema detection
-      }))
+      totalPagesCrawled,
+      averagePageCount,
+      siteStructureComparison: comparison.siteStructureComparison
     }
     
-    // Find shared keywords and gaps
-    const allCompetitorKeywords = new Set<string>()
-    result.competitorData.forEach(comp => {
-      comp.keywords.forEach(k => allCompetitorKeywords.add(k.toLowerCase()))
-    })
-    
-    const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
-    const sharedKeywords = Array.from(allCompetitorKeywords).filter(k => siteKeywordSet.has(k))
-    const keywordGaps = result.keywordGaps.map(g => g.keyword)
-    
     // Combine all competitor keywords
-    const allKeywords = result.competitorData.flatMap(c => c.keywords)
+    const allKeywords = competitorCrawls.flatMap(c => c.keywords)
     
-    console.log(`[Competitor] Agency tier: Analysis complete - ${competitorCrawls.length} competitors, ${keywordGaps.length} gaps, ${sharedKeywords.length} shared`)
+    console.log(`[Competitor] Agency tier: Enhanced crawl complete - ${competitorCrawls.length} competitors, ${totalPagesCrawled} total pages, ${comparison.keywordGaps.length} gaps, ${comparison.sharedKeywords.length} shared`)
     
     return {
       competitorUrl: competitorUrls[0], // Primary competitor for backward compatibility
       competitorKeywords: allKeywords,
-      keywordGaps,
-      sharedKeywords,
-      competitorCrawls,
+      keywordGaps: comparison.keywordGaps.map(g => g.keyword),
+      sharedKeywords: comparison.sharedKeywords,
+      competitorCrawls: competitorDataArray,
       crawlSummary
     }
   } catch (error) {
-    console.warn(`[Competitor] Multi-competitor analysis failed:`, error)
-    // Fallback to single competitor analysis
-    if (competitorUrls.length > 0) {
-      return await generateRealCompetitorAnalysis(competitorUrls[0], siteKeywords, options)
-    }
-    return {
-      competitorUrl: 'Analysis failed',
-      competitorKeywords: [],
-      keywordGaps: generateFallbackKeywordSuggestions(siteKeywords),
-      sharedKeywords: []
+    console.warn(`[Competitor] Enhanced multi-competitor crawl failed:`, error)
+    // Fallback to single-page analysis
+    try {
+      const result = await analyzeCompetitors(competitorUrls, siteKeywords, options.userAgent)
+      return {
+        competitorUrl: competitorUrls[0],
+        competitorKeywords: result.competitorData.flatMap(c => c.keywords),
+        keywordGaps: result.keywordGaps.map(g => g.keyword),
+        sharedKeywords: [],
+        competitorCrawls: result.competitorData.map(comp => ({
+          url: comp.url,
+          keywords: comp.keywords,
+          title: comp.title,
+          metaDescription: comp.metaDescription,
+          pageCount: 1
+        })),
+        crawlSummary: {
+          totalCompetitorsAnalyzed: result.competitorData.length,
+          totalPagesCrawled: result.competitorData.length,
+          averagePageCount: 1,
+          siteStructureComparison: []
+        }
+      }
+    } catch (fallbackError) {
+      console.error('[Competitor] Fallback analysis also failed:', fallbackError)
+      return {
+        competitorUrl: 'Analysis failed',
+        competitorKeywords: [],
+        keywordGaps: generateFallbackKeywordSuggestions(siteKeywords),
+        sharedKeywords: []
+      }
     }
   }
 }

@@ -25,7 +25,7 @@ export interface NAPData {
 }
 
 /**
- * Local schema analysis
+ * Local schema analysis (Enhanced for Agency tier)
  */
 export interface LocalSchemaAnalysis {
   hasLocalBusiness: boolean
@@ -36,6 +36,12 @@ export interface LocalSchemaAnalysis {
   hasOpeningHours: boolean
   hasGeo: boolean
   hasPriceRange: boolean
+  hasReviewMarkup: boolean // NEW: Review schema detection
+  hasDrivingDirections: boolean // NEW: Driving directions schema
+  geoCoordinates?: { latitude?: number; longitude?: number } // NEW: Actual geo coordinates
+  openingHoursSchema?: string[] // NEW: Parsed opening hours from schema
+  reviewCount?: number // NEW: Number of reviews found
+  reviewRating?: number // NEW: Average rating if available
   missingFields: string[]
   recommendations: string[]
 }
@@ -267,7 +273,7 @@ function extractNAP(pages: PageData[]): NAPData {
 }
 
 /**
- * Analyze local schema markup
+ * Analyze local schema markup (Enhanced for Agency tier)
  */
 function analyzeLocalSchema(pages: PageData[]): LocalSchemaAnalysis {
   const analysis: LocalSchemaAnalysis = {
@@ -279,9 +285,16 @@ function analyzeLocalSchema(pages: PageData[]): LocalSchemaAnalysis {
     hasOpeningHours: false,
     hasGeo: false,
     hasPriceRange: false,
+    hasReviewMarkup: false,
+    hasDrivingDirections: false,
+    openingHoursSchema: [],
     missingFields: [],
     recommendations: []
   }
+  
+  const allSchemaTypes = new Set<string>()
+  const reviewRatings: number[] = []
+  let reviewCount = 0
   
   for (const page of pages) {
     if (!page.schemaTypes || page.schemaTypes.length === 0) continue
@@ -289,41 +302,96 @@ function analyzeLocalSchema(pages: PageData[]): LocalSchemaAnalysis {
     // Check for LocalBusiness or its subtypes
     const localBusinessTypes = [
       'LocalBusiness', 'Restaurant', 'Store', 'AutoRepair', 'HomeAndConstructionBusiness',
-      'LodgingBusiness', 'MedicalBusiness', 'ProfessionalService', 'FoodEstablishment'
+      'LodgingBusiness', 'MedicalBusiness', 'ProfessionalService', 'FoodEstablishment',
+      'Plumber', 'Electrician', 'GeneralContractor', 'HVACBusiness', 'RoofingContractor'
     ]
     
     for (const type of page.schemaTypes) {
+      allSchemaTypes.add(type)
+      
       if (localBusinessTypes.some(lbt => type.includes(lbt))) {
         analysis.hasLocalBusiness = true
-        if (!analysis.schemaTypes.includes(type)) {
-          analysis.schemaTypes.push(type)
-        }
       }
       if (type.includes('Organization')) {
         analysis.hasOrganization = true
-        if (!analysis.schemaTypes.includes(type)) {
-          analysis.schemaTypes.push(type)
-        }
+      }
+      
+      // NEW: Detect Review schema (Agency tier)
+      if (type.includes('Review') || type.includes('AggregateRating')) {
+        analysis.hasReviewMarkup = true
+        reviewCount++
       }
     }
     
     // Check for specific fields in schema (using schemaAnalysis if available)
     if (page.schemaAnalysis) {
-      // Schema analysis already done, check for address/phone in extracted data
-      // We can infer from schema types and available page data
-      if (page.title || page.metaDescription) {
-        const pageText = `${page.title || ''} ${page.metaDescription || ''}`.toLowerCase()
-        if (pageText.includes('address') || pageText.includes('street')) {
-          analysis.hasAddress = true
-        }
-        if (pageText.includes('phone') || pageText.includes('telephone') || pageText.includes('call')) {
-          analysis.hasPhone = true
-        }
-        if (pageText.includes('hours') || pageText.includes('open')) {
-          analysis.hasOpeningHours = true
+      const identityData = (page.schemaAnalysis as any).identityData
+      
+      // Check for address in identity data
+      if (identityData?.address) {
+        analysis.hasAddress = true
+      }
+      
+      // Check for phone in identity data
+      if (identityData?.phone || identityData?.telephone) {
+        analysis.hasPhone = true
+      }
+      
+      // NEW: Check for geo coordinates in identity data (Agency tier)
+      if (identityData?.geo) {
+        analysis.hasGeo = true
+        // Try to extract coordinates
+        if (typeof identityData.geo === 'object') {
+          if (identityData.geo.latitude && identityData.geo.longitude) {
+            analysis.geoCoordinates = {
+              latitude: parseFloat(identityData.geo.latitude),
+              longitude: parseFloat(identityData.geo.longitude)
+            }
+          } else if (identityData.geo['@type'] === 'GeoCoordinates') {
+            analysis.geoCoordinates = {
+              latitude: parseFloat(identityData.geo.latitude || '0'),
+              longitude: parseFloat(identityData.geo.longitude || '0')
+            }
+          }
         }
       }
     }
+    
+    // Check page text for additional indicators
+    const pageText = `${page.title || ''} ${page.metaDescription || ''} ${(page.h1Text || []).join(' ')}`.toLowerCase()
+    
+    // Check for address indicators in text
+    if (pageText.includes('address') || pageText.includes('street') || pageText.includes('avenue') || pageText.includes('road')) {
+      analysis.hasAddress = true
+    }
+    
+    // Check for phone indicators in text
+    if (pageText.includes('phone') || pageText.includes('telephone') || pageText.includes('call us')) {
+      analysis.hasPhone = true
+    }
+    
+    // NEW: Enhanced opening hours detection (Agency tier)
+    if (pageText.includes('hours') || pageText.includes('open') || pageText.includes('monday') || pageText.includes('tuesday')) {
+      analysis.hasOpeningHours = true
+    }
+    
+    // NEW: Detect driving directions (Agency tier)
+    if (pageText.includes('directions') || pageText.includes('how to get here') || pageText.includes('find us') || page.url.includes('directions')) {
+      analysis.hasDrivingDirections = true
+    }
+    
+    // NEW: Check for price range indicators
+    if (pageText.includes('price') || pageText.includes('$') || pageText.includes('cost')) {
+      // Price range might be present, but we'd need schema to confirm
+    }
+  }
+  
+  analysis.schemaTypes = Array.from(allSchemaTypes)
+  analysis.reviewCount = reviewCount
+  
+  // Calculate average rating if reviews found
+  if (reviewRatings.length > 0) {
+    analysis.reviewRating = reviewRatings.reduce((sum, r) => sum + r, 0) / reviewRatings.length
   }
   
   // Determine missing fields
@@ -333,6 +401,8 @@ function analyzeLocalSchema(pages: PageData[]): LocalSchemaAnalysis {
     if (!analysis.hasOpeningHours) analysis.missingFields.push('openingHours')
     if (!analysis.hasGeo) analysis.missingFields.push('geo (latitude/longitude)')
     if (!analysis.hasPriceRange) analysis.missingFields.push('priceRange')
+    if (!analysis.hasReviewMarkup) analysis.missingFields.push('review markup (AggregateRating)')
+    if (!analysis.hasDrivingDirections) analysis.missingFields.push('driving directions')
   }
   
   // Generate recommendations
@@ -343,7 +413,16 @@ function analyzeLocalSchema(pages: PageData[]): LocalSchemaAnalysis {
     analysis.recommendations.push(`Complete your LocalBusiness schema with: ${analysis.missingFields.join(', ')}`)
   }
   if (!analysis.hasGeo) {
-    analysis.recommendations.push('Add geo coordinates (latitude/longitude) to help with local search')
+    analysis.recommendations.push('Add geo coordinates (latitude/longitude) to your LocalBusiness schema to help with local search')
+  }
+  if (!analysis.hasReviewMarkup) {
+    analysis.recommendations.push('Add AggregateRating schema markup to display review ratings in search results')
+  }
+  if (!analysis.hasDrivingDirections) {
+    analysis.recommendations.push('Add a "Get Directions" link or driving directions schema to help customers find you')
+  }
+  if (!analysis.hasOpeningHours || (analysis.openingHoursSchema && analysis.openingHoursSchema.length === 0)) {
+    analysis.recommendations.push('Add openingHours to your LocalBusiness schema in the proper format (e.g., "Mo-Fr 09:00-17:00")')
   }
   
   return analysis
@@ -578,11 +657,15 @@ function calculateLocalSEOScore(
     }
   }
   
-  // Local schema (30 points)
+  // Local schema (35 points) - Enhanced for Agency tier
   if (schema.hasLocalBusiness) score += 15
   if (schema.hasAddress) score += 5
   if (schema.hasPhone) score += 5
   if (schema.hasGeo) score += 5
+  // NEW: Review markup (3 points)
+  if (schema.hasReviewMarkup) score += 3
+  // NEW: Driving directions (2 points)
+  if (schema.hasDrivingDirections) score += 2
   
   // Service area pages (20 points)
   if (serviceAreaPages.length > 0) score += 10
@@ -627,7 +710,7 @@ function generateLocalSEOIssues(
     issues.push({
       severity: 'High',
       title: 'Missing phone number',
-      description: 'No phone number found on your website. Phone numbers are critical for local SEO and customer contact.',
+      description: 'No phone number found on your website. Phone numbers are critical for local SEO and customer contact. Note: This check is most relevant for local businesses. If your site is not location-based, you can ignore this.',
       howToFix: '1. Add your phone number to your header or footer\n2. Include it on your contact page\n3. Add it to your LocalBusiness schema markup\n4. Make it clickable (tel: link) for mobile users'
     })
   }
@@ -636,7 +719,7 @@ function generateLocalSEOIssues(
     issues.push({
       severity: 'High',
       title: 'Missing business address',
-      description: 'No physical address found on your website. Addresses help with local search rankings.',
+      description: 'No physical address found on your website. Addresses help with local search rankings. Note: This check is most relevant for local businesses. If your site is not location-based, you can ignore this.',
       howToFix: '1. Add your full business address to your footer\n2. Include it on your contact page\n3. Add it to your LocalBusiness schema markup\n4. Embed a Google Map showing your location'
     })
   }
@@ -668,6 +751,46 @@ function generateLocalSEOIssues(
       title: 'Incomplete LocalBusiness schema',
       description: `Your LocalBusiness schema is missing: ${schema.missingFields.join(', ')}`,
       howToFix: `1. Add the missing fields to your schema markup\n2. Essential fields: ${schema.missingFields.join(', ')}\n3. Use Google's Structured Data Testing Tool to validate\n4. Match your schema data with your Google Business Profile`
+    })
+  }
+  
+  // NEW: Review markup issue (Agency tier)
+  if (schema.hasLocalBusiness && !schema.hasReviewMarkup) {
+    issues.push({
+      severity: 'Medium',
+      title: 'Missing review markup',
+      description: 'No AggregateRating or Review schema markup found. Review markup helps display star ratings in search results.',
+      howToFix: '1. Add AggregateRating schema to your LocalBusiness schema\n2. Include ratingValue (1-5) and reviewCount\n3. Optionally add individual Review items\n4. Example: { "@type": "AggregateRating", "ratingValue": "4.5", "reviewCount": "120" }'
+    })
+  }
+  
+  // NEW: Driving directions issue (Agency tier)
+  if (schema.hasLocalBusiness && !schema.hasDrivingDirections) {
+    issues.push({
+      severity: 'Low',
+      title: 'Missing driving directions',
+      description: 'No driving directions link or schema found. This helps customers find your location.',
+      howToFix: '1. Add a "Get Directions" link to your contact page\n2. Link to Google Maps with your address\n3. Consider adding directions schema markup\n4. Make directions easily accessible from your homepage'
+    })
+  }
+  
+  // NEW: Geo coordinates issue (Agency tier)
+  if (schema.hasLocalBusiness && !schema.hasGeo) {
+    issues.push({
+      severity: 'Medium',
+      title: 'Missing geo coordinates in schema',
+      description: 'No latitude/longitude coordinates found in your LocalBusiness schema. Geo coordinates improve local search accuracy.',
+      howToFix: '1. Add geo coordinates to your LocalBusiness schema\n2. Format: { "@type": "GeoCoordinates", "latitude": "40.7128", "longitude": "-74.0060" }\n3. Use your exact business location\n4. Validate using Google\'s Structured Data Testing Tool'
+    })
+  }
+  
+  // NEW: Opening hours validation issue (Agency tier)
+  if (schema.hasLocalBusiness && (!schema.hasOpeningHours || (schema.openingHoursSchema && schema.openingHoursSchema.length === 0))) {
+    issues.push({
+      severity: 'Medium',
+      title: 'Missing or invalid opening hours in schema',
+      description: 'Opening hours not found in LocalBusiness schema or not properly formatted.',
+      howToFix: '1. Add openingHours to your LocalBusiness schema\n2. Use proper format: "Mo-Fr 09:00-17:00" or ISO 8601 format\n3. Include all days your business is open\n4. Update hours during holidays and special events'
     })
   }
   

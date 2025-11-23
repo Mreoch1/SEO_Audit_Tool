@@ -9,6 +9,7 @@ import { Issue } from './types'
 
 export interface LLMReadabilityData {
   renderingPercentage: number
+  similarity: number // NEW: Similarity percentage (0-100)
   initialHtmlLength: number
   renderedHtmlLength: number
   hasHighRendering: boolean
@@ -36,6 +37,13 @@ export interface LLMReadabilityData {
     mainContentInRendered: boolean
     navigationInInitial: boolean
     navigationInRendered: boolean
+  }
+  // NEW: Content analysis for LLM accessibility
+  contentAnalysis?: {
+    textContentInInitial: number // Character count of visible text in initial HTML
+    textContentInRendered: number // Character count of visible text in rendered HTML
+    criticalElementsMissing: string[] // Elements that appear only in rendered HTML
+    recommendations: string[]
   }
 }
 
@@ -66,8 +74,49 @@ export function calculateRenderingPercentage(
     }
   }
   
-  const percentage = ((renderedLength - initialLength) / initialLength) * 100
-  const renderingPercentage = Math.max(0, percentage)
+  // Calculate rendering percentage and similarity
+  // Rendering percentage = how much content was ADDED via JavaScript
+  // Similarity = how much of the initial HTML remains in rendered HTML
+  let percentage: number
+  let similarity: number
+  
+  // Calculate similarity first (how much of initial HTML is in rendered HTML)
+  // Use a simple character-based similarity
+  const minLength = Math.min(initialLength, renderedLength)
+  const maxLength = Math.max(initialLength, renderedLength)
+  
+  // Similarity = how much of the smaller HTML is present in the larger
+  // If rendered is larger, similarity = initial/rendered (how much of initial is in rendered)
+  // If initial is larger, similarity = rendered/initial (how much of rendered matches initial)
+  if (renderedLength >= initialLength) {
+    // Content was added/rendered via JavaScript
+    similarity = (initialLength / renderedLength) * 100
+    // Rendering percentage = how much was ADDED (the difference)
+    percentage = ((renderedLength - initialLength) / initialLength) * 100
+  } else {
+    // Rendered is smaller - calculate similarity as rendered/initial
+    similarity = (renderedLength / initialLength) * 100
+    // Rendering percentage should reflect how much content is accessible
+    // If similarity is high (>95%), most content is accessible = high rendering percentage
+    // Rendering percentage = similarity (how much of initial is accessible in rendered)
+    percentage = similarity
+  }
+  
+  // CRITICAL FIX: Rendering percentage should represent how much content is accessible to LLMs
+  // If similarity is 99.7%, that means 99.7% of content is accessible = 99.7% rendering
+  // The old logic was inverted - it showed 0% when similarity was high
+  
+  // Final rendering percentage: use similarity when rendered < initial (most content is accessible)
+  // When rendered >= initial, use the percentage of added content
+  let renderingPercentage: number
+  if (renderedLength >= initialLength) {
+    // Content was added - rendering percentage = how much was added
+    renderingPercentage = Math.max(0, Math.min(100, percentage))
+  } else {
+    // Rendered is smaller - similarity represents how much is accessible
+    // High similarity (99.7%) = 99.7% of content is accessible = 99.7% rendering
+    renderingPercentage = similarity
+  }
   
   // Cap display at 10,000% to avoid confusing extreme values
   // Still flag as high rendering if >100%
@@ -82,20 +131,25 @@ export function calculateRenderingPercentage(
   const scriptBundleAnalysis = analyzeScriptBundles(initialHtml)
   const preRenderedVsPostRendered = comparePreVsPostRendered(initialHtml, renderedHtml)
   
+  // Enhanced content analysis
+  const contentAnalysis = analyzeContentForLLMs(initialHtml, renderedHtml)
+  
   return {
     renderingPercentage: Math.round(displayPercentage * 10) / 10, // Round to 1 decimal, capped at 10,000%
+    similarity: Math.round(similarity * 10) / 10, // Round to 1 decimal
     initialHtmlLength: initialLength,
     renderedHtmlLength: renderedLength,
     hasHighRendering,
     hydrationIssues,
     shadowDOMAnalysis,
     scriptBundleAnalysis,
-    preRenderedVsPostRendered
+    preRenderedVsPostRendered,
+    contentAnalysis
   }
 }
 
 /**
- * Generate LLM Readability issues
+ * Generate LLM Readability issues with enhanced diagnostics
  */
 export function generateLLMReadabilityIssues(
   url: string,
@@ -103,23 +157,88 @@ export function generateLLMReadabilityIssues(
 ): Issue[] {
   const issues: Issue[] = []
   
+  // High rendering percentage issue
   if (data.hasHighRendering) {
     const severity = data.renderingPercentage > 150 ? 'High' : 'Medium'
     const displayPercent = data.renderingPercentage >= 10000 ? '10,000%+' : `${data.renderingPercentage}%`
+    
+    let details = `Rendering percentage: ${displayPercent}. Your page has a high level of JavaScript rendering (significant HTML changes after page load). `
+    
+    // Add specific content issues
+    if (data.hydrationIssues?.criticalContentMissing && data.hydrationIssues.criticalContentMissing.length > 0) {
+      details += `Critical content missing from initial HTML: ${data.hydrationIssues.criticalContentMissing.join(', ')}. `
+    }
+    
+    details += `Dynamically rendered content may be missed by LLMs and search engines. Consider server-side rendering (SSR) or static site generation (SSG) for critical content.`
     
     issues.push({
       category: 'Technical',
       severity,
       message: 'High rendering percentage (LLM Readability)',
-      details: `Rendering percentage: ${displayPercent}. Your page has a high level of rendering (changes to the HTML). Dynamically rendering a lot of page content risks some important information being missed by LLMs that generally do not read this content. Consider server-side rendering for critical content.`,
+      details,
       affectedPages: [url]
     })
   } else if (data.renderingPercentage > 50) {
+    let details = `Rendering percentage: ${data.renderingPercentage}%. Some content is dynamically rendered. `
+    
+    if (data.hydrationIssues?.criticalContentMissing && data.hydrationIssues.criticalContentMissing.length > 0) {
+      details += `Note: ${data.hydrationIssues.criticalContentMissing.join(', ')} ${data.hydrationIssues.criticalContentMissing.length === 1 ? 'is' : 'are'} rendered via JavaScript. `
+    }
+    
+    details += `Consider server-side rendering for critical content to ensure LLMs can access it.`
+    
     issues.push({
       category: 'Technical',
       severity: 'Low',
       message: 'Moderate rendering percentage',
-      details: `Rendering percentage: ${data.renderingPercentage}%. Some content is dynamically rendered. Consider server-side rendering for critical content to ensure LLMs can access it.`,
+      details,
+      affectedPages: [url]
+    })
+  }
+  
+  // Missing critical content issue
+  if (data.hydrationIssues?.missingContentWithJSDisabled && data.hydrationIssues.criticalContentMissing.length > 0) {
+    const missingItems = data.hydrationIssues.criticalContentMissing.join(', ')
+    issues.push({
+      category: 'Technical',
+      severity: data.renderingPercentage > 50 ? 'High' : 'Medium',
+      message: `Critical content rendered via JavaScript: ${missingItems}`,
+      details: `${missingItems} ${data.hydrationIssues.criticalContentMissing.length === 1 ? 'is' : 'are'} not present in the initial HTML and only appear after JavaScript execution. This content may not be accessible to LLMs, search engine crawlers, or users with JavaScript disabled. Move this content to the initial HTML or use server-side rendering.`,
+      affectedPages: [url]
+    })
+  }
+  
+  // Shadow DOM issue
+  if (data.shadowDOMAnalysis?.hasShadowDOM) {
+    issues.push({
+      category: 'Technical',
+      severity: 'Medium',
+      message: `Shadow DOM detected (${data.shadowDOMAnalysis.shadowRootCount} root(s))`,
+      details: `Shadow DOM content may not be accessible to search engines and LLMs. Consider using regular DOM elements for SEO-critical content. ${data.shadowDOMAnalysis.recommendations.join(' ')}`,
+      affectedPages: [url]
+    })
+  }
+  
+  // Render-blocking scripts issue
+  if (data.scriptBundleAnalysis && data.scriptBundleAnalysis.renderBlockingScripts > 0) {
+    issues.push({
+      category: 'Performance',
+      severity: 'Medium',
+      message: `${data.scriptBundleAnalysis.renderBlockingScripts} render-blocking script(s) detected`,
+      details: `Render-blocking scripts delay content visibility and can impact LLM accessibility. Add 'async' or 'defer' attributes to non-critical scripts, or move them to the end of the document. ${data.scriptBundleAnalysis.recommendations.join(' ')}`,
+      affectedPages: [url]
+    })
+  }
+  
+  // Large script bundles issue
+  if (data.scriptBundleAnalysis && data.scriptBundleAnalysis.largeBundles.length > 0) {
+    const totalSize = data.scriptBundleAnalysis.largeBundles.reduce((sum, b) => sum + b.size, 0)
+    const sizeMB = (totalSize / 1024 / 1024).toFixed(1)
+    issues.push({
+      category: 'Performance',
+      severity: 'Low',
+      message: `${data.scriptBundleAnalysis.largeBundles.length} large script bundle(s) (${sizeMB} MB total)`,
+      details: `Large script bundles can slow page rendering and impact LLM accessibility. Consider code splitting, lazy loading, and removing unused code. ${data.scriptBundleAnalysis.recommendations.join(' ')}`,
       affectedPages: [url]
     })
   }
@@ -345,6 +464,73 @@ function comparePreVsPostRendered(
     navigationInRendered: renderedHtml.includes('<nav') || 
       renderedHtml.includes('id="nav"') || 
       renderedHtml.includes('class="nav"')
+  }
+}
+
+/**
+ * Analyze content for LLM accessibility
+ * Extracts visible text content and identifies critical elements
+ */
+function analyzeContentForLLMs(
+  initialHtml: string,
+  renderedHtml: string
+): LLMReadabilityData['contentAnalysis'] {
+  const recommendations: string[] = []
+  const criticalElementsMissing: string[] = []
+  
+  // Extract visible text content (remove scripts, styles, comments)
+  const extractTextContent = (html: string): number => {
+    const cleaned = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return cleaned.length
+  }
+  
+  const textContentInInitial = extractTextContent(initialHtml)
+  const textContentInRendered = extractTextContent(renderedHtml)
+  
+  // Check for critical elements
+  const checkElement = (tag: string, name: string) => {
+    const initialHas = (initialHtml.match(new RegExp(`<${tag}[^>]*>`, 'gi')) || []).length > 0
+    const renderedHas = (renderedHtml.match(new RegExp(`<${tag}[^>]*>`, 'gi')) || []).length > 0
+    
+    if (!initialHas && renderedHas) {
+      criticalElementsMissing.push(name)
+    }
+  }
+  
+  checkElement('h1', 'H1 heading')
+  checkElement('main', 'Main content')
+  checkElement('article', 'Article content')
+  checkElement('nav', 'Navigation')
+  
+  // Generate recommendations
+  if (criticalElementsMissing.length > 0) {
+    recommendations.push(`Move ${criticalElementsMissing.join(', ')} to initial HTML for better LLM accessibility.`)
+  }
+  
+  const textIncrease = textContentInRendered - textContentInInitial
+  const textIncreasePercent = textContentInInitial > 0 
+    ? ((textIncrease / textContentInInitial) * 100).toFixed(1)
+    : '0'
+  
+  if (textIncrease > 1000) {
+    recommendations.push(`Significant text content (${textIncreasePercent}% increase, ${textIncrease.toLocaleString()} characters) is added via JavaScript. Consider server-side rendering for this content.`)
+  }
+  
+  if (textContentInInitial < 500 && textContentInRendered > 1000) {
+    recommendations.push(`Initial HTML contains very little text content (${textContentInInitial} characters). Most content is rendered via JavaScript, which may impact LLM accessibility.`)
+  }
+  
+  return {
+    textContentInInitial,
+    textContentInRendered,
+    criticalElementsMissing,
+    recommendations
   }
 }
 

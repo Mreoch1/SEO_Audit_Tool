@@ -24,7 +24,8 @@ export default function SettingsPage() {
   const { toast } = useToast()
   const [settings, setSettings] = useState<Settings>({
     brandName: 'SEO Audit Pro',
-    primaryColor: '#3b82f6'
+    primaryColor: '#3b82f6',
+    logoUrl: '/logo.png'
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -122,7 +123,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="border-b bg-white">
         <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="text-blue-600 hover:underline">← Back to Dashboard</Link>
+          <Link href="/audits/new" className="text-blue-600 hover:underline">← Create New Audit</Link>
           <h1 className="text-2xl font-bold mt-2">Settings</h1>
         </div>
       </div>

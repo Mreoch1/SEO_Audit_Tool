@@ -279,7 +279,7 @@ export async function performEnhancedTechnicalCheck(
       })
     }
 
-    // Check for mixed content (if we can fetch the HTML)
+    // CRITICAL FIX #5: Check for mixed content - Verify actual resource protocol after resolution
     if (data.https) {
       try {
         const htmlResponse = await fetch(finalUrl, {
@@ -287,15 +287,48 @@ export async function performEnhancedTechnicalCheck(
           headers: { 'User-Agent': userAgent }
         })
         const html = await htmlResponse.text()
-        const httpLinks = html.match(/https?:\/\/(?!localhost)[^\s"']+/gi) || []
-        const hasHttpLinks = httpLinks.some(link => link.startsWith('http://'))
         
-        if (hasHttpLinks) {
+        // Extract all resource URLs (img src, script src, link href, iframe src, etc.)
+        const resourcePatterns = [
+          /<img[^>]+src=["']([^"']+)["']/gi,
+          /<script[^>]+src=["']([^"']+)["']/gi,
+          /<link[^>]+href=["']([^"']+)["']/gi,
+          /<iframe[^>]+src=["']([^"']+)["']/gi,
+          /<source[^>]+src=["']([^"']+)["']/gi,
+          /<video[^>]+src=["']([^"']+)["']/gi,
+          /<audio[^>]+src=["']([^"']+)["']/gi,
+          /url\(["']?([^"')]+)["']?\)/gi, // CSS background images
+        ]
+        
+        const httpResources: string[] = []
+        resourcePatterns.forEach(pattern => {
+          let match
+          while ((match = pattern.exec(html)) !== null) {
+            const resourceUrl = match[1]
+            if (resourceUrl && resourceUrl.startsWith('http://')) {
+              // CRITICAL FIX #5: Check if the resource actually resolves to HTTP
+              // Don't flag protocol-relative URLs (//example.com) or relative URLs
+              if (!resourceUrl.startsWith('//') && !resourceUrl.startsWith('/')) {
+                try {
+                  const urlObj = new URL(resourceUrl)
+                  // Only flag if it's explicitly http:// (not https://)
+                  if (urlObj.protocol === 'http:') {
+                    httpResources.push(resourceUrl)
+                  }
+                } catch {
+                  // Invalid URL, skip
+                }
+              }
+            }
+          }
+        })
+        
+        if (httpResources.length > 0) {
           issues.push({
             category: 'Technical',
             severity: 'Medium',
             message: 'Mixed content detected',
-            details: 'HTTPS pages should not load HTTP resources. Update all links to use HTTPS.',
+            details: `HTTPS pages should not load HTTP resources. Found ${httpResources.length} HTTP resource(s). Update all links to use HTTPS.`,
             affectedPages: [url]
           })
         }

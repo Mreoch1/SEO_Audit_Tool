@@ -25,18 +25,21 @@ export function generatePerformanceIssues(page: PageData): Issue[] {
   let opportunities: Array<{ title: string; description: string; savings: number }> = []
   
   if (page.pageSpeedData) {
-    // Use mobile metrics (stricter standards)
-    const mobile = page.pageSpeedData.mobile
-    lcp = mobile.lcp
-    fcp = mobile.fcp
-    cls = mobile.cls
-    inp = mobile.inp
-    ttfb = mobile.ttfb
-    opportunities = mobile.opportunities.map(opp => ({
-      title: opp.title,
-      description: opp.description,
-      savings: opp.savings
-    }))
+    // Use mobile metrics (stricter standards) or simplified structure
+    const pageSpeed = page.pageSpeedData as any
+    const mobile = pageSpeed.mobile || pageSpeed
+    lcp = mobile?.lcp
+    fcp = mobile?.fcp
+    cls = mobile?.cls
+    inp = mobile?.inp
+    ttfb = mobile?.ttfb
+    if (mobile?.opportunities) {
+      opportunities = mobile.opportunities.map((opp: any) => ({
+        title: opp.title,
+        description: opp.description,
+        savings: opp.savings
+      }))
+    }
   } else if (page.performanceMetrics) {
     // Fall back to performanceMetrics from Puppeteer
     lcp = page.performanceMetrics.lcp
