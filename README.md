@@ -436,8 +436,7 @@ npx tsx scripts/runAuditAndEmail.ts \
 npx tsx scripts/runAuditAndEmail.ts \
   --url="https://seoauditpro.net" \
   --email="mreoch82@hotmail.com" \
-  --tier="standard" \
-  --noAddOns
+  --tier="standard"
 ```
 
 This command will:
@@ -445,6 +444,21 @@ This command will:
 2. Run the complete SEO audit (crawling, analysis, scoring)
 3. Generate a PDF report
 4. Email the report with the PDF attached
+
+**Automatic Competitor Detection:**
+
+When the Competitor Analysis add-on is enabled (included in Standard+ tiers) and no competitor URLs are provided, the system will automatically:
+1. Use DeepSeek LLM to analyze the website and identify the industry/niche
+2. Generate a list of real competitor URLs based on the detected industry
+3. Validate competitor URLs (check if they're reachable)
+4. Crawl and analyze competitors to find keyword gaps
+
+To enable DeepSeek competitor detection, add your API key to `.env.local`:
+```
+DEEPSEEK_API_KEY=your_api_key_here
+```
+
+If DeepSeek is unavailable or fails, the system falls back to industry taxonomy-based competitor suggestions.
 
 **Report Storage:**
 - Audit results are stored in the database with the audit ID
