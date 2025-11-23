@@ -30,6 +30,10 @@ interface CliArgs {
   maxPages?: number
   maxDepth?: number
   noAddOns?: boolean
+  additionalKeywords?: number
+  schemaDeepDive?: boolean
+  expedited?: boolean
+  competitorUrls?: string
 }
 
 function parseArgs(): CliArgs {
@@ -50,6 +54,14 @@ function parseArgs(): CliArgs {
       args.maxDepth = parseInt(arg.split('=')[1], 10)
     } else if (arg === '--noAddOns') {
       args.noAddOns = true
+    } else if (arg.startsWith('--additionalKeywords=')) {
+      args.additionalKeywords = parseInt(arg.split('=')[1], 10)
+    } else if (arg === '--schemaDeepDive' || arg.startsWith('--schemaDeepDive=')) {
+      args.schemaDeepDive = true
+    } else if (arg === '--expedited' || arg.startsWith('--expedited=')) {
+      args.expedited = true
+    } else if (arg.startsWith('--competitorUrls=')) {
+      args.competitorUrls = arg.split('=')[1]
     }
   }
   
@@ -75,17 +87,52 @@ async function main() {
   const emailTo = args.email
   const tier = args.tier || 'standard'
   
-  // Enable add-ons based on tier (unless --noAddOns is specified)
-  // Standard+ tiers include competitor analysis by default
-  const addOns = args.noAddOns ? {} : (tier === 'standard' || tier === 'professional' || tier === 'agency') ? {
-    competitorAnalysis: true // Competitor analysis is included in Standard+ tiers
-  } : undefined
+  // Parse competitor URLs (comma-separated)
+  const competitorUrls = args.competitorUrls 
+    ? args.competitorUrls.split(',').map(u => u.trim()).filter(Boolean)
+    : undefined
+  
+  // Build add-ons object based on tier and CLI arguments
+  let addOns: any = args.noAddOns ? {} : undefined
+  
+  if (!args.noAddOns) {
+    addOns = {}
+    
+    // Standard+ tiers include competitor analysis by default
+    if (tier === 'standard' || tier === 'professional' || tier === 'agency') {
+      addOns.competitorAnalysis = true
+    }
+    
+    // Add CLI-specified add-ons
+    if (args.additionalKeywords) {
+      addOns.additionalKeywords = args.additionalKeywords
+    }
+    if (args.schemaDeepDive) {
+      addOns.schemaDeepDive = true
+    }
+    if (args.expedited) {
+      addOns.expedited = true
+    }
+  }
   
   console.log(`\n🔍 Starting SEO audit for: ${url}`)
   console.log(`📧 Will email report to: ${emailTo}`)
   console.log(`📊 Tier: ${tier}`)
   if (args.maxPages) console.log(`📄 Max pages: ${args.maxPages}`)
   if (args.maxDepth) console.log(`🔗 Max depth: ${args.maxDepth}`)
+  if (competitorUrls && competitorUrls.length > 0) {
+    console.log(`🏆 Competitor URLs (${competitorUrls.length}): ${competitorUrls.join(', ')}`)
+  }
+  if (addOns) {
+    const addOnList: string[] = []
+    if (addOns.competitorAnalysis) addOnList.push('Competitor Analysis')
+    if (addOns.schemaDeepDive) addOnList.push('Schema Deep Dive')
+    if (addOns.additionalKeywords) addOnList.push(`Extra Keywords (${addOns.additionalKeywords})`)
+    if (addOns.expedited) addOnList.push('24-Hour Expedited')
+    if (addOnList.length > 0) {
+      console.log(`✨ Add-ons: ${addOnList.join(', ')}`)
+    }
+  }
   console.log('')
 
   try {
@@ -150,14 +197,19 @@ async function main() {
         tier,
         addOns,
         maxPages: args.maxPages,
-        maxDepth: args.maxDepth
+        maxDepth: args.maxDepth,
+        competitorUrls
       }
       
       const auditPromise = runAudit(url, auditOptions)
 
-      // Add timeout of 15 minutes
+      // Add timeout based on tier (longer for larger crawls)
+      const timeoutMinutes = tier === 'agency' ? 60 : // 60 minutes for Agency (200 pages)
+                           tier === 'professional' ? 45 : // 45 minutes for Professional (50 pages)
+                           tier === 'standard' ? 30 : // 30 minutes for Standard (20 pages)
+                           15 // 15 minutes for Starter (5 pages)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Audit timed out after 15 minutes')), 15 * 60 * 1000)
+        setTimeout(() => reject(new Error(`Audit timed out after ${timeoutMinutes} minutes`)), timeoutMinutes * 60 * 1000)
       })
 
       auditResult = await Promise.race([auditPromise, timeoutPromise]) as Awaited<ReturnType<typeof runAudit>>
