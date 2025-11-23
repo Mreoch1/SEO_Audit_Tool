@@ -685,7 +685,7 @@ export async function runAudit(
     }
   }
   
-  // CRITICAL FIX #6: Competitor Analysis - Skip when conditions not met
+  // CRITICAL FIX #6: Competitor Analysis - Auto-detect competitors if none provided
   if (opts.addOns?.competitorAnalysis) {
     // Extract keywords and schema types for industry classification
     const topKeywords = validPages
@@ -718,17 +718,94 @@ export async function runAudit(
       // If URL parsing fails, continue
     }
     
-    // NEW: Auto-fill missing competitor URLs based on industry classification
+    // NEW: Auto-detect competitors using DeepSeek if none provided
     const providedUrls = opts.competitorUrls || []
-    const firstPageHtml = '' // HTML not available in PageData
-    
-    console.log(`[Audit] Competitor URL status: ${providedUrls.length} provided, tier: ${opts.tier}`)
-    
-    // Auto-fill missing competitors
     let finalCompetitorUrls: string[] = []
     let autoDetectedCompetitors: string[] = []
     let detectedIndustry = 'Unknown'
     let industryConfidence = 0
+    
+    console.log(`[Audit] Competitor URL status: ${providedUrls.length} provided, tier: ${opts.tier}`)
+    
+    // If no competitors provided, use DeepSeek to auto-detect
+    if (providedUrls.length === 0) {
+      console.log('[Audit] No competitor URLs provided - attempting automatic detection with DeepSeek...')
+      
+      try {
+        const { autoDetectCompetitors } = await import('./deepseekCompetitorDetection')
+        
+        // Extract site content for context
+        const mainPage = validPages.find(p => p.url === rootUrl) || validPages[0]
+        const siteContent = {
+          title: mainPage?.title,
+          description: mainPage?.metaDescription,
+          headings: mainPage?.h1Text || []
+        }
+        
+        // Determine max competitors based on tier
+        const maxCompetitors = opts.tier === 'agency' ? 5 : opts.tier === 'professional' ? 3 : 2
+        
+        // Auto-detect competitors
+        const detectionResult = await autoDetectCompetitors(
+          rootUrl,
+          siteContent,
+          maxCompetitors
+        )
+        
+        if (detectionResult.competitors.length > 0) {
+          finalCompetitorUrls = detectionResult.competitors.map(c => c.url)
+          autoDetectedCompetitors = finalCompetitorUrls
+          detectedIndustry = `${detectionResult.industry.industry}${detectionResult.industry.subIndustry ? ` / ${detectionResult.industry.subIndustry}` : ''}`
+          industryConfidence = 0.8 // High confidence for DeepSeek detection
+          
+          console.log(`[Audit] ✅ Auto-detected ${finalCompetitorUrls.length} competitors: ${finalCompetitorUrls.slice(0, 3).join(', ')}${finalCompetitorUrls.length > 3 ? '...' : ''}`)
+          console.log(`[Audit] Industry detected: ${detectedIndustry}`)
+        } else {
+          console.log('[Audit] ⚠️ No competitors auto-detected, will try fallback method')
+          // Fall back to existing autoFillCompetitorUrls
+          const firstPageHtml = '' // HTML not available in PageData
+          const autoFillResult = await autoFillCompetitorUrls(
+            rootUrl,
+            [],
+            firstPageHtml,
+            opts.userAgent,
+            opts.tier,
+            topKeywords,
+            pages.flatMap(p => p.schemaTypes || []).filter((v, i, a) => a.indexOf(v) === i)
+          )
+          finalCompetitorUrls = autoFillResult.finalUrls
+          autoDetectedCompetitors = autoFillResult.autoDetected
+          detectedIndustry = autoFillResult.industry
+          industryConfidence = autoFillResult.confidence
+        }
+      } catch (error) {
+        console.warn(`[Audit] DeepSeek auto-detection failed: ${error instanceof Error ? error.message : String(error)}`)
+        // Fall back to existing autoFillCompetitorUrls
+        try {
+          const firstPageHtml = ''
+          const autoFillResult = await autoFillCompetitorUrls(
+            rootUrl,
+            [],
+            firstPageHtml,
+            opts.userAgent,
+            opts.tier,
+            topKeywords,
+            pages.flatMap(p => p.schemaTypes || []).filter((v, i, a) => a.indexOf(v) === i)
+          )
+          finalCompetitorUrls = autoFillResult.finalUrls
+          autoDetectedCompetitors = autoFillResult.autoDetected
+          detectedIndustry = autoFillResult.industry
+          industryConfidence = autoFillResult.confidence
+        } catch (fallbackError) {
+          console.warn('[Audit] Fallback competitor detection also failed, continuing without competitors')
+          finalCompetitorUrls = []
+        }
+      }
+    } else {
+      // User provided competitors - use them
+      finalCompetitorUrls = providedUrls
+      console.log(`[Audit] Using ${finalCompetitorUrls.length} user-provided competitor URLs`)
+    }
     
     // CRITICAL FIX #7: Skip competitor analysis if conditions not met
     let shouldSkipCompetitorAnalysis = false
@@ -745,59 +822,39 @@ export async function runAudit(
       skipReason = 'only 1 page crawled and no competitor URLs provided'
     }
     
+    // CRITICAL FIX #7: Skip competitor analysis if conditions not met
+    // Note: finalCompetitorUrls is already set above (either from DeepSeek, fallback, or user-provided)
     if (shouldSkipCompetitorAnalysis) {
       console.log(`[Audit] Skipping competitor analysis - ${skipReason}`)
       competitorAnalysis = undefined
+    } else if (finalCompetitorUrls.length === 0) {
+      console.log('[Audit] No competitors available after detection, skipping competitor analysis')
+      competitorAnalysis = undefined
     } else {
-      // Proceed with competitor analysis
-      try {
-        const schemaTypes = pages
-          .flatMap(p => p.schemaTypes || [])
-          .filter((v, i, a) => a.indexOf(v) === i) // Unique
-        
-        const autoFillResult = await autoFillCompetitorUrls(
-          rootUrl,
-          providedUrls,
-          firstPageHtml,
-          opts.userAgent,
-          opts.tier,
-          topKeywords,
-          schemaTypes
-        )
-        
-        finalCompetitorUrls = autoFillResult.finalUrls
-        autoDetectedCompetitors = autoFillResult.autoDetected
-        detectedIndustry = autoFillResult.industry
-        industryConfidence = autoFillResult.confidence
-        
-        // CRITICAL FIX #7: Skip if confidence < 50% and no user-provided URLs
-        // Also check if detected industry is Government/News/Nonprofit
-        const isNonCommercialIndustry = detectedIndustry.toLowerCase().includes('government') || 
-                                       detectedIndustry.toLowerCase().includes('news') ||
-                                       detectedIndustry.toLowerCase().includes('nonprofit') ||
-                                       detectedIndustry.toLowerCase().includes('non-profit')
-        
-        if (isNonCommercialIndustry) {
-          console.log(`[Audit] Skipping competitor analysis - detected industry is ${detectedIndustry} (non-commercial)`)
-          competitorAnalysis = undefined
-        } else if (industryConfidence < 0.5 && providedUrls.length === 0) {
-          console.log(`[Audit] Skipping competitor analysis - industry confidence ${Math.round(industryConfidence * 100)}% < 50% and no user-provided URLs`)
-          competitorAnalysis = undefined
-        } else {
-          if (autoDetectedCompetitors.length > 0) {
-            console.log(`[Audit] Auto-detected ${autoDetectedCompetitors.length} competitor(s): ${autoDetectedCompetitors.join(', ')}`)
-            console.log(`[Audit] Detected industry: ${detectedIndustry} (confidence: ${Math.round(industryConfidence * 100)}%)`)
-          }
-          
-          if (providedUrls.length > 0) {
-            console.log(`[Audit] User provided ${providedUrls.length} competitor URL(s): ${providedUrls.join(', ')}`)
-          }
-          
-          console.log(`[Audit] Final competitor list (${finalCompetitorUrls.length} total): ${finalCompetitorUrls.join(', ')}`)
+      // Check if detected industry is non-commercial
+      const isNonCommercialIndustry = detectedIndustry.toLowerCase().includes('government') || 
+                                     detectedIndustry.toLowerCase().includes('news') ||
+                                     detectedIndustry.toLowerCase().includes('nonprofit') ||
+                                     detectedIndustry.toLowerCase().includes('non-profit')
+      
+      if (isNonCommercialIndustry) {
+        console.log(`[Audit] Skipping competitor analysis - detected industry is ${detectedIndustry} (non-commercial)`)
+        competitorAnalysis = undefined
+      } else if (industryConfidence < 0.5 && providedUrls.length === 0 && autoDetectedCompetitors.length === 0) {
+        console.log(`[Audit] Skipping competitor analysis - industry confidence ${Math.round(industryConfidence * 100)}% < 50% and no competitors detected`)
+        competitorAnalysis = undefined
+      } else {
+        // Log final competitor list
+        if (autoDetectedCompetitors.length > 0) {
+          console.log(`[Audit] Auto-detected ${autoDetectedCompetitors.length} competitor(s): ${autoDetectedCompetitors.join(', ')}`)
+          console.log(`[Audit] Detected industry: ${detectedIndustry} (confidence: ${Math.round(industryConfidence * 100)}%)`)
         }
-      } catch (error) {
-        console.warn('[Audit] Auto-fill failed, using provided URLs only:', error)
-        finalCompetitorUrls = providedUrls
+        
+        if (providedUrls.length > 0) {
+          console.log(`[Audit] User provided ${providedUrls.length} competitor URL(s): ${providedUrls.join(', ')}`)
+        }
+        
+        console.log(`[Audit] Final competitor list (${finalCompetitorUrls.length} total): ${finalCompetitorUrls.join(', ')}`)
       }
     }
     
