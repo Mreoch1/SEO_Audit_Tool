@@ -808,18 +808,21 @@ export async function runAudit(
     }
     
     // CRITICAL FIX #7: Skip competitor analysis if conditions not met
+    // NOTE: For Standard+ tiers, we're more lenient - allow competitor analysis even with 2 pages
     let shouldSkipCompetitorAnalysis = false
     let skipReason = ''
     
     if (isNonCommercialSite && siteCategory) {
       shouldSkipCompetitorAnalysis = true
       skipReason = `site category is ${siteCategory} (non-commercial)`
-    } else if (!hasValidKeywords) {
+    } else if (!hasValidKeywords && validPages.length < 2) {
+      // Only skip if no keywords AND less than 2 pages (allow 2+ pages even without keywords)
       shouldSkipCompetitorAnalysis = true
-      skipReason = 'no valid keywords discovered'
-    } else if (!hasMultiplePages && providedUrls.length === 0) {
+      skipReason = 'no valid keywords discovered and less than 2 pages'
+    } else if (validPages.length === 1 && providedUrls.length === 0 && finalCompetitorUrls.length === 0) {
+      // Only skip if exactly 1 page AND no competitors found (allow 2+ pages)
       shouldSkipCompetitorAnalysis = true
-      skipReason = 'only 1 page crawled and no competitor URLs provided'
+      skipReason = 'only 1 page crawled and no competitor URLs found'
     }
     
     // CRITICAL FIX #7: Skip competitor analysis if conditions not met

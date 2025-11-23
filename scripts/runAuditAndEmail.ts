@@ -74,7 +74,12 @@ async function main() {
   const url = args.url
   const emailTo = args.email
   const tier = args.tier || 'standard'
-  const addOns = args.noAddOns ? {} : undefined
+  
+  // Enable add-ons based on tier (unless --noAddOns is specified)
+  // Standard+ tiers include competitor analysis by default
+  const addOns = args.noAddOns ? {} : (tier === 'standard' || tier === 'professional' || tier === 'agency') ? {
+    competitorAnalysis: true // Competitor analysis is included in Standard+ tiers
+  } : undefined
   
   console.log(`\n🔍 Starting SEO audit for: ${url}`)
   console.log(`📧 Will email report to: ${emailTo}`)
