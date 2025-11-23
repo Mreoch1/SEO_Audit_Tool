@@ -1180,7 +1180,7 @@ export async function runAudit(
   console.log(`[Audit] Final severity counts: High=${highSeverityIssues.length}, Medium=${mediumSeverityIssues.length}, Low=${lowSeverityIssues.length}`)
   
   // SPRINT 1: Return with crawl diagnostics and valid pages only
-  return {
+  const result = {
     summary: {
       totalPages: validPages.length, // Use valid pages count
       totalPagesCrawled: uniquePages.length, // Total including errors
@@ -1229,6 +1229,14 @@ export async function runAudit(
       }
     }
   }
+  
+  // DEBUG: Verify result has issues before returning
+  const totalResultIssues = result.technicalIssues.length + result.onPageIssues.length + 
+                           result.contentIssues.length + result.accessibilityIssues.length + 
+                           result.performanceIssues.length
+  console.log(`[Audit] Result being returned: Technical=${result.technicalIssues.length}, On-page=${result.onPageIssues.length}, Content=${result.contentIssues.length}, Total=${totalResultIssues}`)
+  
+  return result
   } finally {
     // Ensure browser is always closed, even if audit fails
     if (browserInitialized && closeBrowserFn) {
