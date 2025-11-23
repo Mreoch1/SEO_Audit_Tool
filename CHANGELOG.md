@@ -2,7 +2,73 @@
 
 ## [Unreleased] - Major Updates (2025-11-22)
 
-### Latest: Production-Ready Improvements (Sprint 1-3 Complete)
+### Latest: AI-Powered Competitor Detection & Report Quality Assurance (2025-11-23)
+
+#### Added
+- **DeepSeek AI-Powered Competitor Detection** (`lib/deepseekCompetitorDetection.ts`)
+  - Automatically classifies website industry/niche using DeepSeek LLM
+  - Generates real competitor URLs based on detected industry
+  - Validates competitor URLs via HEAD requests before crawling
+  - Falls back to OpenAI GPT-4o-mini if DeepSeek unavailable
+  - Multi-layer fallback: DeepSeek → OpenAI → Industry Taxonomy → Pattern-based
+  - Integrated into competitor analysis workflow when no URLs provided
+  - Environment variable: `DEEPSEEK_API_KEY` or `OPENAI_API_KEY`
+
+- **Report Quality Assurance Module** (`lib/reportValidation.ts`)
+  - Validates issue aggregation accuracy (summary vs actual issues)
+  - Checks crawl completeness against tier limits
+  - Validates readability formula correctness
+  - Validates keyword extraction quality
+  - Checks narrative/score consistency
+  - Generates validation reports with fixable issues
+  - Automatic fix loop in `scripts/runAuditAndEmail.ts` (up to 3 attempts)
+
+- **Enhanced LLM Readability Analysis** (`lib/llmReadability.ts`)
+  - Fixed rendering percentage calculation (similarity-based when rendered < initial)
+  - Added detailed content analysis (text increase percentage, critical elements)
+  - Added hydration issue detection (content missing with JS disabled)
+  - Added Shadow DOM analysis (detection and recommendations)
+  - Added script bundle analysis (large bundles, render-blocking scripts)
+  - Pre-rendered vs post-rendered comparison for critical elements
+
+#### Changed
+- **Issue Aggregation**: Fixed critical bug where report showed "0 issues" despite low scores
+  - Changed from `categorizeIssues()` function to direct array filtering
+  - Issues now correctly populate in all categories (Technical, On-page, Content, etc.)
+  - Summary counts now match actual issue arrays
+
+- **Rendering Percentage Calculation**: Fixed inverted math for similarity-based rendering
+  - When rendered HTML < initial HTML: uses similarity directly (99.7% similarity = 99.7% rendering)
+  - When rendered HTML >= initial HTML: uses percentage increase
+  - Correctly displays 99.7% instead of 0.3%, 100% instead of 0%
+
+- **Competitor Analysis**: Enhanced with AI-powered auto-detection
+  - Automatically detects industry when no competitor URLs provided
+  - Generates and validates competitor URLs before crawling
+  - Better logging and error handling
+
+- **Report Validation**: Integrated into audit workflow
+  - Automatic validation after each audit run
+  - Automatic fixes applied for fixable issues
+  - Re-runs audit up to 3 times until validation passes
+
+#### Fixed
+- Fixed "0 issues" bug in reports (issue aggregation now works correctly)
+- Fixed rendering percentage showing 0% when similarity was 99.7%+
+- Fixed keyword extraction garbage tokens (HTML entity decoding)
+- Fixed issue count mismatches between summary and detailed sections
+- Fixed priority action plan showing "No issues" when issues existed
+- Fixed site-wide issues being filtered out (preserved issues without affectedPages)
+
+#### Technical Improvements
+- **Report QA Module**: Comprehensive validation system for audit reports
+- **DeepSeek Integration**: AI-powered competitor detection with graceful fallbacks
+- **Enhanced Diagnostics**: Agency tier includes Shadow DOM, hydration, and script bundle analysis
+- **Automatic Fix Loop**: Self-healing audit system that fixes and re-runs until quality threshold met
+
+---
+
+### Previous: Production-Ready Improvements (Sprint 1-3 Complete)
 
 #### Added
 - **Crawl Diagnostics Module** (`lib/crawlDiagnostics.ts`)

@@ -30,11 +30,13 @@ SEO Audit Pro is a comprehensive, self-hosted SEO auditing platform designed to 
 *   **Issue Deduplication:** Automatically merges duplicate issues to provide clean, actionable reports.
 
 ### 4. 🏆 Automated Competitor Intelligence
-*   **Auto-Detection:** Automatically identifies the industry niche (SaaS, E-commerce, Health, etc.) based on site content.
+*   **DeepSeek AI-Powered Detection:** Uses DeepSeek LLM to automatically analyze the website and identify the industry/niche when no competitor URLs are provided.
+*   **Smart Competitor Discovery:** Generates real competitor URLs based on detected industry, validates them, and crawls up to the tier's page limit per competitor.
 *   **Real Competitor Crawling:** Live-crawls top competitors in that niche to extract their actual keyword strategies.
 *   **Keyword Gap Analysis:** Identifies high-value keywords your competitors are using but you are missing.
 *   **Opportunity Discovery:** Highlights "low hanging fruit" keywords to target.
-*   **Graceful Fallback:** Provides pattern-based suggestions if competitor crawling fails, with clear explanations.
+*   **Multi-Layer Fallback:** Falls back to industry taxonomy if DeepSeek is unavailable, then to pattern-based suggestions if competitor crawling fails.
+*   **URL Validation:** Automatically validates competitor URLs before crawling to ensure they're reachable.
 
 ### 5. 🏢 Local SEO Analysis (New!)
 *   **NAP Consistency:** Extracts and validates Name, Address, Phone data across all pages.

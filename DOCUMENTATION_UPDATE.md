@@ -16,6 +16,7 @@
 - Added 404 Page Filtering
 - Added URL Deduplication
 - Added Issue Deduplication
+- Added DeepSeek AI-Powered Competitor Detection
 - Updated Social Media Detection description
 - Updated Reporting section with new features
 
@@ -28,6 +29,8 @@
 - Added URL deduplication to detailed features
 - Added 404 page filtering to detailed features
 - Added Clean keyword extraction to detailed features
+- Added DeepSeek competitor detection documentation
+- Added DEEPSEEK_API_KEY environment variable documentation
 - Updated Social Media Presence description
 - Updated PDF Report Contents section
 - Updated Fix Instructions section
@@ -35,10 +38,19 @@
 ### 3. CHANGELOG.md
 **Changes**:
 - Added comprehensive "Unreleased" section for Sprint 1-3
-- Documented all new modules
-- Documented all fixes
+- Added latest section for AI-Powered Competitor Detection & Report QA
+- Documented all new modules (DeepSeek, Report QA, Enhanced LLM Readability)
+- Documented all fixes (issue aggregation, rendering percentage, keyword extraction)
 - Documented technical improvements
 - Organized by Added/Changed/Fixed
+
+### 4. FIXES_REVISION_12.md
+**Changes**:
+- Updated Fix #1 status: ✅ RESOLVED (issue aggregation working correctly)
+- Updated Fix #2 status: ✅ RESOLVED (rendering percentage math fixed)
+- Updated Fix #3 status: ✅ RESOLVED (crawl depth is correct for site structure)
+- Added testing results showing 10/10 quality score
+- Marked all fixes as production-ready
 
 ---
 

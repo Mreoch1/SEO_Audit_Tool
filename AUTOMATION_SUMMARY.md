@@ -47,7 +47,26 @@ Automatically validates audit results and detects:
 - ✅ Better error handling for page.evaluate() calls
 - ✅ H1 extraction fallback to HTML parsing if DOM evaluation fails
 
-### 4. Internal Error Fixes
+### 4. DeepSeek AI-Powered Competitor Detection
+**File:** `lib/deepseekCompetitorDetection.ts`
+
+- ✅ Automatically classifies website industry/niche using DeepSeek LLM
+- ✅ Generates real competitor URLs based on detected industry
+- ✅ Validates competitor URLs via HEAD requests before crawling
+- ✅ Falls back to OpenAI GPT-4o-mini if DeepSeek unavailable
+- ✅ Multi-layer fallback: DeepSeek → OpenAI → Industry Taxonomy → Pattern-based
+- ✅ Integrated into competitor analysis workflow when no URLs provided
+- ✅ Environment variable: `DEEPSEEK_API_KEY` or `OPENAI_API_KEY`
+
+**Usage:**
+When running an audit with competitor analysis add-on enabled but no competitor URLs provided, the system will:
+1. Analyze the target website to identify industry/niche
+2. Generate competitor suggestions using AI
+3. Validate URLs before crawling
+4. Crawl validated competitors and extract keywords
+5. Perform keyword gap analysis
+
+### 5. Internal Error Fixes
 **Files:** `lib/seoAudit.ts`, `lib/reportSummary.ts`, `lib/pdf.ts`
 
 - ✅ Fixed severity count calculation (was accessing undefined properties)
