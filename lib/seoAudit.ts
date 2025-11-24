@@ -1777,13 +1777,10 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
       if (validated.warnings.length > 0) {
         console.warn(`[Performance] Validation warnings for ${url}:`, validated.warnings)
       }
-      pageData.pageSpeedData = {
-        lcp: validated.lcp,
-        fcp: validated.fcp,
-        cls: validated.cls,
-        ttfb: validated.ttfb
-      }
-      console.log(`[PageSpeed] Metrics: LCP=${validated.lcp}ms, FCP=${validated.fcp}ms, CLS=${validated.cls}, TTFB=${validated.ttfb}ms`)
+      // CRITICAL FIX: Save full PageSpeedData structure, not just simplified metrics
+      // This ensures we can access both mobile and desktop data later
+      pageData.pageSpeedData = pageSpeedData as any
+      console.log(`[PageSpeed] ✅ Saved PageSpeed data: LCP=${validated.lcp}ms, FCP=${validated.fcp}ms, CLS=${validated.cls}, TTFB=${validated.ttfb}ms`)
     } else {
       if (isMainPage) {
         console.warn(`[PageSpeed] ⚠️ No PageSpeed data available for ${url}. Check API key, quota, or network connection.`)

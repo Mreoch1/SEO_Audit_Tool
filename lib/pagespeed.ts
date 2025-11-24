@@ -57,31 +57,39 @@ export async function fetchPageSpeedInsights(url: string): Promise<PageSpeedData
     const mobileResult = mobileSettled.status === 'fulfilled' ? mobileSettled.value : null
     const desktopResult = desktopSettled.status === 'fulfilled' ? desktopSettled.value : null
 
-    // Return null if both failed (don't return partial data)
-    if (!mobileResult && !desktopResult) {
-      return null
-    }
-
-    // If one or both succeeded, return what we have
-    // The audit will still work, just with partial or full PageSpeed data
-    return {
-      mobile: mobileResult || {
-        lcp: 0,
-        fcp: 0,
-        cls: 0,
-        inp: 0,
-        ttfb: 0,
-        opportunities: []
-      },
-      desktop: desktopResult || {
-        lcp: 0,
-        fcp: 0,
-        cls: 0,
-        inp: 0,
-        ttfb: 0,
-        opportunities: []
+    // CRITICAL FIX: Return partial data if at least one strategy succeeded
+    // This ensures we have PageSpeed data even if one strategy fails
+    if (mobileResult || desktopResult) {
+      console.log(`[PageSpeed] ✅ Retrieved data: mobile=${!!mobileResult}, desktop=${!!desktopResult}`)
+      return {
+        mobile: mobileResult || {
+          lcp: 0,
+          fcp: 0,
+          cls: 0,
+          inp: 0,
+          ttfb: 0,
+          opportunities: []
+        },
+        desktop: desktopResult || {
+          lcp: 0,
+          fcp: 0,
+          cls: 0,
+          inp: 0,
+          ttfb: 0,
+          opportunities: []
+        }
       }
     }
+
+    // Both failed - log the reasons
+    if (mobileSettled.status === 'rejected') {
+      console.warn(`[PageSpeed] ❌ Mobile strategy failed:`, mobileSettled.reason)
+    }
+    if (desktopSettled.status === 'rejected') {
+      console.warn(`[PageSpeed] ❌ Desktop strategy failed:`, desktopSettled.reason)
+    }
+    console.warn(`[PageSpeed] ⚠️ Both strategies failed for ${url}`)
+    return null
   } catch (error) {
     // This catch block should rarely be hit since individual errors are handled in fetchPageSpeedForStrategy
     console.warn('PageSpeed Insights API error:', error instanceof Error ? error.message : error)
