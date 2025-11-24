@@ -1,0 +1,33 @@
+
+🔍 Starting SEO audit for: https://linear.app
+📧 Will email report to: test@example.com
+📊 Tier: standard
+🏆 Competitor URLs (2): https://www.notion.so, https://www.atlassian.com
+✨ Add-ons: Competitor Analysis
+
+✅ Database and SMTP settings verified
+
+📝 Creating audit record...
+✅ Audit created with ID: cmidr6waz00002vt2hts2f6bp
+
+🔍 Running audit (this may take a few minutes)...
+   This will crawl and analyze the website...
+
+[Audit] Starting audit for https://linear.app (max pages: 20, max depth: 3)
+[Audit] Following redirects to determine canonical URL...
+[Audit] Final URL after redirects: https://linear.app/
+[Audit] Root URL is valid
+[Audit] Checking robots.txt...
+[Audit] Checking sitemap.xml...
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+   ⏳ Running... (0m 2s)   ⏳ Running... (0m 4s)[Renderer] Browser instance verified and ready
+[Audit] Starting to crawl up to 20 pages...
+[Audit Progress] Analyzing page 1/20: https://linear.app (0s elapsed)
+[Audit Progress] ✅ Main page identified: https://linear.app (will fetch PageSpeed data)
+[Audit Progress] Main page check: normalizedUrl=https://linear.app, startUrl=https://linear.app, depth=0, pages.length=0
+   ⏳ Running... (0m 6s)   ⏳ Running... (0m 8s)   ⏳ Running... (0m 10s)   ⏳ Running... (0m 12s)   ⏳ Running... (0m 14s)   ⏳ Running... (0m 16s)   ⏳ Running... (0m 18s)   ⏳ Running... (0m 20s)   ⏳ Running... (0m 22s)   ⏳ Running... (0m 24s)   ⏳ Running... (0m 26s)   ⏳ Running... (0m 28s)   ⏳ Running... (0m 30s)   ⏳ Running... (0m 32s)   ⏳ Running... (0m 34s)   ⏳ Running... (0m 36s)   ⏳ Running... (0m 38s)[Renderer] Waiting 1000ms before retry 2/3...
+   ⏳ Running... (0m 40s)[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+   ⏳ Running... (0m 42s)[Renderer] Browser instance verified and ready
+   ⏳ Running... (0m 44s)   ⏳ Running... (0m 46s)   ⏳ Running... (0m 48s)   ⏳ Running... (0m 50s)   ⏳ Running... (0m 52s)   ⏳ Running... (0m 54s)   ⏳ Running... (0m 56s)   ⏳ Running... (0m 58s)   ⏳ Running... (1m 0s)
