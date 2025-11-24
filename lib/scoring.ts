@@ -801,14 +801,21 @@ export function calculateAccessibilityScore(
   })
   
   // CRITICAL: Cannot have perfect score if any High priority issues exist (including viewport)
+  // CRITICAL FIX: Only cap score if there are multiple issues or severe problems
   const hasHighPriorityIssues = issues.some(i => 
     (i.category === 'Accessibility' || (i.category === 'Technical' && matchesIssue(i, ['viewport']))) && 
     i.severity === 'High'
   )
   const hasMissingViewport = pages.some(p => !p.hasViewport)
+  const totalAccessibilityIssues = issues.filter(i => 
+    i.category === 'Accessibility' || (i.category === 'Technical' && matchesIssue(i, ['viewport']))
+  ).length
   
-  if (hasHighPriorityIssues || hasMissingViewport) {
-    score = Math.min(score, 85) // Cap at 85 if high priority issues exist or viewport missing
+  // Only cap if there are multiple issues or many pages affected
+  if (hasHighPriorityIssues && totalAccessibilityIssues > 1) {
+    score = Math.min(score, 85) // Cap at 85 if multiple high priority issues exist
+  } else if (hasHighPriorityIssues || hasMissingViewport) {
+    score = Math.min(score, 90) // Cap at 90 for single issue
   }
   
   // CRITICAL FIX: Penalize score if comprehensive accessibility checks haven't been performed
