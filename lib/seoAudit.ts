@@ -1782,9 +1782,28 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
       }
       // CRITICAL FIX: Save full PageSpeedData structure, not just simplified metrics
       // This ensures we can access both mobile and desktop data later
-      pageData.pageSpeedData = pageSpeedData as any
+      // Ensure the data structure is JSON-serializable
+      const serializablePageSpeedData = {
+        mobile: {
+          lcp: pageSpeedData.mobile.lcp,
+          fcp: pageSpeedData.mobile.fcp,
+          cls: pageSpeedData.mobile.cls,
+          inp: pageSpeedData.mobile.inp,
+          ttfb: pageSpeedData.mobile.ttfb,
+          opportunities: pageSpeedData.mobile.opportunities || []
+        },
+        desktop: {
+          lcp: pageSpeedData.desktop.lcp,
+          fcp: pageSpeedData.desktop.fcp,
+          cls: pageSpeedData.desktop.cls,
+          inp: pageSpeedData.desktop.inp,
+          ttfb: pageSpeedData.desktop.ttfb,
+          opportunities: pageSpeedData.desktop.opportunities || []
+        }
+      }
+      pageData.pageSpeedData = serializablePageSpeedData as any
       console.log(`[PageSpeed] ✅ Saved PageSpeed data to pageData: LCP=${validated.lcp}ms, FCP=${validated.fcp}ms, CLS=${validated.cls}, TTFB=${validated.ttfb}ms`)
-      console.log(`[PageSpeed] ✅ PageSpeed data structure: ${JSON.stringify(Object.keys(pageData.pageSpeedData || {})).substring(0, 100)}`)
+      console.log(`[PageSpeed] ✅ Verified data structure: mobile.lcp=${serializablePageSpeedData.mobile.lcp}, desktop.lcp=${serializablePageSpeedData.desktop.lcp}`)
     } else {
       if (isMainPage) {
         console.warn(`[PageSpeed] ⚠️ No PageSpeed data available for ${url}. Check API key, quota, or network connection.`)
