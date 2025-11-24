@@ -425,27 +425,44 @@ export async function renderPage(
 
       let renderedTitle: string | undefined
       try {
-        // Wait for title to stabilize (check multiple times)
+        // CRITICAL FIX: Wait for title to stabilize and check for dynamic updates
+        // Some sites (like Next.js) update title after initial render
         let previousTitle = ''
         let stableCount = 0
-        for (let i = 0; i < 5; i++) {
-          await page.waitForTimeout(500) // Wait 500ms between checks
-          const currentTitle = await page.evaluate(() => document.title || '')
-          if (currentTitle === previousTitle && currentTitle) {
-            stableCount++
-            if (stableCount >= 2) {
-              // Title is stable
-              renderedTitle = currentTitle
-              break
+        const maxChecks = 8 // Increased from 5
+        const checkInterval = 800 // Increased from 500ms
+        
+        for (let i = 0; i < maxChecks; i++) {
+          await page.waitForTimeout(checkInterval)
+          const currentTitle = await page.evaluate(() => {
+            // Try multiple methods to get title
+            return document.title || 
+                   (document.querySelector('title')?.textContent || '').trim() ||
+                   (document.querySelector('meta[property="og:title"]')?.getAttribute('content') || '').trim()
+          })
+          
+          if (currentTitle && currentTitle.length > 0) {
+            if (currentTitle === previousTitle) {
+              stableCount++
+              if (stableCount >= 2) {
+                // Title is stable
+                renderedTitle = currentTitle
+                break
+              }
+            } else {
+              stableCount = 0
+              previousTitle = currentTitle
             }
-          } else {
-            stableCount = 0
-            previousTitle = currentTitle
           }
         }
-        // If title never stabilized, use the last value
+        // If title never stabilized, use the last non-empty value
         if (!renderedTitle && previousTitle) {
           renderedTitle = previousTitle
+        }
+        // Final fallback: try one more time after a longer wait
+        if (!renderedTitle) {
+          await page.waitForTimeout(1000)
+          renderedTitle = await page.evaluate(() => document.title || '')
         }
       } catch (error: any) {
         console.warn('[Renderer] Title extraction error:', error?.message || error)

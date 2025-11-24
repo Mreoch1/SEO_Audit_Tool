@@ -757,18 +757,15 @@ export function calculateAccessibilityScore(
   })
   
   // Also check actual page data for missing alt text
-  // CRITICAL FIX: Don't double-penalize - if alt text issue is already counted, reduce the penalty
+  // CRITICAL FIX: Don't double-penalize - if alt text issue is already counted, reduce the penalty significantly
   const totalImages = pages.reduce((sum, p) => sum + (p.imageCount || 0), 0)
   const totalMissingAlt = pages.reduce((sum, p) => sum + (p.missingAltCount || 0), 0)
-  if (totalImages > 0) {
+  if (totalImages > 0 && altIssues.length === 0) {
+    // Only deduct if alt text issue wasn't already counted as an issue
     const missingAltRate = totalMissingAlt / totalImages
-    // If alt issues are already counted, use a reduced penalty (max 20 instead of full weight)
-    // This prevents double-counting when issues are already reported
-    const altPenalty = altIssues.length > 0 
-      ? Math.min(20, missingAltRate * 20) // Reduced penalty if issues already counted
-      : Math.min(weights.altText, missingAltRate * weights.altText) // Full penalty if no issues reported
-    score -= altPenalty
+    score -= Math.min(15, missingAltRate * 15) // Reduced from 20
   }
+  // If alt issues are already counted, don't deduct again (already penalized above)
   
   // ARIA label issues (-20 points max)
   const ariaIssues = issues.filter(i => 
@@ -812,13 +809,20 @@ export function calculateAccessibilityScore(
   ).length
   
   // CRITICAL FIX: Only cap if there are multiple issues
-  // For single issues, allow higher scores (60+ for single viewport issue, 70+ for single alt issue)
+  // For single issues, allow much higher scores (80+ for single viewport issue, 85+ for single alt issue)
   if (hasHighPriorityIssues && totalAccessibilityIssues > 1) {
     score = Math.min(score, 85) // Cap at 85 if multiple high priority issues exist
   } else if (hasHighPriorityIssues || hasMissingViewport) {
-    // Single issue: allow score up to 70 (viewport) or 80 (alt text)
-    const maxScoreForSingleIssue = viewportIssues.length > 0 ? 70 : 80
+    // Single issue: allow score up to 80 (viewport) or 85 (alt text)
+    // This ensures a single issue doesn't destroy the score
+    const maxScoreForSingleIssue = viewportIssues.length > 0 ? 80 : 85
     score = Math.min(score, maxScoreForSingleIssue)
+  }
+  
+  // CRITICAL FIX: Ensure minimum score based on number of issues
+  // With only 1 issue, score should be at least 60
+  if (totalAccessibilityIssues === 1 && score < 60) {
+    score = 60 // Minimum score for single issue
   }
   
   // CRITICAL FIX: Penalize score if comprehensive accessibility checks haven't been performed
