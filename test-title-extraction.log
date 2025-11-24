@@ -30,4 +30,46 @@
    ⏳ Running... (0m 40s)[Renderer] Launching new browser instance...
 [Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
    ⏳ Running... (0m 42s)[Renderer] Browser instance verified and ready
-   ⏳ Running... (0m 44s)   ⏳ Running... (0m 46s)   ⏳ Running... (0m 48s)   ⏳ Running... (0m 50s)   ⏳ Running... (0m 52s)   ⏳ Running... (0m 54s)   ⏳ Running... (0m 56s)   ⏳ Running... (0m 58s)   ⏳ Running... (1m 0s)
+   ⏳ Running... (0m 44s)   ⏳ Running... (0m 46s)   ⏳ Running... (0m 48s)   ⏳ Running... (0m 50s)   ⏳ Running... (0m 52s)   ⏳ Running... (0m 54s)   ⏳ Running... (0m 56s)   ⏳ Running... (0m 58s)   ⏳ Running... (1m 0s)   ⏳ Running... (1m 2s)   ⏳ Running... (1m 4s)   ⏳ Running... (1m 6s)   ⏳ Running... (1m 8s)   ⏳ Running... (1m 10s)   ⏳ Running... (1m 12s)   ⏳ Running... (1m 14s)   ⏳ Running... (1m 16s)[Renderer] Waiting 2000ms before retry 3/3...
+   ⏳ Running... (1m 18s)[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+   ⏳ Running... (1m 20s)   ⏳ Running... (1m 22s)[Renderer] Browser instance verified and ready
+   ⏳ Running... (1m 24s)   ⏳ Running... (1m 26s)   ⏳ Running... (1m 28s)   ⏳ Running... (1m 30s)   ⏳ Running... (1m 32s)   ⏳ Running... (1m 34s)   ⏳ Running... (1m 36s)   ⏳ Running... (1m 38s)   ⏳ Running... (1m 40s)   ⏳ Running... (1m 42s)   ⏳ Running... (1m 44s)   ⏳ Running... (1m 46s)   ⏳ Running... (1m 48s)   ⏳ Running... (1m 50s)   ⏳ Running... (1m 52s)   ⏳ Running... (1m 54s)   ⏳ Running... (1m 56s)[Renderer] Failed to render https://linear.app after 3 attempts: Navigation timeout of 30000 ms exceeded
+Rendering failed for https://linear.app, falling back to basic fetch: Error: Failed to render https://linear.app after 3 attempts: Navigation timeout of 30000 ms exceeded
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:615:15)
+    at async analyzePage (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:1732:22)
+    at async crawlPages (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:1500:24)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:175:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:230:21)
+[Audit Progress] Completed page 1 in 112s
+[Audit Progress] No rendered links found, falling back to fetch for https://linear.app...
+[Audit Progress] Extracted 39 internal links from https://linear.app (using domain: linear.app)
+[Audit Progress] Found 39 internal links on https://linear.app, added 20 to queue
+[Audit Progress] Analyzing page 2/20: https://linear.app/homepage (112s elapsed)
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+   ⏳ Running... (1m 58s)[Renderer] Browser instance verified and ready
+   ⏳ Running... (2m 0s)   ⏳ Running... (2m 2s)   ⏳ Running... (2m 4s)   ⏳ Running... (2m 6s)   ⏳ Running... (2m 8s)   ⏳ Running... (2m 10s)   ⏳ Running... (2m 12s)   ⏳ Running... (2m 14s)   ⏳ Running... (2m 16s)   ⏳ Running... (2m 18s)   ⏳ Running... (2m 20s)   ⏳ Running... (2m 22s)   ⏳ Running... (2m 24s)   ⏳ Running... (2m 26s)   ⏳ Running... (2m 28s)   ⏳ Running... (2m 30s)   ⏳ Running... (2m 32s)   ⏳ Running... (2m 34s)   ⏳ Running... (2m 36s)[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Browser instance verified and ready
+   ⏳ Running... (2m 38s)   ⏳ Running... (2m 40s)   ⏳ Running... (2m 42s)   ⏳ Running... (2m 44s)   ⏳ Running... (2m 46s)   ⏳ Running... (2m 48s)   ⏳ Running... (2m 50s)   ⏳ Running... (2m 52s)   ⏳ Running... (2m 54s)   ⏳ Running... (2m 56s)   ⏳ Running... (2m 58s)   ⏳ Running... (3m 0s)   ⏳ Running... (3m 2s)   ⏳ Running... (3m 4s)   ⏳ Running... (3m 6s)   ⏳ Running... (3m 8s)   ⏳ Running... (3m 10s)   ⏳ Running... (3m 12s)   ⏳ Running... (3m 14s)[Renderer] Waiting 2000ms before retry 3/3...
+   ⏳ Running... (3m 16s)[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Browser instance verified and ready
+   ⏳ Running... (3m 18s)   ⏳ Running... (3m 20s)   ⏳ Running... (3m 22s)   ⏳ Running... (3m 24s)   ⏳ Running... (3m 26s)   ⏳ Running... (3m 28s)   ⏳ Running... (3m 30s)   ⏳ Running... (3m 32s)   ⏳ Running... (3m 34s)   ⏳ Running... (3m 36s)   ⏳ Running... (3m 38s)   ⏳ Running... (3m 40s)   ⏳ Running... (3m 42s)   ⏳ Running... (3m 44s)   ⏳ Running... (3m 46s)   ⏳ Running... (3m 48s)   ⏳ Running... (3m 50s)[Renderer] Failed to render https://linear.app/homepage after 3 attempts: Navigation timeout of 30000 ms exceeded
+Rendering failed for https://linear.app/homepage, falling back to basic fetch: Error: Failed to render https://linear.app/homepage after 3 attempts: Navigation timeout of 30000 ms exceeded
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:615:15)
+    at async analyzePage (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:1732:22)
+    at async crawlPages (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:1500:24)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:175:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:230:21)
+   ⏳ Running... (3m 52s)[Audit Progress] Completed page 2 in 115s
+[Audit Progress] No rendered links found, falling back to fetch for https://linear.app/homepage...
+[Audit Progress] Extracted 39 internal links from https://linear.app/homepage (using domain: linear.app)
+[Audit Progress] Found 39 internal links on https://linear.app/homepage, added 20 to queue
+[Audit Progress] Analyzing page 3/20: https://linear.app/features (228s elapsed)
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Browser instance verified and ready
+   ⏳ Running... (3m 54s)   ⏳ Running... (3m 56s)   ⏳ Running... (3m 58s)   ⏳ Running... (4m 0s)   ⏳ Running... (4m 2s)   ⏳ Running... (4m 4s)   ⏳ Running... (4m 6s)   ⏳ Running... (4m 8s)   ⏳ Running... (4m 10s)   ⏳ Running... (4m 12s)   ⏳ Running... (4m 14s)   ⏳ Running... (4m 16s)   ⏳ Running... (4m 18s)   ⏳ Running... (4m 20s)   ⏳ Running... (4m 22s)   ⏳ Running... (4m 24s)

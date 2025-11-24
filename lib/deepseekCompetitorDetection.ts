@@ -61,6 +61,10 @@ Produce a short machine-readable JSON response with these exact fields:
 
 Only return valid JSON, no additional text.`
 
+    // CRITICAL FIX: Add timeout to prevent hanging
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+    
     const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -81,7 +85,10 @@ Only return valid JSON, no additional text.`
         ],
         temperature: 0.3,
         max_tokens: 300
-      })
+      }),
+      signal: controller.signal
+    }).finally(() => {
+      clearTimeout(timeoutId)
     })
 
     if (!response.ok) {
@@ -148,6 +155,10 @@ Return JSON in this exact format:
 
 Only return valid JSON, no additional text.`
 
+    // CRITICAL FIX: Add timeout to prevent hanging
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+    
     const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -168,7 +179,10 @@ Only return valid JSON, no additional text.`
         ],
         temperature: 0.5,
         max_tokens: 500
-      })
+      }),
+      signal: controller.signal
+    }).finally(() => {
+      clearTimeout(timeoutId)
     })
 
     if (!response.ok) {

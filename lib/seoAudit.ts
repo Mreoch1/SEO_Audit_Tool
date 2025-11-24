@@ -684,7 +684,7 @@ export async function runAudit(
         console.log('[Audit] No competitor URLs provided - attempting automatic detection with DeepSeek...')
 
         try {
-          const { autoDetectCompetitors } = await import('./deepseekCompetitorDetection')
+          const { autoDetectCompetitors, type CompetitorDetectionResult } = await import('./deepseekCompetitorDetection')
 
           // Extract site content for context
           const mainPage = validPages.find(p => p.url === rootUrl) || validPages[0]
@@ -697,12 +697,26 @@ export async function runAudit(
           // Determine max competitors based on tier
           const maxCompetitors = opts.tier === 'agency' ? 5 : opts.tier === 'professional' ? 3 : 2
 
-          // Auto-detect competitors
-          const detectionResult = await autoDetectCompetitors(
-            rootUrl,
-            siteContent,
-            maxCompetitors
-          )
+          // Auto-detect competitors with timeout
+          console.log('[Audit] Calling DeepSeek auto-detection (this may take 30-60 seconds)...')
+          const detectionResult = await Promise.race([
+            autoDetectCompetitors(
+              rootUrl,
+              siteContent,
+              maxCompetitors
+            ),
+            new Promise<any>((_, reject) =>
+              setTimeout(() => reject(new Error('DeepSeek detection timeout after 2 minutes')), 120000)
+            )
+          ]).catch((error) => {
+            console.warn(`[Audit] DeepSeek detection failed or timed out: ${error instanceof Error ? error.message : String(error)}`)
+            // Return fallback result
+            return {
+              industry: { industry: 'Unknown', niche: 'General Business' },
+              competitors: [],
+              detectionMethod: 'fallback' as const
+            }
+          })
 
           if (detectionResult.competitors.length > 0) {
             finalCompetitorUrls = detectionResult.competitors.map(c => c.url)
