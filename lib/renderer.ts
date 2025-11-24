@@ -47,6 +47,7 @@ export interface RenderedPageData {
     h1Text: string[]
   }
   initialHtml?: string // CRITICAL FIX: Initial HTML for rendering percentage calculation
+  schemaScripts?: string[] // CRITICAL FIX: JSON-LD schema scripts extracted from rendered DOM
 }
 
 // Browser instance per audit (not global)
@@ -370,6 +371,24 @@ export async function renderPage(
         throw new Error('Browser disconnected before final data extraction')
       }
       const finalHtml = await page.content()
+      
+      // CRITICAL FIX: Extract JSON-LD schema scripts from rendered DOM
+      // This catches schema that's injected dynamically via JavaScript
+      let schemaScripts: string[] = []
+      try {
+        schemaScripts = await page.evaluate(() => {
+          const scripts: string[] = []
+          document.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
+            const content = script.textContent || script.innerHTML
+            if (content && content.trim()) {
+              scripts.push(content.trim())
+            }
+          })
+          return scripts
+        })
+      } catch (error) {
+        console.warn('[Renderer] Failed to extract schema from DOM:', error)
+      }
 
       // Analyze images and links while page is still open
       // Add connection checks for each analysis step
@@ -450,7 +469,8 @@ export async function renderPage(
         metrics,
         imageData,
         linkData,
-        h1Data // CRITICAL FIX: H1s extracted from rendered DOM
+        h1Data, // CRITICAL FIX: H1s extracted from rendered DOM
+        schemaScripts // CRITICAL FIX: JSON-LD schema scripts extracted from rendered DOM
       }
     } catch (error: any) {
       lastError = error

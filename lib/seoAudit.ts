@@ -1756,7 +1756,8 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
       needsImageDetails,
       httpVersion,
       compression,
-      rendered.h1Data // CRITICAL FIX: Pass H1s extracted from rendered DOM
+      rendered.h1Data, // CRITICAL FIX: Pass H1s extracted from rendered DOM
+      rendered.schemaScripts // CRITICAL FIX: Pass schema scripts for JS-injected schema detection
     )
 
     // Wait for PageSpeed data and add it
@@ -1939,7 +1940,8 @@ async function parseHtmlWithRenderer(
 ): Promise<PageData> {
   // CRITICAL FIX #11: Parse using rendered HTML (not initial HTML) for accurate content extraction
   // Parse basic HTML elements (title, meta, headers, etc.) from rendered content
-  const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType)
+  // CRITICAL FIX: Pass schema scripts for JS-injected schema detection
+  const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType, schemaScripts)
 
   // CRITICAL FIX: Use H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)
   // Try multiple methods and use whichever finds H1s
@@ -2152,6 +2154,7 @@ function parseHtml(
   statusCode: number,
   loadTime: number,
   contentType: string,
+  schemaScripts?: string[],
   needsImageDetails = false
 ): PageData {
   // Remove scripts and styles
@@ -2250,7 +2253,8 @@ function parseHtml(
   const hasViewport = /<meta[^>]*name=["']viewport["']/i.test(html)
 
   // Enhanced schema analysis (includes Identity Schema detection)
-  const schemaAnalysis = analyzeSchema(html, url)
+  // CRITICAL FIX: Pass rendered DOM schema scripts if available (for JS-injected schema)
+  const schemaAnalysis = analyzeSchema(html, url, schemaScripts || [])
   const hasSchemaMarkup = schemaAnalysis.hasSchema
   const schemaTypes = schemaAnalysis.schemaTypes
 

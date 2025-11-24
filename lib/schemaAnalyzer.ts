@@ -25,8 +25,12 @@ export interface SchemaAnalysis {
 
 /**
  * Analyze schema markup in HTML
+ * 
+ * @param html - HTML string to analyze (can be initial or rendered HTML)
+ * @param url - URL of the page
+ * @param renderedDomScripts - Optional: Array of script tag contents extracted from rendered DOM (for JS-injected schema)
  */
-export function analyzeSchema(html: string, url: string): SchemaAnalysis {
+export function analyzeSchema(html: string, url: string, renderedDomScripts?: string[]): SchemaAnalysis {
   const analysis: SchemaAnalysis = {
     hasSchema: false,
     schemaTypes: [],
@@ -41,7 +45,21 @@ export function analyzeSchema(html: string, url: string): SchemaAnalysis {
   // Match script tags with type="application/ld+json" or type='application/ld+json'
   const jsonLdMatches = html.match(/<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || []
   
-  jsonLdMatches.forEach(script => {
+  // CRITICAL FIX: Also check rendered DOM scripts (for JS-injected schema)
+  // This catches schema that's added dynamically after page load
+  const allJsonLdContent: string[] = [...jsonLdMatches]
+  if (renderedDomScripts && renderedDomScripts.length > 0) {
+    // Check if any rendered DOM scripts contain JSON-LD
+    renderedDomScripts.forEach(scriptContent => {
+      // Check if this script content looks like JSON-LD (starts with { or [)
+      const trimmed = scriptContent.trim()
+      if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && !allJsonLdContent.includes(scriptContent)) {
+        allJsonLdContent.push(scriptContent)
+      }
+    })
+  }
+  
+  allJsonLdContent.forEach(script => {
     try {
       // Extract JSON content more carefully
       const jsonContent = script.replace(/<script[^>]*>([\s\S]*?)<\/script>/i, '$1').trim()
