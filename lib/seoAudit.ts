@@ -1936,12 +1936,13 @@ async function parseHtmlWithRenderer(
   needsImageDetails = false,
   httpVersion?: PageData['httpVersion'],
   compression?: PageData['compression'],
-  h1Data?: RenderedPageData['h1Data']
+  h1Data?: RenderedPageData['h1Data'],
+  schemaScripts?: string[] // CRITICAL FIX: JSON-LD schema scripts from rendered DOM
 ): Promise<PageData> {
   // CRITICAL FIX #11: Parse using rendered HTML (not initial HTML) for accurate content extraction
   // Parse basic HTML elements (title, meta, headers, etc.) from rendered content
   // CRITICAL FIX: Pass schema scripts for JS-injected schema detection
-  const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType, schemaScripts)
+  const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType, schemaScripts || [])
 
   // CRITICAL FIX: Use H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)
   // Try multiple methods and use whichever finds H1s
