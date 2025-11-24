@@ -3217,8 +3217,13 @@ async function generateRealCompetitorAnalysis(
     // Convert to CompetitorAnalysis format
     const allKeywords = result.competitorData.flatMap(c => c.keywords)
     const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
-    const shared = allKeywords.filter(k => siteKeywordSet.has(k.toLowerCase()))
-    const gaps = result.keywordGaps.map(g => g.keyword)
+    
+    // CRITICAL FIX: Use findKeywordGaps for proper comparison (handles similarity matching)
+    const { findKeywordGaps } = await import('./keywordProcessor')
+    const gapAnalysis = findKeywordGaps(siteKeywords, allKeywords)
+    
+    const shared = gapAnalysis.shared
+    const gaps = gapAnalysis.gaps
 
     console.log(`[Competitor] Results: ${allKeywords.length} competitor keywords, ${gaps.length} keyword gaps, ${shared.length} shared keywords`)
 

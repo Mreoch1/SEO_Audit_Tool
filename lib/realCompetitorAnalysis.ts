@@ -269,7 +269,11 @@ export async function analyzeCompetitors(
         keywordLower.includes(sk)
     })
     
-    if (!existsInSite && data.count >= 2) { // Must appear in at least 2 competitors
+    // CRITICAL FIX: For single competitor analysis, show gaps even if keyword appears once
+    // For multi-competitor analysis, require at least 2 competitors to have it
+    const minFrequency = competitorUrls.length > 1 ? 2 : 1
+    
+    if (!existsInSite && data.count >= minFrequency) {
       gaps.push({
         keyword,
         foundOn: Array.from(data.urls),
