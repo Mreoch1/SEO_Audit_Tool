@@ -1764,6 +1764,7 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
     // Wait for PageSpeed data and add it
     const pageSpeedData = await pageSpeedPromise
     if (pageSpeedData) {
+      console.log(`[PageSpeed] ✅ Successfully retrieved PageSpeed data for ${url}`)
       // NEW: Validate performance metrics
       // Extract mobile metrics for validation (or use simplified structure if available)
       const metrics = (pageSpeedData as any).mobile || pageSpeedData
@@ -1781,6 +1782,11 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
         fcp: validated.fcp,
         cls: validated.cls,
         ttfb: validated.ttfb
+      }
+      console.log(`[PageSpeed] Metrics: LCP=${validated.lcp}ms, FCP=${validated.fcp}ms, CLS=${validated.cls}, TTFB=${validated.ttfb}ms`)
+    } else {
+      if (isMainPage) {
+        console.warn(`[PageSpeed] ⚠️ No PageSpeed data available for ${url}. Check API key, quota, or network connection.`)
       }
     }
 
@@ -1839,6 +1845,7 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
 
         const pageSpeedData = await pageSpeedPromise
         if (pageSpeedData) {
+          console.log(`[PageSpeed] ✅ Successfully retrieved PageSpeed data for ${url}`)
           // NEW: Validate performance metrics
           // Extract mobile metrics for validation (or use simplified structure if available)
           const metrics = (pageSpeedData as any).mobile || pageSpeedData
@@ -1856,6 +1863,11 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
             fcp: validated.fcp,
             cls: validated.cls,
             ttfb: validated.ttfb
+          }
+          console.log(`[PageSpeed] Metrics: LCP=${validated.lcp}ms, FCP=${validated.fcp}ms, CLS=${validated.cls}, TTFB=${validated.ttfb}ms`)
+        } else {
+          if (isMainPage) {
+            console.warn(`[PageSpeed] ⚠️ No PageSpeed data available for ${url}. Check API key, quota, or network connection.`)
           }
         }
 
@@ -3200,13 +3212,15 @@ async function generateRealCompetitorAnalysis(
 
   try {
     const result = await analyzeCompetitors([competitorUrl], siteKeywords, options.userAgent)
-    console.log(`[Competitor] Real analysis succeeded`)
+    console.log(`[Competitor] ✅ Real analysis succeeded`)
 
     // Convert to CompetitorAnalysis format
     const allKeywords = result.competitorData.flatMap(c => c.keywords)
     const siteKeywordSet = new Set(siteKeywords.map(k => k.toLowerCase()))
     const shared = allKeywords.filter(k => siteKeywordSet.has(k.toLowerCase()))
     const gaps = result.keywordGaps.map(g => g.keyword)
+
+    console.log(`[Competitor] Results: ${allKeywords.length} competitor keywords, ${gaps.length} keyword gaps, ${shared.length} shared keywords`)
 
     return {
       competitorUrl,
@@ -3247,11 +3261,14 @@ async function generateMultiCompetitorAnalysis(
       crawlCompetitorSite(url, 20, 3, options.userAgent)
     )
 
+    console.log(`[Competitor] Waiting for ${competitorUrls.length} competitor crawls to complete...`)
     const competitorCrawls = (await Promise.all(crawlPromises))
       .filter((crawl): crawl is NonNullable<typeof crawl> => crawl !== null)
 
+    console.log(`[Competitor] ✅ Completed ${competitorCrawls.length}/${competitorUrls.length} competitor crawls`)
+
     if (competitorCrawls.length === 0) {
-      console.warn('[Competitor] All competitor crawls failed, falling back to single-page analysis')
+      console.warn('[Competitor] ⚠️ All competitor crawls failed, falling back to single-page analysis')
       const result = await analyzeCompetitors(competitorUrls, siteKeywords, options.userAgent)
       return {
         competitorUrl: competitorUrls[0],

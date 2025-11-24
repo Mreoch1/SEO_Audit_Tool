@@ -208,10 +208,19 @@ export function analyzeEnhancedContent(
   
   // CRITICAL FIX #1: Update word count from rendered content (if different from page.wordCount)
   // Recalculate word count from extracted main content
-  const renderedWordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
+  // Use the same word counting method as parseHtml for consistency (filter single-character words)
+  const renderedWordCount = textContent
+    .split(/\s+/)
+    .filter(w => w.length > 0 && w.length > 1) // Filter single-character "words" - same as parseHtml
+    .length
+  
+  // Use rendered word count if it's higher (more accurate), otherwise use page.wordCount
   if (renderedWordCount > 0 && renderedWordCount !== page.wordCount) {
     // Update the data with rendered word count
     data.depth.wordCount = renderedWordCount
+  } else {
+    // Use page.wordCount if it's already accurate
+    data.depth.wordCount = page.wordCount || renderedWordCount
   }
   
   // NEW: Agency tier - Extract first 100 words for keyword placement analysis

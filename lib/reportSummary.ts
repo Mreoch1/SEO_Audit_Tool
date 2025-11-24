@@ -238,8 +238,13 @@ export function generateDetailedSummary(result: AuditResult): string {
     if (missingTitleCount > 0) text += `${missingTitleCount} page${missingTitleCount !== 1 ? 's' : ''} missing titles, `
     if (missingMetaCount > 0) text += `${missingMetaCount} page${missingMetaCount !== 1 ? 's' : ''} missing meta descriptions, `
     if (missingH1Count > 0) text += `${missingH1Count} page${missingH1Count !== 1 ? 's' : ''} missing H1 tags. `
-    if (siteWide.duplicateTitles.length > 0) {
-      text += `Additionally, ${siteWide.duplicateTitles.length / 2} duplicate title${siteWide.duplicateTitles.length / 2 !== 1 ? 's' : ''} were found across pages. `
+    // Count unique duplicate titles (not total pages with duplicates)
+    const duplicateTitleIssues = (onPageIssues || []).filter(i => 
+      i.message.includes('Duplicate page title') || i.message.includes('Template-based duplicate title')
+    )
+    if (duplicateTitleIssues.length > 0) {
+      const totalDuplicatePages = duplicateTitleIssues.reduce((sum, issue) => sum + (issue.affectedPages?.length || 0), 0)
+      text += `Additionally, ${duplicateTitleIssues.length} duplicate title${duplicateTitleIssues.length !== 1 ? 's' : ''} found across ${totalDuplicatePages} page${totalDuplicatePages !== 1 ? 's' : ''}. `
     }
     text += `\n`
   }
