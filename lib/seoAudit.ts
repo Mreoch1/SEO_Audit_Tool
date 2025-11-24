@@ -1994,7 +1994,14 @@ async function parseHtmlWithRenderer(
   // CRITICAL FIX #11: Parse using rendered HTML (not initial HTML) for accurate content extraction
   // Parse basic HTML elements (title, meta, headers, etc.) from rendered content
   // CRITICAL FIX: Pass schema scripts for JS-injected schema detection
+  // CRITICAL FIX: Ensure parseHtml returns PageData, not a number
   const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType, schemaScripts || [])
+  
+  // CRITICAL FIX: Validate basicData is an object, not a number
+  if (typeof basicData !== 'object' || basicData === null) {
+    console.error(`[ParseHTML] ❌ parseHtml returned invalid type: ${typeof basicData}, value: ${basicData}`)
+    throw new Error(`parseHtml returned invalid type: ${typeof basicData} (expected PageData object)`)
+  }
   
   // CRITICAL FIX: Override title with rendered title if available (handles JS-rendered titles)
   if (renderedTitle && renderedTitle.trim()) {

@@ -15,9 +15,26 @@
  */
 
 // CRITICAL FIX: Load environment variables from .env.local
-import { config } from 'dotenv'
+// Use Node.js built-in fs to read .env.local and set process.env
+import { readFileSync } from 'fs'
 import { resolve } from 'path'
-config({ path: resolve(process.cwd(), '.env.local') })
+try {
+  const envPath = resolve(process.cwd(), '.env.local')
+  const envFile = readFileSync(envPath, 'utf-8')
+  envFile.split('\n').forEach(line => {
+    const trimmed = line.trim()
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const [key, ...valueParts] = trimmed.split('=')
+      const value = valueParts.join('=').replace(/^["']|["']$/g, '')
+      if (key && value) {
+        process.env[key.trim()] = value.trim()
+      }
+    }
+  })
+} catch (error) {
+  // .env.local might not exist, that's okay
+  console.warn('[Script] Could not load .env.local, using existing environment variables')
+}
 
 import { prisma } from '../lib/db'
 import { runAudit, AuditOptions } from '../lib/seoAudit'
