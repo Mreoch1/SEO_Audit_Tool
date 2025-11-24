@@ -32,7 +32,7 @@ export async function GET(
   const branding = {
     brandName: settings?.brandName || 'SEO Audit Pro',
     brandSubtitle: settings?.brandSubtitle || undefined,
-    primaryColor: settings?.primaryColor || '#3b82f6',
+    primaryColor: settings?.primaryColor || '#2563eb',
     logoUrl: settings?.logoUrl || '/logo.png'
   }
 

@@ -1,10 +1,12 @@
 /**
  * Email Utilities
  * 
- * Handles sending emails via Nodemailer using SMTP settings
+ * Handles sending emails via Resend API (preferred) or SMTP fallback
+ * Maintains full branding support
  */
 
 import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 import { prisma } from './db'
 
 export interface EmailOptions {
@@ -55,15 +57,69 @@ async function getTransporter() {
 }
 
 /**
- * Send email
+ * Send email via Resend API (preferred for better deliverability)
  */
-export async function sendEmail(options: EmailOptions): Promise<void> {
-  const settings = await prisma.appSettings.findUnique({
-    where: { id: 'singleton' }
+async function sendEmailViaResend(options: EmailOptions, settings: any): Promise<void> {
+  if (!settings.resendApiKey) {
+    throw new Error('Resend API key not configured')
+  }
+
+  const resend = new Resend(settings.resendApiKey)
+  
+  // Try custom domain first, fallback to Resend default domain if not verified
+  let from = settings.smtpFrom || settings.smtpUser || 'onboarding@resend.dev'
+  const fromName = settings.brandName || 'SEO Audit Pro'
+  
+  // Check if using custom domain - if so, try it first, then fallback to Resend default
+  const isCustomDomain = from.includes('@') && !from.includes('resend.dev') && !from.includes('onboarding@')
+  
+  // Resend format: "Name <email@domain.com>"
+  let fromFormatted = `${fromName} <${from}>`
+
+  // Convert attachments to Resend format
+  const attachments = options.attachments?.map(att => ({
+    filename: att.filename,
+    content: att.content
+  })) || []
+
+  let result = await resend.emails.send({
+    from: fromFormatted,
+    to: options.to,
+    replyTo: from,
+    subject: options.subject,
+    html: options.html,
+    text: options.text,
+    attachments: attachments.length > 0 ? attachments : undefined
   })
 
-  const from = settings?.smtpFrom || settings?.smtpUser || 'noreply@example.com'
-  const fromName = settings?.brandName || 'SEO Audit Pro'
+  // If custom domain fails verification, retry with Resend default domain
+  if (result.error && isCustomDomain && result.error.message?.includes('not verified')) {
+    console.log(`[Resend] Custom domain not verified, using Resend default domain`)
+    from = 'onboarding@resend.dev'
+    fromFormatted = `${fromName} <${from}>`
+    
+    result = await resend.emails.send({
+      from: fromFormatted,
+      to: options.to,
+      replyTo: from,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+      attachments: attachments.length > 0 ? attachments : undefined
+    })
+  }
+
+  if (result.error) {
+    throw new Error(`Resend API error: ${result.error.message}`)
+  }
+}
+
+/**
+ * Send email via SMTP (fallback)
+ */
+async function sendEmailViaSMTP(options: EmailOptions, settings: any): Promise<void> {
+  const from = settings.smtpFrom || settings.smtpUser || 'noreply@example.com'
+  const fromName = settings.brandName || 'SEO Audit Pro'
   
   // Format from address with name for better deliverability
   const fromFormatted = fromName ? `${fromName} <${from}>` : from
@@ -102,14 +158,42 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
 }
 
 /**
+ * Send email (uses Resend if configured, otherwise SMTP)
+ */
+export async function sendEmail(options: EmailOptions): Promise<void> {
+  const settings = await prisma.appSettings.findUnique({
+    where: { id: 'singleton' }
+  })
+
+  if (!settings) {
+    throw new Error('App settings not found')
+  }
+
+  // Use Resend if API key is configured, otherwise fallback to SMTP
+  const useResend = settings.resendApiKey && (settings.emailProvider === 'resend' || !settings.emailProvider)
+  
+  if (useResend) {
+    try {
+      await sendEmailViaResend(options, settings)
+      return
+    } catch (error) {
+      console.warn('Resend API failed, falling back to SMTP:', error)
+      // Fall through to SMTP
+    }
+  }
+
+  // Fallback to SMTP
+  await sendEmailViaSMTP(options, settings)
+}
+
+/**
  * Send test email
  */
 export async function sendTestEmail(to: string): Promise<void> {
   await sendEmail({
     to,
     subject: 'SEO Audit App - Test Email',
-    text: 'This is a test email from the SEO Audit App. If you received this, your SMTP settings are configured correctly.',
-    html: '<p>This is a test email from the SEO Audit App. If you received this, your SMTP settings are configured correctly.</p>'
+    text: 'This is a test email from the SEO Audit App. If you received this, your email settings are configured correctly.',
+    html: '<p>This is a test email from the SEO Audit App. If you received this, your email settings are configured correctly.</p>'
   })
 }
-

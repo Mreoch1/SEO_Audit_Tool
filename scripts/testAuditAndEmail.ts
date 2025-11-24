@@ -11,6 +11,7 @@ import { runAudit } from '../lib/seoAudit'
 import { generatePDF } from '../lib/pdf'
 import { sendEmail } from '../lib/email'
 import { generateShortSummary, generateDetailedSummary } from '../lib/reportSummary'
+import { Colors } from '../lib/brandColors'
 
 async function main() {
   const url = 'https://seoauditpro.net'
@@ -150,7 +151,7 @@ async function main() {
     const branding = {
       brandName: settings?.brandName || 'SEO Audit Pro',
       brandSubtitle: settings?.brandSubtitle || undefined,
-      primaryColor: settings?.primaryColor || '#3b82f6',
+      primaryColor: settings?.primaryColor || Colors.primary,
       logoUrl: settings?.logoUrl || '/logo.png'
     }
 
@@ -178,7 +179,7 @@ async function main() {
     const contentScore = auditResult.summary.contentScore
     const accessibilityScore = auditResult.summary.accessibilityScore
 
-    const primaryColor = branding.primaryColor || '#3b82f6'
+    const primaryColor = branding.primaryColor || Colors.primary
     const brandName = branding.brandName || 'SEOAuditPro'
     const escapedUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 

@@ -62,13 +62,15 @@ model AppSettings {
   id            String   @id @default("singleton")
   brandName     String   @default("SEO Audit Pro")
   brandSubtitle String?
-  primaryColor  String   @default("#3b82f6")
+  primaryColor  String   @default("#2563eb")
   logoUrl       String?
   smtpHost      String?
   smtpPort      Int?
   smtpUser      String?
   smtpPassword  String?
   smtpFrom      String?
+  resendApiKey  String?  // Resend API key for better deliverability
+  emailProvider String?  @default("smtp") // "smtp" or "resend"
   updatedAt     DateTime @updatedAt
 }
 

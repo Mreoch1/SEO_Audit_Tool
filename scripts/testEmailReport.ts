@@ -6,6 +6,7 @@
 import { prisma } from '../lib/db'
 import { generatePDF } from '../lib/pdf'
 import { sendEmail } from '../lib/email'
+import { Colors } from '../lib/brandColors'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -64,7 +65,7 @@ async function main() {
     const branding = {
       brandName: settings?.brandName || 'SEO Audit Pro',
       brandSubtitle: settings?.brandSubtitle || undefined,
-      primaryColor: settings?.primaryColor || '#3b82f6',
+      primaryColor: settings?.primaryColor || Colors.primary,
       logoUrl: logoDataUri || null
     }
 
@@ -95,7 +96,7 @@ async function main() {
     const contentScore = audit.contentScore || 0
     const accessibilityScore = audit.accessibilityScore || 0
 
-    const primaryColor = branding.primaryColor || '#3b82f6'
+    const primaryColor = branding.primaryColor || Colors.primary
     const brandName = branding.brandName || 'SEOAuditPro'
     const escapedUrl = audit.url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 

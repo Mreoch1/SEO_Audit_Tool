@@ -24,7 +24,7 @@ export default function SettingsPage() {
   const { toast } = useToast()
   const [settings, setSettings] = useState<Settings>({
     brandName: 'SEO Audit Pro',
-    primaryColor: '#3b82f6',
+    primaryColor: '#2563eb',
     logoUrl: '/logo.png'
   })
   const [loading, setLoading] = useState(true)

@@ -7,6 +7,7 @@
 import puppeteer from 'puppeteer'
 import { AuditResult, Issue } from './types'
 import { generateDetailedSummary } from './reportSummary'
+import { Colors, FontStack } from './brandColors'
 
 export interface BrandingData {
   brandName: string
@@ -82,13 +83,13 @@ export async function generatePDF(
       
       const pdf = await Promise.race([
         page.pdf({
-          format: 'A4',
-          printBackground: true,
-          margin: {
-            top: '20mm',
-            right: '15mm',
-            bottom: '20mm',
-            left: '15mm'
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '20mm',
+          right: '15mm',
+          bottom: '20mm',
+          left: '15mm'
           },
           timeout: 60000
         }),
@@ -148,66 +149,68 @@ function generateReportHTML(
       box-sizing: border-box;
     }
     body {
-      font-family: 'Helvetica Neue', Arial, sans-serif;
-      color: #333;
+      font-family: ${FontStack};
+      color: ${Colors.textPrimary};
       line-height: 1.6;
     }
     .cover-page {
       page-break-after: always;
       display: flex;
       flex-direction: column;
-      justify-content: center;
+      justify-content: flex-start;
       align-items: center;
       min-height: 100vh;
       text-align: center;
-      padding: 40px;
+      padding: 100px 40px 40px 40px;
+      position: relative;
     }
     .logo {
-      max-width: 300px;
-      margin-bottom: 40px;
+      max-width: 375px;
+      margin-bottom: 30px;
       display: block;
       margin-left: auto;
       margin-right: auto;
     }
     .brand-name {
-      font-size: 36px;
+      font-size: 42px;
       font-weight: bold;
       color: ${branding.primaryColor};
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     .brand-subtitle {
       font-size: 18px;
-      color: #666;
-      margin-bottom: 40px;
+      color: ${Colors.textBody};
+      margin-bottom: 30px;
     }
     .report-title {
-      font-size: 28px;
-      margin: 40px 0 20px;
-      color: #222;
+      font-size: 32px;
+      margin: 0 0 12px 0;
+      color: ${Colors.textPrimary};
+      font-weight: 600;
     }
     .report-url {
       font-size: 16px;
-      color: #666;
-      margin-bottom: 30px;
+      color: ${Colors.textBody};
+      margin-bottom: 8px;
       word-break: break-all;
     }
     .report-date {
       font-size: 14px;
-      color: #999;
-      margin-bottom: 40px;
+      color: ${Colors.textBody};
+      margin-bottom: 20px;
     }
     .score-circle {
-      width: 120px;
-      height: 120px;
+      width: 140px;
+      height: 140px;
       border-radius: 50%;
-      border: 8px solid ${branding.primaryColor};
+      border: 10px solid ${branding.primaryColor};
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 36px;
+      font-size: 42px;
       font-weight: bold;
       color: ${branding.primaryColor};
-      margin: 20px auto;
+      margin: 30px auto 20px auto;
     }
     .page {
       padding: 40px;
@@ -344,62 +347,174 @@ function generateReportHTML(
 <body>
   <!-- Cover Page -->
   <div class="cover-page">
+    <!-- Top Third: Branding Zone -->
+    <div style="margin-bottom: 40px;">
     ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="${branding.brandName}" class="logo">` : `<div class="brand-name">${branding.brandName}</div>`}
     ${branding.brandSubtitle ? `<div class="brand-subtitle">${branding.brandSubtitle}</div>` : ''}
     <div class="report-title">SEO Site Audit Report</div>
+      <div style="font-size: 15px; color: ${Colors.textBody}; margin: 8px 0 0 0; font-weight: 300; letter-spacing: 0.3px;">
+        Technical, On-Page, Performance, and LLM-Readability Assessment
+      </div>
+    </div>
+    
+    <!-- Mid-Top: Metadata -->
+    <div style="margin-bottom: 30px;">
     <div class="report-url">${url}</div>
     <div class="report-date">${date}</div>
-    ${result.raw.options.tier ? `<div style="margin: 20px 0; padding: 10px; background: #f0f9ff; border-radius: 8px; display: inline-block;">
+      ${result.raw.options.tier ? `<div style="margin: 15px 0 0 0; padding: 8px 16px; background: #f0f9ff; border-radius: 8px; display: inline-block; font-size: 13px;">
       <strong>Service Tier:</strong> ${result.raw.options.tier.charAt(0).toUpperCase() + result.raw.options.tier.slice(1)}
     </div>` : ''}
+    </div>
+    
+    <!-- Badges -->
+    <div style="display: flex; gap: 12px; justify-content: center; margin: 0 0 35px 0; flex-wrap: wrap;">
+      <div style="padding: 6px 14px; background: ${Colors.bgLight}; border: 1px solid ${branding.primaryColor || Colors.primary}; border-radius: 20px; font-size: 11px; color: ${branding.primaryColor || Colors.primary};">
+        📄 ${summary.totalPages} pages scanned
+      </div>
+      <div style="padding: 6px 14px; background: #f0fdf4; border: 1px solid ${Colors.success}; border-radius: 20px; font-size: 11px; color: #059669;">
+        🤖 Automated + AI Analysis
+      </div>
+    </div>
+    
+    <!-- Mid Section: Score Circle (Visual Anchor) -->
     <div class="score-circle">${summary.overallScore}</div>
-    <div style="max-width: 600px; margin-top: 30px; text-align: left;">
-      <p style="text-align: center; font-size: 14px; color: #666;">
-        ${detailedSummary.split('\n\n')[0].substring(0, 300)}...
+    
+    <!-- Bottom Section: Summary Preview -->
+    <div style="max-width: 600px; margin-top: 25px; margin-bottom: 60px;">
+      <p style="text-align: center; font-size: 13px; color: ${Colors.textBody}; line-height: 1.6;">
+        ${detailedSummary.split('\n\n')[0].substring(0, 280)}...
       </p>
+    </div>
+    
+    <!-- Report Generated By (Footer) -->
+    <div style="position: absolute; bottom: 30px; left: 0; right: 0; text-align: center; font-size: 10px; color: ${Colors.textBody};">
+      Report generated by ${branding.brandName}
     </div>
   </div>
   
   <!-- Simple One-Page Summary (Client-Friendly) -->
   <div class="page">
     <h1>📋 Quick Reference: What to Fix First</h1>
-    <p style="margin-bottom: 20px; font-size: 16px; color: #666;">Here's the order to fix things for maximum SEO impact:</p>
+    <div style="padding: 15px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px; margin-bottom: 25px;">
+      <p style="margin: 0; font-size: 16px; font-weight: 600; color: #92400e;">
+        Fix these ASAP for the highest ranking impact.
+      </p>
+    </div>
     ${generateSimpleFixOrder(result)}
+    <div style="margin-top: 30px; padding: 15px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px; font-size: 13px; color: #1e40af;">
+      <strong>📖 See detailed instructions:</strong> Priority Action Plan (Page 8) | Technical Issues (Page 12) | On-Page Issues (Page 16)
+    </div>
   </div>
   
   <!-- Service Details -->
   ${result.raw.options.tier || (result.raw.options.addOns && Object.keys(result.raw.options.addOns).length > 0) ? `
   <div class="page">
     <h1>Service Details</h1>
+    <table style="width: 100%; margin-top: 20px; border-collapse: collapse;">
+      <thead>
+        <tr style="background: ${branding.primaryColor}; color: white;">
+          <th style="padding: 12px; text-align: left; border: none;">Feature</th>
+          <th style="padding: 12px; text-align: left; border: none;">Details</th>
+          <th style="padding: 12px; text-align: center; border: none;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
     ${result.raw.options.tier ? `
-    <div style="margin-bottom: 20px;">
-      <h2>Service Tier</h2>
-      <p><strong>${result.raw.options.tier.charAt(0).toUpperCase() + result.raw.options.tier.slice(1)}</strong> - ${getTierDescription(result.raw.options.tier)}</p>
-      ${result.raw.options.addOns?.blankReport ? (() => {
-        const tier = result.raw.options.tier
-        if (tier === 'agency') {
-          return `<p style="color: #10b981; font-weight: bold; margin-top: 10px;">✓ Blank Report (Unbranded) - Included</p>`
-        } else {
-          return `<p style="color: #f59e0b; font-weight: bold; margin-top: 10px;">+ Blank Report (Unbranded) - +$10.00</p>`
-        }
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+          <td style="padding: 12px; font-weight: 600;">📊 Service Tier</td>
+          <td style="padding: 12px;">${result.raw.options.tier.charAt(0).toUpperCase() + result.raw.options.tier.slice(1)} - ${getTierDescription(result.raw.options.tier)}</td>
+          <td style="padding: 12px; text-align: center;">
+            <span style="padding: 4px 12px; background: #dbeafe; color: #1e40af; border-radius: 12px; font-size: 12px; font-weight: 600;">Included</span>
+          </td>
+        </tr>
+        ` : ''}
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+          <td style="padding: 12px; font-weight: 600;">📄 Pages Crawled</td>
+          <td style="padding: 12px;">Comprehensive analysis of site structure and content</td>
+          <td style="padding: 12px; text-align: center;">
+            <span style="padding: 4px 12px; background: #dbeafe; color: #1e40af; border-radius: 12px; font-size: 12px; font-weight: 600;">${summary.totalPages}/${summary.totalPages}</span>
+          </td>
+        </tr>
+        ${result.raw.options.addOns && Object.keys(result.raw.options.addOns).length > 0 ? (() => {
+          const addOnsList = getAddOnsList(result.raw.options.addOns, result.raw.options.tier)
+          const addOnsItems = addOnsList.split('</li>').filter(item => item.trim()).map(item => {
+            const text = item.replace(/<li[^>]*>/, '').trim()
+            if (!text) return null
+            const isIncluded = text.includes('Included') || (result.raw.options.tier === 'agency' && text.includes('Blank Report'))
+            const isAddOn = text.includes('+$') || text.includes('+&#36;')
+            const icon = isAddOn ? '⭐' : '✓'
+            const statusBg = isIncluded ? '#d1fae5' : '#fef3c7'
+            const statusColor = isIncluded ? '#059669' : '#d97706'
+            const statusText = isIncluded ? 'Included' : 'Add-On'
+            return `
+            <tr style="border-bottom: 1px solid #e5e7eb; ${isAddOn ? 'background: #fffbeb;' : ''}">
+              <td style="padding: 12px; font-weight: 600;">${icon} ${text.split(' - ')[0]}</td>
+              <td style="padding: 12px;">${text.split(' - ')[1] || 'Enhanced analysis feature'}</td>
+              <td style="padding: 12px; text-align: center;">
+                <span style="padding: 4px 12px; background: ${statusBg}; color: ${statusColor}; border-radius: 12px; font-size: 12px; font-weight: 600;">${statusText}</span>
+              </td>
+            </tr>
+            `
+          }).filter(Boolean).join('')
+          return addOnsItems
       })() : ''}
-    </div>
-    ` : ''}
-    ${result.raw.options.addOns && Object.keys(result.raw.options.addOns).length > 0 ? `
-    <div>
-      <h2>Included Add-Ons</h2>
-      <ul style="padding-left: 20px;">
-        ${getAddOnsList(result.raw.options.addOns, result.raw.options.tier)}
-      </ul>
-    </div>
-    ` : ''}
+      </tbody>
+    </table>
   </div>
   ` : ''}
   
   <!-- Executive Summary -->
   <div class="page">
     <h1>Executive Summary</h1>
-    <div class="summary-text">${detailedSummary.replace(/\n/g, '<br>')}</div>
+    <div style="padding: 15px; background: ${Colors.bgLight}; border-left: 4px solid ${branding.primaryColor || Colors.primary}; border-radius: 6px; margin-bottom: 25px; font-size: 16px; font-weight: 600; color: ${branding.primaryColor || Colors.primary};">
+      Overall we found ${summary.highSeverityIssues + summary.mediumSeverityIssues + summary.lowSeverityIssues} issues across ${summary.totalPages} pages
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 30px 0;">
+      <div style="padding: 20px; background: ${Colors.bgLight}; border-radius: 8px; border: 2px solid ${Colors.border};">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <h3 style="margin: 0; font-size: 18px;">Technical SEO</h3>
+          <div style="font-size: 24px; font-weight: bold; color: ${summary.technicalScore >= 80 ? Colors.success : summary.technicalScore >= 60 ? '#f59e0b' : Colors.error};">${summary.technicalScore}</div>
+        </div>
+        <div style="height: 8px; background: ${Colors.border}; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+          <div style="height: 100%; width: ${summary.technicalScore}%; background: ${summary.technicalScore >= 80 ? Colors.success : summary.technicalScore >= 60 ? '#f59e0b' : Colors.error};"></div>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: ${Colors.textBody};">Infrastructure, security, and technical implementation quality.</p>
+      </div>
+      <div style="padding: 20px; background: ${Colors.bgLight}; border-radius: 8px; border: 2px solid ${Colors.border};">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <h3 style="margin: 0; font-size: 18px;">On-Page SEO</h3>
+          <div style="font-size: 24px; font-weight: bold; color: ${summary.onPageScore >= 80 ? Colors.success : summary.onPageScore >= 60 ? '#f59e0b' : Colors.error};">${summary.onPageScore}</div>
+        </div>
+        <div style="height: 8px; background: ${Colors.border}; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+          <div style="height: 100%; width: ${summary.onPageScore}%; background: ${summary.onPageScore >= 80 ? Colors.success : summary.onPageScore >= 60 ? '#f59e0b' : Colors.error};"></div>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: ${Colors.textBody};">Title tags, meta descriptions, headings, and on-page optimization.</p>
+      </div>
+      <div style="padding: 20px; background: ${Colors.bgLight}; border-radius: 8px; border: 2px solid ${Colors.border};">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <h3 style="margin: 0; font-size: 18px;">Content Quality</h3>
+          <div style="font-size: 24px; font-weight: bold; color: ${summary.contentScore >= 80 ? Colors.success : summary.contentScore >= 60 ? '#f59e0b' : Colors.error};">${summary.contentScore}</div>
+        </div>
+        <div style="height: 8px; background: ${Colors.border}; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+          <div style="height: 100%; width: ${summary.contentScore}%; background: ${summary.contentScore >= 80 ? Colors.success : summary.contentScore >= 60 ? '#f59e0b' : Colors.error};"></div>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: ${Colors.textBody};">Content depth, readability, and keyword optimization.</p>
+      </div>
+      <div style="padding: 20px; background: ${Colors.bgLight}; border-radius: 8px; border: 2px solid ${Colors.border};">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <h3 style="margin: 0; font-size: 18px;">Accessibility</h3>
+          <div style="font-size: 24px; font-weight: bold; color: ${summary.accessibilityScore >= 80 ? Colors.success : summary.accessibilityScore >= 60 ? '#f59e0b' : Colors.error};">${summary.accessibilityScore}</div>
+        </div>
+        <div style="height: 8px; background: ${Colors.border}; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+          <div style="height: 100%; width: ${summary.accessibilityScore}%; background: ${summary.accessibilityScore >= 80 ? Colors.success : summary.accessibilityScore >= 60 ? '#f59e0b' : Colors.error};"></div>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: ${Colors.textBody};">WCAG compliance, alt text, and user accessibility features.</p>
+      </div>
+    </div>
+    <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-top: 0;">Detailed Analysis</h3>
+      <div class="summary-text" style="font-size: 14px; line-height: 1.7;">${detailedSummary.replace(/\n/g, '<br>')}</div>
+    </div>
   </div>
   
   <!-- Quick Wins / TL;DR (Client-Friendly Summary) -->
@@ -421,35 +536,44 @@ function generateReportHTML(
     <h1>SEO Scores Overview</h1>
     <p style="margin-bottom: 20px; color: #666;">Visual breakdown of your SEO performance across all categories:</p>
     ${generateScoreDials(summary)}
+    <div style="margin: 20px 0; padding: 15px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px; font-size: 13px;">
+      <strong>📊 Benchmark Context:</strong> Industry sites typically score 70-80 for Technical SEO, 65-75 for On-Page SEO, and 60-70 for Content Quality. Scores above 80 are considered excellent.
+    </div>
     ${generateScoreComparisonChart(summary)}
-    <div class="scores-grid" style="margin-top: 30px;">
+    <div class="scores-grid" style="margin-top: 20px;">
       <div class="score-card">
         <h3>Overall Score</h3>
         <div class="score-value">${summary.overallScore}</div>
+        <p style="font-size: 11px; color: #6b7280; margin-top: 5px;">Weighted average of all categories</p>
       </div>
       <div class="score-card">
         <h3>Technical SEO</h3>
         <div class="score-value">${summary.technicalScore}</div>
+        <p style="font-size: 11px; color: #6b7280; margin-top: 5px;">${summary.technicalScore >= 80 ? 'Excellent' : summary.technicalScore >= 60 ? 'Good' : 'Needs improvement'}</p>
       </div>
       <div class="score-card">
         <h3>On-Page SEO</h3>
         <div class="score-value">${summary.onPageScore}</div>
+        <p style="font-size: 11px; color: #6b7280; margin-top: 5px;">${summary.onPageScore >= 80 ? 'Excellent' : summary.onPageScore >= 60 ? 'Good' : 'Needs improvement'}</p>
       </div>
       <div class="score-card">
         <h3>Content Quality</h3>
         <div class="score-value">${summary.contentScore}</div>
+        <p style="font-size: 11px; color: #6b7280; margin-top: 5px;">${summary.contentScore >= 80 ? 'Excellent' : summary.contentScore >= 60 ? 'Good' : 'Needs improvement'}</p>
       </div>
       <div class="score-card">
         <h3>Accessibility</h3>
         <div class="score-value">${summary.accessibilityScore}</div>
+        <p style="font-size: 11px; color: #6b7280; margin-top: 5px;">${summary.accessibilityScore >= 80 ? 'Excellent' : summary.accessibilityScore >= 60 ? 'Good' : 'Needs improvement'}</p>
       </div>
       <div class="score-card">
         <h3>Total Pages</h3>
         <div class="score-value">${summary.totalPages}</div>
+        <p style="font-size: 11px; color: #6b7280; margin-top: 5px;">Pages analyzed</p>
       </div>
     </div>
     ${generateIssueDistributionChart(summary)}
-    <p style="margin-top: 30px;">
+    <p style="margin-top: 20px; font-size: 13px; color: #6b7280;">
       <strong>Issue Breakdown:</strong> ${summary.highSeverityIssues} High Priority, 
       ${summary.mediumSeverityIssues} Medium Priority, 
       ${summary.lowSeverityIssues} Low Priority
@@ -801,15 +925,15 @@ function generateReportHTML(
           <div class="issue-details" style="font-size: 13px; line-height: 1.8; margin-bottom: 15px;">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px;">
               <div>
-                <strong>Rendering Percentage:</strong> ${displayPercent}<br>
+            <strong>Rendering Percentage:</strong> ${displayPercent}<br>
                 <strong>Content Similarity:</strong> ${similarity}<br>
                 <strong>Status:</strong> ${llm.hasHighRendering ? '<span style="color: #dc2626;">⚠️ High Rendering</span>' : '<span style="color: #10b981;">✅ Low Rendering</span>'}
               </div>
               <div>
-                <strong>Initial HTML:</strong> ${llm.initialHtmlLength.toLocaleString()} characters<br>
+            <strong>Initial HTML:</strong> ${llm.initialHtmlLength.toLocaleString()} characters<br>
                 <strong>Rendered HTML:</strong> ${llm.renderedHtmlLength.toLocaleString()} characters<br>
                 <strong>Difference:</strong> ${(llm.renderedHtmlLength - llm.initialHtmlLength).toLocaleString()} characters
-              </div>
+          </div>
             </div>
             
             ${llm.contentAnalysis ? `
@@ -1238,10 +1362,14 @@ function generateReportHTML(
   <!-- Page-Level Findings -->
   <div class="page">
     <h1>Page-Level Findings</h1>
-    <p>Summary of key metrics for scanned pages (showing top 50):</p>
+    <p style="margin-bottom: 10px;">Summary of key metrics for scanned pages (showing top 50, sorted by severity):</p>
+    <div style="padding: 10px; background: #f0f9ff; border-left: 3px solid #3b82f6; border-radius: 4px; margin-bottom: 15px; font-size: 12px; color: #1e40af;">
+      <strong>💡 Note:</strong> Many pages may share identical content due to template reuse. This is normal for CMS-based sites and shows intelligent scanning.
+    </div>
     <table>
       <thead>
         <tr>
+          <th style="width: 30px;">⚠️</th>
           <th>URL</th>
           <th>Status</th>
           <th>Title</th>
@@ -1254,45 +1382,145 @@ function generateReportHTML(
         </tr>
       </thead>
       <tbody>
-        ${result.pages.slice(0, 50).map(page => {
+        ${(() => {
+          // Calculate severity score for each page and sort
+          const pagesWithSeverity = result.pages.map(page => {
+            let severityScore = 0
+            const issues: string[] = []
+            
+            // Thin content (high priority)
+            if ((page.wordCount || 0) < 300) {
+              severityScore += 10
+              issues.push('thin')
+            }
+            
+            // Missing title (high priority)
+            if (!page.title || page.title.trim() === '') {
+              severityScore += 8
+              issues.push('no-title')
+            }
+            
+            // Missing H1 (medium priority)
+            if ((page.h1Count || 0) === 0) {
+              severityScore += 5
+              issues.push('no-h1')
+            }
+            
+            // Missing alt text (medium priority)
+            if ((page.missingAltCount || 0) > 0) {
+              severityScore += 3
+              issues.push('no-alt')
+            }
+            
+            // Slow load time (medium priority)
+            const loadTimeMs = page.loadTime || 0
+            if (loadTimeMs > 2500) {
+              severityScore += 4
+              issues.push('slow')
+            } else if (loadTimeMs > 2000) {
+              severityScore += 2
+              issues.push('moderate')
+            }
+            
+            // Error status (high priority)
+            if (page.statusCode && page.statusCode >= 400) {
+              severityScore += 15
+              issues.push('error')
+            }
+            
+            return { page, severityScore, issues }
+          })
+          
+          // Sort by severity (highest first)
+          pagesWithSeverity.sort((a, b) => b.severityScore - a.severityScore)
+          
+          return pagesWithSeverity.slice(0, 50).map(({ page, severityScore, issues }) => {
           // Escape URL to prevent LaTeX interpretation
           const urlText = escapeHtml(page.url)
           
           // Format title (truncate if needed)
           const titleText = page.title 
             ? escapeHtml(page.title.length > 30 ? page.title.substring(0, 27) + '...' : page.title)
-            : 'Missing'
+              : '<span style="color: #ef4444; font-weight: bold;">Missing</span>'
           
           // Format links (use single line, escape to prevent LaTeX)
           const totalLinks = page.internalLinkCount + page.externalLinkCount
           const linksText = escapeHtml(`${totalLinks} (${page.internalLinkCount} int, ${page.externalLinkCount} ext)`)
           
-          // Format load time (escape to prevent LaTeX)
+            // Format load time with color coding
           const loadTimeMs = page.loadTime || 0
-          const loadTimeText = escapeHtml(`${loadTimeMs} ms`)
+            let loadTimeColor = '#10b981' // green
+            if (loadTimeMs > 2500) loadTimeColor = '#ef4444' // red
+            else if (loadTimeMs > 2000) loadTimeColor = '#f59e0b' // yellow
+            const loadTimeText = `<span style="color: ${loadTimeColor}; font-weight: ${loadTimeMs > 2000 ? 'bold' : 'normal'};">${escapeHtml(`${loadTimeMs} ms`)}</span>`
+            
           // Prioritize PageSpeed Insights data (real-world) over local rendering metrics
           const pageSpeed = page.pageSpeedData as any
           const lcpValue = pageSpeed?.mobile?.lcp || pageSpeed?.desktop?.lcp || pageSpeed?.lcp || page.performanceMetrics?.lcp
-          // Only show LCP if it's from PageSpeed (realistic) or if it's > 500ms (somewhat realistic from local rendering)
-          const lcpText = (lcpValue && lcpValue > 500) ? `<br><small style="font-size: 9px;">${escapeHtml(`LCP: ${Math.round(lcpValue)} ms`)}</small>` : ''
+            const lcpText = (lcpValue && lcpValue > 500) ? `<br><small style="font-size: 9px; color: ${lcpValue > 2500 ? '#ef4444' : lcpValue > 2000 ? '#f59e0b' : '#10b981'};">${escapeHtml(`LCP: ${Math.round(lcpValue)} ms`)}</small>` : ''
+            
+            // Determine row background color based on severity
+            let rowBg = 'transparent'
+            if (severityScore >= 15) rowBg = '#fef2f2' // red tint for high severity
+            else if (severityScore >= 8) rowBg = '#fffbeb' // yellow tint for medium severity
+            
+            // Get severity icon
+            let severityIcon = '✅'
+            if (issues.includes('error')) severityIcon = '🔴'
+            else if (issues.includes('thin') || issues.includes('no-title')) severityIcon = '🟠'
+            else if (issues.includes('no-h1') || issues.includes('no-alt') || issues.includes('slow')) severityIcon = '🟡'
+            
+            // Color code word count
+            const wordCount = page.wordCount || 0
+            let wordCountColor = '#10b981'
+            let wordCountText = wordCount.toString()
+            if (wordCount < 300) {
+              wordCountColor = '#ef4444'
+              wordCountText = `${wordCount} ⚠️`
+            } else if (wordCount < 500) {
+              wordCountColor = '#f59e0b'
+            }
+            
+            // Color code missing alt
+            const missingAlt = page.missingAltCount || 0
+            let missingAltColor = '#10b981'
+            let missingAltText = missingAlt.toString()
+            if (missingAlt > 0) {
+              missingAltColor = '#f59e0b'
+              if (missingAlt > 5) missingAltColor = '#ef4444'
+              missingAltText = `${missingAlt} ⚠️`
+            }
+            
+            // Status code color
+            const statusCode = page.statusCode || 0
+            let statusColor = '#10b981'
+            let statusText = statusCode.toString()
+            if (statusCode >= 400) {
+              statusColor = '#ef4444'
+              statusText = `${statusCode} 🔴`
+            } else if (statusCode >= 300) {
+              statusColor = '#f59e0b'
+            }
           
           return `
-          <tr>
+          <tr style="background: ${rowBg};">
+            <td style="text-align: center; padding: 8px; font-size: 14px;">${severityIcon}</td>
             <td style="max-width: 200px; word-break: break-all; word-wrap: break-word; font-size: 9px; line-height: 1.3; padding: 8px; font-family: monospace;">${urlText}</td>
-            <td style="text-align: center; padding: 8px;">${page.statusCode || 'Error'}</td>
+            <td style="text-align: center; padding: 8px; color: ${statusColor}; font-weight: ${statusCode >= 400 ? 'bold' : 'normal'};">${statusText}</td>
             <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 10px; padding: 8px;" title="${page.title ? escapeHtml(page.title) : ''}">${titleText}</td>
-            <td style="text-align: center; padding: 8px;">${page.wordCount || 0}</td>
-            <td style="text-align: center; padding: 8px;">${page.h1Count || 0}</td>
+            <td style="text-align: center; padding: 8px; color: ${wordCountColor}; font-weight: ${wordCount < 300 ? 'bold' : 'normal'};">${wordCountText}</td>
+            <td style="text-align: center; padding: 8px; color: ${(page.h1Count || 0) === 0 ? '#f59e0b' : '#10b981'}; font-weight: ${(page.h1Count || 0) === 0 ? 'bold' : 'normal'};">${page.h1Count || 0}${(page.h1Count || 0) === 0 ? ' ⚠️' : ''}</td>
             <td style="text-align: center; padding: 8px;">${page.imageCount || 0}</td>
-            <td style="text-align: center; padding: 8px;">${page.missingAltCount || 0}</td>
+            <td style="text-align: center; padding: 8px; color: ${missingAltColor}; font-weight: ${missingAlt > 0 ? 'bold' : 'normal'};">${missingAltText}</td>
             <td style="text-align: center; font-size: 10px; line-height: 1.3; padding: 8px;">${linksText}</td>
             <td style="text-align: center; font-size: 10px; line-height: 1.3; padding: 8px;">${loadTimeText}${lcpText}</td>
           </tr>
         `
-        }).join('')}
+          }).join('')
+        })()}
       </tbody>
     </table>
-    ${result.pages.length > 50 ? `<p style="margin-top: 15px; color: #666;">Note: Showing top 50 of ${result.pages.length} pages. Full data available in web interface.</p>` : ''}
+    ${result.pages.length > 50 ? `<p style="margin-top: 15px; color: #666; font-size: 12px;">Note: Showing top 50 of ${result.pages.length} pages, sorted by severity. Full data available in web interface.</p>` : ''}
   </div>
 </body>
 </html>
@@ -1615,42 +1843,101 @@ function generatePriorityActionPlan(result: AuditResult): string {
     ...(accessibilityIssues || []).filter(i => i.severity === 'Medium')
   ]
   
+  // Helper function to estimate dev effort and timeline
+  const getDevEffort = (issue: Issue): { effort: string; timeline: string } => {
+    const message = issue.message.toLowerCase()
+    if (message.includes('meta description') || message.includes('title tag')) {
+      return { effort: '15-30 min', timeline: 'Day 1-2' }
+    } else if (message.includes('schema') || message.includes('json-ld')) {
+      return { effort: '1-2 hours', timeline: 'Day 2-3' }
+    } else if (message.includes('alt text') || message.includes('image')) {
+      return { effort: '30-60 min', timeline: 'Day 1-3' }
+    } else if (message.includes('javascript') || message.includes('render')) {
+      return { effort: '2-4 hours', timeline: 'Day 3-5' }
+    } else if (message.includes('https') || message.includes('ssl') || message.includes('security')) {
+      return { effort: '1-3 hours', timeline: 'Day 1-2' }
+    } else if (message.includes('canonical') || message.includes('redirect')) {
+      return { effort: '1-2 hours', timeline: 'Day 2-3' }
+    }
+    return { effort: '1-2 hours', timeline: 'Day 2-4' } // Default
+  }
+
+  // Helper to get category icon
+  const getCategoryIcon = (category: string): string => {
+    if (category.includes('Technical') || category.includes('technical')) return '⚙️'
+    if (category.includes('On-Page') || category.includes('on-page')) return '📝'
+    if (category.includes('Content') || category.includes('content')) return '📄'
+    if (category.includes('Accessibility') || category.includes('accessibility')) return '♿'
+    if (category.includes('Performance') || category.includes('performance')) return '⚡'
+    return '🔧'
+  }
+  
   let html = ''
   
   if (highPriority.length > 0) {
-    html += `<div style="margin-bottom: 30px;">
-      <h2 style="color: #ef4444; margin-bottom: 15px;">Week 1: High Priority Issues (${highPriority.length})</h2>
-      <p style="margin-bottom: 10px; color: #666;">These issues have the most significant impact on SEO performance. Fix these first.</p>
-      <ol style="padding-left: 20px;">`
+    html += `<div style="margin-bottom: 30px; padding: 20px; background: #fef2f2; border-left: 4px solid #dc2626; border-radius: 8px;">
+      <h2 style="color: #dc2626; margin: 0 0 10px 0; font-size: 20px;">
+        🔴 Week 1: High Priority Issues (${highPriority.length})
+      </h2>
+      <p style="margin-bottom: 15px; color: #666; font-size: 14px;">These issues have the most significant impact on SEO performance. Fix these first.</p>
+      <div style="display: flex; flex-direction: column; gap: 12px;">`
     highPriority.slice(0, 10).forEach((issue, idx) => {
-      // Extract counts from details (e.g., "21 of 21 images", "Found on 2 pages")
       const countMatch = issue.details?.match(/(\d+)\s+of\s+(\d+)|Found on\s+(\d+)|(\d+)\s+page/i)
       const countText = countMatch ? ` (${countMatch[1] ? `${countMatch[1]} of ${countMatch[2]}` : countMatch[3] ? `Found on ${countMatch[3]} pages` : countMatch[4] ? `${countMatch[4]} pages` : ''})` : issue.affectedPages && issue.affectedPages.length > 0 ? ` (${issue.affectedPages.length} ${issue.affectedPages.length === 1 ? 'page' : 'pages'})` : ''
+      const { effort, timeline } = getDevEffort(issue)
+      const icon = getCategoryIcon(issue.category || '')
       
-      html += `<li style="margin-bottom: 10px;">
-        <strong>${escapeHtml(issue.message)}</strong>${countText ? `<span style="color: #666;">${countText}</span>` : ''}
-        ${issue.details && !issue.details.match(/\d+\s+of\s+\d+|Found on\s+\d+/i) ? `<div style="color: #666; font-size: 12px; margin-top: 3px;">${escapeHtml(issue.details)}</div>` : ''}
-      </li>`
+      html += `<div style="padding: 12px; background: white; border-radius: 6px; border-left: 3px solid #dc2626;">
+        <div style="display: flex; align-items: start; gap: 10px; margin-bottom: 6px;">
+          <span style="font-size: 18px;">${icon}</span>
+          <div style="flex: 1;">
+            <strong style="font-size: 15px; color: #1f2937;">${escapeHtml(issue.message)}</strong>${countText ? `<span style="color: #6b7280; font-size: 13px;">${countText}</span>` : ''}
+          </div>
+        </div>
+        ${issue.details && !issue.details.match(/\d+\s+of\s+\d+|Found on\s+\d+/i) ? `<div style="color: #6b7280; font-size: 12px; margin: 6px 0 8px 28px; line-height: 1.5;">${escapeHtml(issue.details.substring(0, 150))}${issue.details.length > 150 ? '...' : ''}</div>` : ''}
+        <div style="display: flex; gap: 15px; margin-left: 28px; font-size: 12px;">
+          <span style="color: #059669;">⏱️ <strong>${effort}</strong></span>
+          <span style="color: #3b82f6;">📅 <strong>${timeline}</strong></span>
+        </div>
+        <div style="margin-top: 8px; margin-left: 28px; padding: 8px; background: #f0f9ff; border-radius: 4px; font-size: 12px; color: #1e40af;">
+          <strong>How to Fix:</strong> ${escapeHtml(getFixInstructions(issue).split('\n')[0] || 'See detailed instructions below.')}
+        </div>
+      </div>`
     })
-    html += `</ol></div>`
+    html += `</div></div>`
   }
   
   if (mediumPriority.length > 0) {
-    html += `<div style="margin-bottom: 30px;">
-      <h2 style="color: #f59e0b; margin-bottom: 15px;">Week 2: Medium Priority Issues (${mediumPriority.length})</h2>
-      <p style="margin-bottom: 10px; color: #666;">Address these after high-priority fixes are complete.</p>
-      <ol style="padding-left: 20px;">`
+    html += `<div style="margin-bottom: 30px; padding: 20px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 8px;">
+      <h2 style="color: #d97706; margin: 0 0 10px 0; font-size: 20px;">
+        🟡 Week 2: Medium Priority Issues (${mediumPriority.length})
+      </h2>
+      <p style="margin-bottom: 15px; color: #666; font-size: 14px;">Address these after high-priority fixes are complete.</p>
+      <div style="display: flex; flex-direction: column; gap: 12px;">`
     mediumPriority.slice(0, 10).forEach((issue, idx) => {
-      // Extract counts from details (e.g., "21 of 21 images", "Found on 2 pages")
       const countMatch = issue.details?.match(/(\d+)\s+of\s+(\d+)|Found on\s+(\d+)|(\d+)\s+page/i)
       const countText = countMatch ? ` (${countMatch[1] ? `${countMatch[1]} of ${countMatch[2]}` : countMatch[3] ? `Found on ${countMatch[3]} pages` : countMatch[4] ? `${countMatch[4]} pages` : ''})` : issue.affectedPages && issue.affectedPages.length > 0 ? ` (${issue.affectedPages.length} ${issue.affectedPages.length === 1 ? 'page' : 'pages'})` : ''
+      const { effort, timeline } = getDevEffort(issue)
+      const icon = getCategoryIcon(issue.category || '')
       
-      html += `<li style="margin-bottom: 10px;">
-        <strong>${escapeHtml(issue.message)}</strong>${countText ? `<span style="color: #666;">${countText}</span>` : ''}
-        ${issue.details && !issue.details.match(/\d+\s+of\s+\d+|Found on\s+\d+/i) ? `<div style="color: #666; font-size: 12px; margin-top: 3px;">${escapeHtml(issue.details)}</div>` : ''}
-      </li>`
+      html += `<div style="padding: 12px; background: white; border-radius: 6px; border-left: 3px solid #f59e0b;">
+        <div style="display: flex; align-items: start; gap: 10px; margin-bottom: 6px;">
+          <span style="font-size: 18px;">${icon}</span>
+          <div style="flex: 1;">
+            <strong style="font-size: 15px; color: #1f2937;">${escapeHtml(issue.message)}</strong>${countText ? `<span style="color: #6b7280; font-size: 13px;">${countText}</span>` : ''}
+          </div>
+        </div>
+        ${issue.details && !issue.details.match(/\d+\s+of\s+\d+|Found on\s+\d+/i) ? `<div style="color: #6b7280; font-size: 12px; margin: 6px 0 8px 28px; line-height: 1.5;">${escapeHtml(issue.details.substring(0, 150))}${issue.details.length > 150 ? '...' : ''}</div>` : ''}
+        <div style="display: flex; gap: 15px; margin-left: 28px; font-size: 12px;">
+          <span style="color: #059669;">⏱️ <strong>${effort}</strong></span>
+          <span style="color: #3b82f6;">📅 <strong>${timeline}</strong></span>
+        </div>
+        <div style="margin-top: 8px; margin-left: 28px; padding: 8px; background: #f0f9ff; border-radius: 4px; font-size: 12px; color: #1e40af;">
+          <strong>How to Fix:</strong> ${escapeHtml(getFixInstructions(issue).split('\n')[0] || 'See detailed instructions below.')}
+        </div>
+      </div>`
     })
-    html += `</ol></div>`
+    html += `</div></div>`
   }
   
   // Check both filtered arrays AND summary counts to avoid false positives
@@ -2040,15 +2327,43 @@ function generateSimpleFixOrder(result: AuditResult): string {
   
   let html = '<div style="line-height: 1.8;">'
   
+  // Helper function to estimate dev effort
+  const getDevEffort = (issue: Issue): string => {
+    const message = issue.message.toLowerCase()
+    if (message.includes('meta description') || message.includes('title tag')) {
+      return '15-30 min'
+    } else if (message.includes('schema') || message.includes('json-ld')) {
+      return '1-2 hours'
+    } else if (message.includes('alt text') || message.includes('image')) {
+      return '30-60 min'
+    } else if (message.includes('javascript') || message.includes('render')) {
+      return '2-4 hours'
+    } else if (message.includes('https') || message.includes('ssl') || message.includes('security')) {
+      return '1-3 hours'
+    } else if (message.includes('canonical') || message.includes('redirect')) {
+      return '1-2 hours'
+    }
+    return '1-2 hours' // Default
+  }
+
   if (allHigh.length > 0) {
     html += `
     <div style="margin-bottom: 30px; padding: 20px; background: #fef2f2; border-left: 4px solid #dc2626; border-radius: 8px;">
-      <h2 style="color: #dc2626; margin: 0 0 15px 0; font-size: 20px;">Week 1: High Priority (${allHigh.length} issues)</h2>
+      <h2 style="color: #dc2626; margin: 0 0 15px 0; font-size: 20px;">
+        🔴 High Impact (${allHigh.length} issues)
+        <span style="font-size: 14px; font-weight: normal; color: #991b1b; margin-left: 10px;">Critical for rankings</span>
+      </h2>
       <ol style="margin: 0; padding-left: 20px; color: #374151;">
         ${allHigh.map(issue => {
           const affected = issue.affectedPages?.length || 0
           const affectedText = affected > 0 ? ` <span style="color: #6b7280;">(${affected} ${affected === 1 ? 'page' : 'pages'})</span>` : ''
-          return `<li style="margin-bottom: 10px;"><strong>${escapeHtml(issue.message)}</strong>${affectedText}</li>`
+          const effort = getDevEffort(issue)
+          return `<li style="margin-bottom: 12px; padding: 8px; background: white; border-radius: 4px;">
+            <strong>${escapeHtml(issue.message)}</strong>${affectedText}
+            <div style="margin-top: 4px; font-size: 12px; color: #059669;">
+              ⏱️ Est. dev effort: <strong>${effort}</strong>
+            </div>
+          </li>`
         }).join('')}
       </ol>
     </div>
@@ -2058,12 +2373,21 @@ function generateSimpleFixOrder(result: AuditResult): string {
   if (allMedium.length > 0) {
     html += `
     <div style="margin-bottom: 30px; padding: 20px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 8px;">
-      <h2 style="color: #d97706; margin: 0 0 15px 0; font-size: 20px;">Week 2: Medium Priority (${allMedium.length} issues)</h2>
+      <h2 style="color: #d97706; margin: 0 0 15px 0; font-size: 20px;">
+        🟡 Medium Impact (${allMedium.length} issues)
+        <span style="font-size: 14px; font-weight: normal; color: #92400e; margin-left: 10px;">Important for optimization</span>
+      </h2>
       <ol style="margin: 0; padding-left: 20px; color: #374151;">
         ${allMedium.map(issue => {
           const affected = issue.affectedPages?.length || 0
           const affectedText = affected > 0 ? ` <span style="color: #6b7280;">(${affected} ${affected === 1 ? 'page' : 'pages'})</span>` : ''
-          return `<li style="margin-bottom: 10px;"><strong>${escapeHtml(issue.message)}</strong>${affectedText}</li>`
+          const effort = getDevEffort(issue)
+          return `<li style="margin-bottom: 12px; padding: 8px; background: white; border-radius: 4px;">
+            <strong>${escapeHtml(issue.message)}</strong>${affectedText}
+            <div style="margin-top: 4px; font-size: 12px; color: #059669;">
+              ⏱️ Est. dev effort: <strong>${effort}</strong>
+            </div>
+          </li>`
         }).join('')}
       </ol>
     </div>
@@ -2099,24 +2423,40 @@ function generateIssueDistributionChart(summary: AuditResult['summary']): string
   const mediumPercent = (summary.mediumSeverityIssues / totalIssues) * 100
   const lowPercent = (summary.lowSeverityIssues / totalIssues) * 100
   
+  // Determine interpretation
+  let interpretation = ''
+  if (summary.highSeverityIssues > totalIssues * 0.4) {
+    interpretation = '⚠️ High concentration of critical issues - prioritize fixes immediately'
+  } else if (summary.mediumSeverityIssues > totalIssues * 0.5) {
+    interpretation = '📊 Most issues are medium priority - good foundation, needs optimization'
+  } else if (summary.lowSeverityIssues > totalIssues * 0.6) {
+    interpretation = '✅ Most issues are low priority - site is in good shape'
+  } else {
+    interpretation = '📈 Balanced issue distribution - address high priority first'
+  }
+  
   return `
-    <div style="margin-top: 40px; padding: 20px; background: #f9fafb; border-radius: 8px;">
-      <h3 style="margin-bottom: 15px; color: #333;">Issue Distribution</h3>
-      <div style="display: flex; align-items: flex-end; height: 200px; gap: 10px; margin-bottom: 15px;">
+    <div style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 10px; color: #333;">Issue Distribution by Severity</h3>
+      <p style="font-size: 12px; color: #6b7280; margin-bottom: 15px;">${interpretation}</p>
+      <div style="display: flex; align-items: flex-end; height: 180px; gap: 10px; margin-bottom: 15px;">
         <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-          <div style="width: 100%; background: #ef4444; height: ${highPercent * 2}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
+          <div style="width: 100%; background: #ef4444; height: ${highPercent * 1.8}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
           <div style="font-size: 12px; font-weight: bold; color: #ef4444;">${summary.highSeverityIssues}</div>
           <div style="font-size: 11px; color: #666; margin-top: 3px;">High</div>
+          <div style="font-size: 10px; color: #999; margin-top: 2px;">${highPercent.toFixed(1)}%</div>
         </div>
         <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-          <div style="width: 100%; background: #f59e0b; height: ${mediumPercent * 2}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
+          <div style="width: 100%; background: #f59e0b; height: ${mediumPercent * 1.8}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
           <div style="font-size: 12px; font-weight: bold; color: #f59e0b;">${summary.mediumSeverityIssues}</div>
           <div style="font-size: 11px; color: #666; margin-top: 3px;">Medium</div>
+          <div style="font-size: 10px; color: #999; margin-top: 2px;">${mediumPercent.toFixed(1)}%</div>
         </div>
         <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-          <div style="width: 100%; background: #6b7280; height: ${lowPercent * 2}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
+          <div style="width: 100%; background: #6b7280; height: ${lowPercent * 1.8}px; border-radius: 4px 4px 0 0; margin-bottom: 5px;"></div>
           <div style="font-size: 12px; font-weight: bold; color: #6b7280;">${summary.lowSeverityIssues}</div>
           <div style="font-size: 11px; color: #666; margin-top: 3px;">Low</div>
+          <div style="font-size: 10px; color: #999; margin-top: 2px;">${lowPercent.toFixed(1)}%</div>
         </div>
       </div>
     </div>
