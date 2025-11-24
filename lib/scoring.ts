@@ -730,9 +730,9 @@ export function calculateAccessibilityScore(
     i.category === 'Technical' && matchesIssue(i, ['viewport', 'mobile'])
   )
   viewportIssues.forEach(issue => {
-    if (issue.severity === 'High') score -= 15 // Major penalty - viewport is critical for accessibility
-    else if (issue.severity === 'Medium') score -= 8
-    else score -= 3
+    if (issue.severity === 'High') score -= 10 // Reduced from 15 - viewport is critical but shouldn't destroy score
+    else if (issue.severity === 'Medium') score -= 5
+    else score -= 2
   })
   
   // Also check actual page data for missing viewport
@@ -741,7 +741,7 @@ export function calculateAccessibilityScore(
   if (pagesWithoutViewport > 0 && viewportIssues.length === 0) {
     // Only deduct if viewport issue wasn't already counted as an issue
     const missingViewportRate = pagesWithoutViewport / pages.length
-    score -= Math.min(15, missingViewportRate * 15) // Up to 15 points for missing viewport
+    score -= Math.min(10, missingViewportRate * 10) // Reduced from 15
   }
   
   // Alt text issues (-40 points max) - CRITICAL: High severity
@@ -749,8 +749,8 @@ export function calculateAccessibilityScore(
     i.category === 'Accessibility' && matchesIssue(i, ['alt', 'alt text', 'missing alt', 'image alt'])
   )
   altIssues.forEach(issue => {
-    if (issue.severity === 'High') score -= 10
-    else if (issue.severity === 'Medium') score -= 4
+    if (issue.severity === 'High') score -= 8 // Reduced from 10
+    else if (issue.severity === 'Medium') score -= 3
     else score -= 1
   })
   
