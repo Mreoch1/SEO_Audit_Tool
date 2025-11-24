@@ -1757,7 +1757,8 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
       httpVersion,
       compression,
       rendered.h1Data, // CRITICAL FIX: Pass H1s extracted from rendered DOM
-      rendered.schemaScripts // CRITICAL FIX: Pass schema scripts for JS-injected schema detection
+      rendered.schemaScripts, // CRITICAL FIX: Pass schema scripts for JS-injected schema detection
+      rendered.renderedTitle // CRITICAL FIX: Pass rendered title for accurate title extraction
     )
 
     // Wait for PageSpeed data and add it
@@ -1937,12 +1938,18 @@ async function parseHtmlWithRenderer(
   httpVersion?: PageData['httpVersion'],
   compression?: PageData['compression'],
   h1Data?: RenderedPageData['h1Data'],
-  schemaScripts?: string[] // CRITICAL FIX: JSON-LD schema scripts from rendered DOM
+  schemaScripts?: string[], // CRITICAL FIX: JSON-LD schema scripts from rendered DOM
+  renderedTitle?: string // CRITICAL FIX: Title extracted from rendered DOM
 ): Promise<PageData> {
   // CRITICAL FIX #11: Parse using rendered HTML (not initial HTML) for accurate content extraction
   // Parse basic HTML elements (title, meta, headers, etc.) from rendered content
   // CRITICAL FIX: Pass schema scripts for JS-injected schema detection
   const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType, schemaScripts || [])
+  
+  // CRITICAL FIX: Override title with rendered title if available (handles JS-rendered titles)
+  if (renderedTitle && renderedTitle.trim()) {
+    basicData.title = renderedTitle.trim()
+  }
 
   // CRITICAL FIX: Use H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)
   // Try multiple methods and use whichever finds H1s

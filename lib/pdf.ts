@@ -528,7 +528,7 @@ function generateReportHTML(
   <div class="page">
     <h1>Priority Action Plan</h1>
     <p style="margin-bottom: 20px;">Address issues in this order for maximum SEO impact:</p>
-    ${generatePriorityActionPlan(result)}
+    ${generatePriorityActionPlan(result, branding)}
   </div>
   
   <!-- Scores Overview -->
@@ -1987,7 +1987,7 @@ function getFixInstructions(issue: { message: string; details?: string; category
 /**
  * Generate priority action plan based on issues
  */
-function generatePriorityActionPlan(result: AuditResult): string {
+function generatePriorityActionPlan(result: AuditResult, branding: BrandingData): string {
   const { 
     technicalIssues = [], 
     onPageIssues = [], 

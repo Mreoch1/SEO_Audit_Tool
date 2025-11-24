@@ -62,7 +62,16 @@ export function analyzeSchema(html: string, url: string, renderedDomScripts?: st
   allJsonLdContent.forEach(script => {
     try {
       // Extract JSON content more carefully
-      const jsonContent = script.replace(/<script[^>]*>([\s\S]*?)<\/script>/i, '$1').trim()
+      // If it's from rendered DOM, it's already JSON string (not wrapped in script tags)
+      // If it's from initial HTML, it may be wrapped in script tags
+      let jsonContent: string
+      if (script.includes('<script')) {
+        // From initial HTML - extract from script tag
+        jsonContent = script.replace(/<script[^>]*>([\s\S]*?)<\/script>/i, '$1').trim()
+      } else {
+        // From rendered DOM - already JSON string
+        jsonContent = script.trim()
+      }
       // Remove any leading/trailing whitespace and comments
       const cleanedJson = jsonContent.replace(/\/\*[\s\S]*?\*\//g, '').trim()
       if (!cleanedJson) return // Skip empty scripts

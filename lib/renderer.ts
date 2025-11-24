@@ -46,6 +46,7 @@ export interface RenderedPageData {
     h1Count: number
     h1Text: string[]
   }
+  renderedTitle?: string // CRITICAL FIX: Page title extracted from rendered DOM
   initialHtml?: string // CRITICAL FIX: Initial HTML for rendering percentage calculation
   schemaScripts?: string[] // CRITICAL FIX: JSON-LD schema scripts extracted from rendered DOM
 }
@@ -416,6 +417,21 @@ export async function renderPage(
         linkData = { internalLinkCount: 0, externalLinkCount: 0, links: [] }
       }
 
+      // CRITICAL FIX: Extract title from rendered DOM (handles JS-rendered titles)
+      if (!browserInstance || !browserInstance.isConnected()) {
+        throw new Error('Browser disconnected during title extraction')
+      }
+
+      let renderedTitle: string | undefined
+      try {
+        renderedTitle = await page.evaluate(() => {
+          return document.title || ''
+        })
+      } catch (error: any) {
+        console.warn('[Renderer] Title extraction error:', error?.message || error)
+        renderedTitle = undefined
+      }
+
       // CRITICAL FIX: Extract H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)
       if (!browserInstance || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected during H1 extraction')
@@ -470,6 +486,7 @@ export async function renderPage(
         imageData,
         linkData,
         h1Data, // CRITICAL FIX: H1s extracted from rendered DOM
+        renderedTitle, // CRITICAL FIX: Title extracted from rendered DOM
         schemaScripts // CRITICAL FIX: JSON-LD schema scripts extracted from rendered DOM
       }
     } catch (error: any) {
