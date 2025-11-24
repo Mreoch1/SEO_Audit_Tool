@@ -14,6 +14,11 @@
  *   --noAddOns     Disable all add-ons
  */
 
+// CRITICAL FIX: Load environment variables from .env.local
+import { config } from 'dotenv'
+import { resolve } from 'path'
+config({ path: resolve(process.cwd(), '.env.local') })
+
 import { prisma } from '../lib/db'
 import { runAudit, AuditOptions } from '../lib/seoAudit'
 import { generatePDF } from '../lib/pdf'

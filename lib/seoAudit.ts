@@ -1998,7 +1998,13 @@ async function parseHtmlWithRenderer(
   
   // CRITICAL FIX: Override title with rendered title if available (handles JS-rendered titles)
   if (renderedTitle && renderedTitle.trim()) {
-    basicData.title = renderedTitle.trim()
+    const trimmedTitle = renderedTitle.trim()
+    basicData.title = trimmedTitle
+    console.log(`[ParseHTML] ✅ Using rendered title: "${trimmedTitle}"`)
+  } else if (basicData.title) {
+    console.log(`[ParseHTML] Using parsed title: "${basicData.title}"`)
+  } else {
+    console.warn(`[ParseHTML] ⚠️ No title found for ${url}`)
   }
 
   // CRITICAL FIX: Use H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)

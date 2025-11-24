@@ -1,0 +1,20 @@
+{
+  "score": 3.5,
+  "issues": [
+    {
+      "category": "Core Web Vitals",
+      "severity": "High",
+      "symptom": "No PageSpeed data for any pages (0/20)",
+      "rootCause": "PageSpeed Insights API failing or not configured, or main page not identified correctly",
+      "fix": "Check API key, quota, error handling, ensure main page is identified correctly, and verify API is called"
+    },
+    {
+      "category": "Title Extraction",
+      "severity": "High",
+      "symptom": "Only 3 unique titles for 20 pages (likely template reuse or extraction error)",
+      "rootCause": "Title extraction from initial HTML instead of rendered DOM",
+      "fix": "Extract titles from rendered DOM using Puppeteer"
+    }
+  ],
+  "clientReview": "\n📋 CLIENT-FACING REVIEW\n════════════════════════════════════════════════════════════\n\nOverall Assessment: Poor\n\n⚠️  Concerns:\n   - Core Web Vitals data is missing (critical for performance analysis)\n   - Schema detection may have false positives\n\n"
+}

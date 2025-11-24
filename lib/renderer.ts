@@ -436,9 +436,27 @@ export async function renderPage(
           await page.waitForTimeout(checkInterval)
           const currentTitle = await page.evaluate(() => {
             // Try multiple methods to get title
-            return document.title || 
-                   (document.querySelector('title')?.textContent || '').trim() ||
-                   (document.querySelector('meta[property="og:title"]')?.getAttribute('content') || '').trim()
+            // CRITICAL FIX: Check for dynamic title updates (Next.js, React Router, etc.)
+            // Some sites update title after navigation or data loading
+            let title = document.title || ''
+            
+            // If no title in document.title, try other methods
+            if (!title || title.trim().length === 0) {
+              const titleTag = document.querySelector('title')
+              if (titleTag) {
+                title = titleTag.textContent?.trim() || ''
+              }
+            }
+            
+            // Fallback to og:title if still no title
+            if (!title || title.trim().length === 0) {
+              const ogTitle = document.querySelector('meta[property="og:title"]')
+              if (ogTitle) {
+                title = ogTitle.getAttribute('content')?.trim() || ''
+              }
+            }
+            
+            return title
           })
           
           if (currentTitle && currentTitle.length > 0) {
@@ -447,12 +465,20 @@ export async function renderPage(
               if (stableCount >= 2) {
                 // Title is stable
                 renderedTitle = currentTitle
+                console.log(`[Renderer] ✅ Title extracted and stable: "${currentTitle}" (after ${i + 1} checks)`)
                 break
               }
             } else {
               stableCount = 0
               previousTitle = currentTitle
+              // Log title changes for debugging
+              if (i > 0) {
+                console.log(`[Renderer] Title changed: "${previousTitle}" → "${currentTitle}" (check ${i + 1})`)
+              }
             }
+          } else if (i === 0) {
+            // Log if title is empty on first check
+            console.warn(`[Renderer] ⚠️ Title is empty on first check for ${url}`)
           }
         }
         // If title never stabilized, use the last non-empty value

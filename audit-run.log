@@ -1,0 +1,392 @@
+
+🔍 Starting SEO audit for: https://linear.app
+📧 Will email report to: test@example.com
+📊 Tier: standard
+🏆 Competitor URLs (3): https://www.notion.so, https://www.atlassian.com, https://www.taskade.com
+✨ Add-ons: Competitor Analysis
+
+✅ Database and SMTP settings verified
+
+📝 Creating audit record...
+✅ Audit created with ID: cmido9apq0000pi0djk737kco
+
+🔍 Running audit (this may take a few minutes)...
+   This will crawl and analyze the website...
+
+[Audit] Starting audit for https://linear.app (max pages: 20, max depth: 3)
+[Audit] Following redirects to determine canonical URL...
+[Audit] Final URL after redirects: https://linear.app/
+[Audit] Root URL is valid
+[Audit] Checking robots.txt...
+[Audit] Checking sitemap.xml...
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Browser instance verified and ready
+[Audit] Starting to crawl up to 20 pages...
+[Audit Progress] Analyzing page 1/20: https://linear.app (0s elapsed)
+[Audit Progress] ✅ Main page identified: https://linear.app (will fetch PageSpeed data)
+[Audit Progress] Main page check: normalizedUrl=https://linear.app, startUrl=https://linear.app, depth=0, pages.length=0
+   ⏳ Running... (0m 2s)   ⏳ Running... (0m 4s)   ⏳ Running... (0m 6s)   ⏳ Running... (0m 8s)   ⏳ Running... (0m 10s)   ⏳ Running... (0m 12s)   ⏳ Running... (0m 14s)   ⏳ Running... (0m 16s)   ⏳ Running... (0m 18s)   ⏳ Running... (0m 20s)   ⏳ Running... (0m 22s)   ⏳ Running... (0m 24s)   ⏳ Running... (0m 26s)   ⏳ Running... (0m 28s)[Audit Progress] Fetching PageSpeed Insights for main page (this may take 60+ seconds)...
+[PageSpeed] ❌ API key not configured. Set PAGESPEED_INSIGHTS_API_KEY environment variable.
+[PageSpeed] Get your API key at: https://developers.google.com/speed/docs/insights/v5/get-started
+[PageSpeed] ⚠️ No PageSpeed data available for https://linear.app. Check API key, quota, or network connection.
+[PageSpeed] 💡 This may be due to: API timeout, quota exceeded, or network issues
+[Audit Progress] Completed page 1 in 28s
+[Audit Progress] Using 12 internal links from rendered HTML for https://linear.app
+[Audit Progress] Found 12 internal links on https://linear.app, added 12 to queue
+[Audit Progress] Analyzing page 2/20: https://linear.app/plan (28s elapsed)
+   ⏳ Running... (0m 30s)   ⏳ Running... (0m 32s)   ⏳ Running... (0m 34s)   ⏳ Running... (0m 36s)   ⏳ Running... (0m 38s)   ⏳ Running... (0m 40s)   ⏳ Running... (0m 42s)   ⏳ Running... (0m 44s)   ⏳ Running... (0m 46s)   ⏳ Running... (0m 48s)   ⏳ Running... (0m 50s)[Audit Progress] Completed page 2 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/plan
+[Audit Progress] Found 8 internal links on https://linear.app/plan, added 8 to queue
+[Audit Progress] Analyzing page 3/20: https://linear.app/build (50s elapsed)
+   ⏳ Running... (0m 52s)   ⏳ Running... (0m 54s)   ⏳ Running... (0m 56s)   ⏳ Running... (0m 58s)   ⏳ Running... (1m 0s)   ⏳ Running... (1m 2s)   ⏳ Running... (1m 4s)   ⏳ Running... (1m 6s)   ⏳ Running... (1m 8s)   ⏳ Running... (1m 10s)   ⏳ Running... (1m 12s)[Audit Progress] Completed page 3 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/build
+[Audit Progress] Found 8 internal links on https://linear.app/build, added 8 to queue
+[Audit Progress] Analyzing page 4/20: https://linear.app/ai (72s elapsed)
+   ⏳ Running... (1m 14s)   ⏳ Running... (1m 16s)   ⏳ Running... (1m 18s)   ⏳ Running... (1m 20s)   ⏳ Running... (1m 22s)   ⏳ Running... (1m 24s)   ⏳ Running... (1m 26s)   ⏳ Running... (1m 28s)   ⏳ Running... (1m 30s)   ⏳ Running... (1m 32s)   ⏳ Running... (1m 34s)[Audit Progress] Completed page 4 in 23s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/ai
+[Audit Progress] Found 8 internal links on https://linear.app/ai, added 8 to queue
+[Audit Progress] Analyzing page 5/20: https://linear.app/insights (95s elapsed)
+   ⏳ Running... (1m 36s)   ⏳ Running... (1m 38s)   ⏳ Running... (1m 40s)   ⏳ Running... (1m 42s)   ⏳ Running... (1m 44s)   ⏳ Running... (1m 46s)   ⏳ Running... (1m 48s)   ⏳ Running... (1m 50s)   ⏳ Running... (1m 52s)   ⏳ Running... (1m 54s)   ⏳ Running... (1m 56s)   ⏳ Running... (1m 58s)[Audit Progress] Completed page 5 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/insights
+[Audit Progress] Found 8 internal links on https://linear.app/insights, added 8 to queue
+[Audit Progress] Analyzing page 6/20: https://linear.app/mobile (117s elapsed)
+   ⏳ Running... (2m 0s)   ⏳ Running... (2m 2s)   ⏳ Running... (2m 4s)   ⏳ Running... (2m 6s)   ⏳ Running... (2m 8s)   ⏳ Running... (2m 10s)   ⏳ Running... (2m 12s)   ⏳ Running... (2m 14s)   ⏳ Running... (2m 16s)   ⏳ Running... (2m 18s)   ⏳ Running... (2m 20s)[Audit Progress] Completed page 6 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/mobile
+[Audit Progress] Found 8 internal links on https://linear.app/mobile, added 8 to queue
+[Audit Progress] Analyzing page 7/20: https://linear.app/customer-requests (139s elapsed)
+   ⏳ Running... (2m 22s)   ⏳ Running... (2m 24s)   ⏳ Running... (2m 26s)   ⏳ Running... (2m 28s)   ⏳ Running... (2m 30s)   ⏳ Running... (2m 32s)   ⏳ Running... (2m 34s)   ⏳ Running... (2m 36s)   ⏳ Running... (2m 38s)   ⏳ Running... (2m 40s)   ⏳ Running... (2m 42s)[Audit Progress] Completed page 7 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/customer-requests
+[Audit Progress] Found 8 internal links on https://linear.app/customer-requests, added 8 to queue
+[Audit Progress] Analyzing page 8/20: https://linear.app/asks (161s elapsed)
+   ⏳ Running... (2m 44s)   ⏳ Running... (2m 46s)   ⏳ Running... (2m 48s)   ⏳ Running... (2m 50s)   ⏳ Running... (2m 52s)   ⏳ Running... (2m 54s)   ⏳ Running... (2m 56s)   ⏳ Running... (2m 58s)   ⏳ Running... (3m 0s)   ⏳ Running... (3m 2s)   ⏳ Running... (3m 4s)[Audit Progress] Completed page 8 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/asks
+[Audit Progress] Found 8 internal links on https://linear.app/asks, added 8 to queue
+[Audit Progress] Analyzing page 9/20: https://linear.app/security (183s elapsed)
+   ⏳ Running... (3m 6s)   ⏳ Running... (3m 8s)   ⏳ Running... (3m 10s)   ⏳ Running... (3m 12s)   ⏳ Running... (3m 14s)   ⏳ Running... (3m 16s)   ⏳ Running... (3m 18s)   ⏳ Running... (3m 20s)   ⏳ Running... (3m 22s)   ⏳ Running... (3m 24s)   ⏳ Running... (3m 26s)[Audit Progress] Completed page 9 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/security
+[Audit Progress] Found 8 internal links on https://linear.app/security, added 8 to queue
+[Audit Progress] Analyzing page 10/20: https://linear.app/contact/sales (205s elapsed)
+   ⏳ Running... (3m 28s)   ⏳ Running... (3m 30s)   ⏳ Running... (3m 32s)   ⏳ Running... (3m 34s)   ⏳ Running... (3m 36s)   ⏳ Running... (3m 38s)   ⏳ Running... (3m 40s)   ⏳ Running... (3m 42s)   ⏳ Running... (3m 44s)   ⏳ Running... (3m 46s)   ⏳ Running... (3m 48s)[Audit Progress] Completed page 10 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/contact/sales
+[Audit Progress] Found 8 internal links on https://linear.app/contact/sales, added 8 to queue
+[Audit Progress] Analyzing page 11/20: https://linear.app/signup (228s elapsed)
+   ⏳ Running... (3m 50s)   ⏳ Running... (3m 52s)   ⏳ Running... (3m 54s)   ⏳ Running... (3m 56s)   ⏳ Running... (3m 58s)   ⏳ Running... (4m 0s)   ⏳ Running... (4m 2s)   ⏳ Running... (4m 4s)   ⏳ Running... (4m 6s)Rendering failed for https://linear.app/signup, falling back to basic fetch: TypeError: Cannot create property 'title' on number '35'
+    at parseHtmlWithRenderer (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:2001:15)
+    at analyzePage (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:1764:28)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async crawlPages (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:1500:24)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:175:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Audit Progress] Completed page 11 in 19s
+[Audit Progress] No rendered links found, falling back to fetch for https://linear.app/signup...
+[Audit Progress] No links found with domain linear.app, trying broader extraction...
+[Audit Progress] No link hrefs found in HTML at all
+[Audit Progress] No internal links found on https://linear.app/signup (checked domain: linear.app, response URL: https://linear.app/signup)
+[Audit Progress] Analyzing page 12/20: https://linear.app/download (247s elapsed)
+   ⏳ Running... (4m 8s)   ⏳ Running... (4m 10s)   ⏳ Running... (4m 12s)   ⏳ Running... (4m 14s)   ⏳ Running... (4m 16s)   ⏳ Running... (4m 18s)   ⏳ Running... (4m 20s)   ⏳ Running... (4m 22s)   ⏳ Running... (4m 24s)   ⏳ Running... (4m 26s)   ⏳ Running... (4m 28s)   ⏳ Running... (4m 30s)[Audit Progress] Completed page 12 in 24s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/download
+[Audit Progress] Found 8 internal links on https://linear.app/download, added 8 to queue
+[Audit Progress] Analyzing page 13/20: https://linear.app/login (270s elapsed)
+   ⏳ Running... (4m 32s)   ⏳ Running... (4m 34s)   ⏳ Running... (4m 36s)   ⏳ Running... (4m 38s)   ⏳ Running... (4m 40s)   ⏳ Running... (4m 42s)   ⏳ Running... (4m 44s)   ⏳ Running... (4m 46s)   ⏳ Running... (4m 48s)   ⏳ Running... (4m 50s)Rendering failed for https://linear.app/login, falling back to basic fetch: TypeError: Cannot create property 'title' on number '29'
+    at parseHtmlWithRenderer (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:2001:15)
+    at analyzePage (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:1764:28)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async crawlPages (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:1500:24)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:175:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Audit Progress] Completed page 13 in 19s
+[Audit Progress] No rendered links found, falling back to fetch for https://linear.app/login...
+[Audit Progress] No links found with domain linear.app, trying broader extraction...
+[Audit Progress] No link hrefs found in HTML at all
+[Audit Progress] No internal links found on https://linear.app/login (checked domain: linear.app, response URL: https://linear.app/login)
+[Audit Progress] Analyzing page 14/20: https://linear.app/careers (289s elapsed)
+   ⏳ Running... (4m 52s)   ⏳ Running... (4m 54s)   ⏳ Running... (4m 56s)   ⏳ Running... (4m 58s)   ⏳ Running... (5m 0s)   ⏳ Running... (5m 2s)   ⏳ Running... (5m 4s)   ⏳ Running... (5m 6s)   ⏳ Running... (5m 8s)   ⏳ Running... (5m 10s)   ⏳ Running... (5m 12s)[Audit Progress] Completed page 14 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/careers
+[Audit Progress] Found 8 internal links on https://linear.app/careers, added 8 to queue
+[Audit Progress] Analyzing page 15/20: https://linear.app/blog (312s elapsed)
+   ⏳ Running... (5m 14s)   ⏳ Running... (5m 16s)   ⏳ Running... (5m 18s)   ⏳ Running... (5m 20s)   ⏳ Running... (5m 22s)   ⏳ Running... (5m 24s)   ⏳ Running... (5m 26s)   ⏳ Running... (5m 28s)   ⏳ Running... (5m 30s)   ⏳ Running... (5m 32s)   ⏳ Running... (5m 34s)   ⏳ Running... (5m 36s)[Audit Progress] Completed page 15 in 25s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/blog
+[Audit Progress] Found 8 internal links on https://linear.app/blog, added 8 to queue
+[Audit Progress] Analyzing page 16/20: https://linear.app/blog/cx-in-linear (336s elapsed)
+   ⏳ Running... (5m 38s)   ⏳ Running... (5m 40s)   ⏳ Running... (5m 42s)   ⏳ Running... (5m 44s)   ⏳ Running... (5m 46s)   ⏳ Running... (5m 48s)   ⏳ Running... (5m 50s)   ⏳ Running... (5m 52s)   ⏳ Running... (5m 54s)   ⏳ Running... (5m 56s)   ⏳ Running... (5m 58s)[Audit Progress] Completed page 16 in 22s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/blog/cx-in-linear
+[Audit Progress] Found 8 internal links on https://linear.app/blog/cx-in-linear, added 8 to queue
+[Audit Progress] Analyzing page 17/20: https://linear.app/blog/continuous-planning-in-linear (359s elapsed)
+   ⏳ Running... (6m 0s)   ⏳ Running... (6m 2s)   ⏳ Running... (6m 4s)   ⏳ Running... (6m 6s)   ⏳ Running... (6m 8s)   ⏳ Running... (6m 10s)   ⏳ Running... (6m 12s)   ⏳ Running... (6m 14s)   ⏳ Running... (6m 16s)   ⏳ Running... (6m 18s)   ⏳ Running... (6m 20s)   ⏳ Running... (6m 22s)[Audit Progress] Completed page 17 in 23s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/blog/continuous-planning-in-linear
+[Audit Progress] Found 8 internal links on https://linear.app/blog/continuous-planning-in-linear, added 8 to queue
+[Audit Progress] Analyzing page 18/20: https://linear.app/blog/designing-remote-work-at-linear (381s elapsed)
+   ⏳ Running... (6m 24s)   ⏳ Running... (6m 26s)   ⏳ Running... (6m 28s)   ⏳ Running... (6m 30s)   ⏳ Running... (6m 32s)   ⏳ Running... (6m 34s)   ⏳ Running... (6m 36s)   ⏳ Running... (6m 38s)   ⏳ Running... (6m 40s)   ⏳ Running... (6m 42s)   ⏳ Running... (6m 44s)   ⏳ Running... (6m 46s)[Audit Progress] Completed page 18 in 24s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/blog/designing-remote-work-at-linear
+[Audit Progress] Found 8 internal links on https://linear.app/blog/designing-remote-work-at-linear, added 8 to queue
+[Audit Progress] Analyzing page 19/20: https://linear.app/blog/self-driving-saas (405s elapsed)
+   ⏳ Running... (6m 48s)   ⏳ Running... (6m 50s)   ⏳ Running... (6m 52s)   ⏳ Running... (6m 54s)   ⏳ Running... (6m 56s)   ⏳ Running... (6m 58s)   ⏳ Running... (7m 0s)   ⏳ Running... (7m 2s)   ⏳ Running... (7m 4s)   ⏳ Running... (7m 6s)   ⏳ Running... (7m 8s)[Audit Progress] Completed page 19 in 23s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/blog/self-driving-saas
+[Audit Progress] Found 8 internal links on https://linear.app/blog/self-driving-saas, added 8 to queue
+[Audit Progress] Analyzing page 20/20: https://linear.app/blog/linear-liquid-glass (428s elapsed)
+   ⏳ Running... (7m 10s)   ⏳ Running... (7m 12s)   ⏳ Running... (7m 14s)   ⏳ Running... (7m 16s)   ⏳ Running... (7m 18s)   ⏳ Running... (7m 20s)   ⏳ Running... (7m 22s)   ⏳ Running... (7m 24s)   ⏳ Running... (7m 26s)   ⏳ Running... (7m 28s)   ⏳ Running... (7m 30s)[Audit Progress] Completed page 20 in 23s
+[Audit Progress] Using 8 internal links from rendered HTML for https://linear.app/blog/linear-liquid-glass
+[Audit Progress] Found 8 internal links on https://linear.app/blog/linear-liquid-glass, added 8 to queue
+[Audit] Finished crawling 20 pages
+[Audit] Analyzing site-wide issues...
+[Audit] Performing enhanced technical analysis...
+   ⏳ Running... (7m 32s)Enhanced technical check failed: ReferenceError: Cannot access 'validPages' before initialization
+    at runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:257:29)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Audit] Performing enhanced on-page and content analysis...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Waiting 1000ms before retry 2/3...
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+   ⏳ Running... (7m 34s)(node:50701) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 SIGINT listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:50701) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 SIGTERM listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+   ⏳ Running... (7m 36s)[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Waiting 2000ms before retry 3/3...
+   ⏳ Running... (7m 38s)[Renderer] Waiting 2000ms before retry 3/3...
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Browser instance verified and ready
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Failed to render https://linear.app/security after 3 attempts: Protocol error (Page.navigate): Target closed
+Enhanced analysis failed for https://linear.app/security: Error: Failed to render https://linear.app/security after 3 attempts: Protocol error (Page.navigate): Target closed
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 8)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+(node:50701) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 exit listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:50701) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 SIGHUP listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+   ⏳ Running... (7m 40s)[Renderer] Launching new browser instance...
+[Renderer] Using system Chrome: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Browser instance verified and ready
+[Renderer] Failed to render https://linear.app/build after 3 attempts: net::ERR_ABORTED at https://linear.app/build
+Enhanced analysis failed for https://linear.app/build: Error: Failed to render https://linear.app/build after 3 attempts: net::ERR_ABORTED at https://linear.app/build
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 2)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Renderer] Failed to render https://linear.app/asks after 3 attempts: net::ERR_ABORTED at https://linear.app/asks
+Enhanced analysis failed for https://linear.app/asks: Error: Failed to render https://linear.app/asks after 3 attempts: net::ERR_ABORTED at https://linear.app/asks
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 7)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Renderer] Failed to render https://linear.app/customer-requests after 3 attempts: net::ERR_ABORTED at https://linear.app/customer-requests
+Enhanced analysis failed for https://linear.app/customer-requests: Error: Failed to render https://linear.app/customer-requests after 3 attempts: net::ERR_ABORTED at https://linear.app/customer-requests
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 6)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+   ⏳ Running... (7m 42s)[Renderer] Failed to render https://linear.app/contact/sales after 3 attempts: Browser disconnected during page load
+Enhanced analysis failed for https://linear.app/contact/sales: Error: Failed to render https://linear.app/contact/sales after 3 attempts: Browser disconnected during page load
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 9)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Renderer] Failed to render https://linear.app/mobile after 3 attempts: Browser disconnected during page load
+Enhanced analysis failed for https://linear.app/mobile: Error: Failed to render https://linear.app/mobile after 3 attempts: Browser disconnected during page load
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 5)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Renderer] Failed to render https://linear.app/insights after 3 attempts: Browser disconnected during page load
+[Renderer] Failed to render https://linear.app/ai after 3 attempts: Browser disconnected during page load
+Enhanced analysis failed for https://linear.app/insights: Error: Failed to render https://linear.app/insights after 3 attempts: Browser disconnected during page load
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 4)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+Enhanced analysis failed for https://linear.app/ai: Error: Failed to render https://linear.app/ai after 3 attempts: Browser disconnected during page load
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 3)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Renderer] Failed to render https://linear.app/plan after 3 attempts: Browser disconnected during page load
+Enhanced analysis failed for https://linear.app/plan: Error: Failed to render https://linear.app/plan after 3 attempts: Browser disconnected during page load
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 1)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Renderer] Failed to render https://linear.app after 3 attempts: Browser disconnected during page load
+Enhanced analysis failed for https://linear.app: Error: Failed to render https://linear.app after 3 attempts: Browser disconnected during page load
+    at renderPage (/Users/michaelreoch/seo-audit-app/lib/renderer.ts:568:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async <anonymous> (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:332:26)
+    at async Promise.all (index 0)
+    at async runAudit (/Users/michaelreoch/seo-audit-app/lib/seoAudit.ts:326:5)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:208:21)
+[Audit] Applying final issue deduplication (25 issues before)
+[Audit] After deduplication: 25 unique issues
+[Audit] Applying Sprint 1 fixes: deduplication and 404 filtering
+[Dedup] Deduplicated 20 pages → 20 unique pages
+[Filter] Total pages: 20, Valid: 20, Errors: 0
+[Audit] Crawl diagnostics: ✅ Full crawl successful - 20 pages analyzed
+[Audit] Crawl metrics: 0.04 pages/sec, efficiency: 71%
+[Audit] Skipping Local SEO analysis - no LocalBusiness/Organization schema detected and no Local SEO add-on selected
+[Audit] Competitor URL status: 3 provided, tier: standard
+[Audit] Using 3 user-provided competitor URLs
+[Audit] User provided 3 competitor URL(s): https://www.notion.so, https://www.atlassian.com, https://www.taskade.com
+[Audit] Final competitor list (3 total): https://www.notion.so, https://www.atlassian.com, https://www.taskade.com
+[Competitor] Starting real competitor analysis for: https://www.notion.so
+[Competitor] Site has 30 keywords to compare
+[Competitor] 🔍 Analyzing 1 competitor URLs: https://www.notion.so
+[Competitor] Processing batch 1: https://www.notion.so
+[Competitor] ✅ Successfully analyzed: https://www.notion.so (50 keywords)
+[Competitor] ✅ Successfully analyzed 1/1 competitors
+[Competitor] ✅ Real analysis succeeded
+[Competitor] Results: 50 competitor keywords, 28 keyword gaps, 0 shared keywords
+[Audit] Detected platform: custom, updating fix instructions...
+[Audit] Calculating scores for 20 valid pages (excluding 0 error pages)
+[Audit] Total issues before scoring: 25
+[Audit] Score calculation completed in 2ms
+[Audit] Scores: Technical=75, OnPage=50, Content=88, Accessibility=80
+[Audit] Issues before filtering: Technical=0, On-page=0, Content=0
+[Audit] Issue categories found (BEFORE filtering): On-page=9, Technical=5, Performance=10, Content=1
+[Audit] Sample issue structure: category="On-page", severity="High", hasAffectedPages=true, affectedPagesLength=2
+[Audit] Issues before final filter: 25, after: 25
+[Audit] Issue categories found (AFTER filtering): On-page=9, Technical=5, Performance=10, Content=1
+[Audit] Final issue categorization: Technical=5, On-page=9, Content=1, Accessibility=0, Performance=10
+[Audit] Total issues after final filtering: 25
+[Audit] Final severity counts: High=3, Medium=10, Low=12
+[Audit] Result being returned: Technical=5, On-page=9, Content=1, Total=25
+[Audit] Browser closed successfully
+                                                  ✅ Audit completed in 7m 44s
+   Pages scanned: 20
+
+
+🔍 Running comprehensive QA validation...
+
+📊 QA Score: 7/10 (Target: 9/10)
+
+📊 Report Quality Assurance Results
+   Score: 7/10 ❌ FAILED
+   Critical Issues: 1
+   Warnings: 1
+
+🚨 Critical Issues:
+   ❌ [Readability Formula] Rendering percentage shows 0% but HTML is 95.5% similar
+      Expected: ~4.5% rendering (or 95.5% similarity)
+      Actual: 0% rendering
+      Fix: When rendered < initial: renderingPercentage = similarity > 95 ? (100 - similarity) : ((initial - rendered) / initial * 100)
+
+⚠️  Warnings:
+   ⚠️  [Narrative Consistency] Summary narrative may contradict scores
+      Expected: Narrative matches score levels (excellent = 90+, good = 70-89, needs improvement = <70)
+      Actual: Narrative may claim "excellent" despite low scores
+
+
+
+🔧 Attempting to fix 1 critical issue(s)...
+
+📊 Final QA Score: 9/10
+✅ Report quality passed (score >= 9)
+💾 Saving audit results...
+✅ Audit results saved
+
+📄 Generating PDF report...
+✅ PDF generated in 6s (2456.8 KB)
+
+📧 Sending email to test@example.com...
+[Resend] Custom domain not verified, using Resend default domain
+Resend API failed, falling back to SMTP: Error: Resend API error: You can only send testing emails to your own email address (mreoch82@hotmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the `from` address to an email using this domain.
+    at sendEmailViaResend (/Users/michaelreoch/seo-audit-app/lib/email.ts:113:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async sendEmail (/Users/michaelreoch/seo-audit-app/lib/email.ts:177:7)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/runAuditAndEmail.ts:579:7)
+✅ Email sent successfully!
+
+📊 Audit Summary:
+   Audit ID: cmido9apq0000pi0djk737kco
+   Overall Score: 73/100
+   Technical: 75/100
+   On-Page: 50/100
+   Content: 88/100
+   Accessibility: 80/100
+
+✨ Audit complete. Report saved with ID: cmido9apq0000pi0djk737kco
+   Email sent to: test@example.com
+
