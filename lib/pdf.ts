@@ -301,7 +301,7 @@ function generateReportHTML(
     .fix-instructions {
       margin-top: 15px;
       padding: 15px;
-      background: #f0f9ff;
+      background: ${Colors.bgLight};
       border-left: 3px solid ${branding.primaryColor};
       border-radius: 4px;
     }
@@ -401,7 +401,7 @@ function generateReportHTML(
       </p>
     </div>
     ${generateSimpleFixOrder(result)}
-    <div style="margin-top: 30px; padding: 15px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px; font-size: 13px; color: #1e40af;">
+    <div style="margin-top: 30px; padding: 15px; background: ${Colors.bgLight}; border-left: 4px solid ${branding.primaryColor || Colors.primary}; border-radius: 6px; font-size: 13px; color: ${branding.primaryColor || Colors.primary};">
       <strong>📖 See detailed instructions:</strong> Priority Action Plan (Page 8) | Technical Issues (Page 12) | On-Page Issues (Page 16)
     </div>
   </div>
@@ -535,11 +535,11 @@ function generateReportHTML(
   <div class="page">
     <h1>SEO Scores Overview</h1>
     <p style="margin-bottom: 20px; color: #666;">Visual breakdown of your SEO performance across all categories:</p>
-    ${generateScoreDials(summary)}
-    <div style="margin: 20px 0; padding: 15px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 6px; font-size: 13px;">
+    ${generateScoreDials(summary, branding)}
+    <div style="margin: 20px 0; padding: 15px; background: ${Colors.bgLight}; border-left: 4px solid ${branding.primaryColor || Colors.primary}; border-radius: 6px; font-size: 13px; color: ${Colors.textSecondary};">
       <strong>📊 Benchmark Context:</strong> Industry sites typically score 70-80 for Technical SEO, 65-75 for On-Page SEO, and 60-70 for Content Quality. Scores above 80 are considered excellent.
     </div>
-    ${generateScoreComparisonChart(summary)}
+    ${generateScoreComparisonChart(summary, branding)}
     <div class="scores-grid" style="margin-top: 20px;">
       <div class="score-card">
         <h3>Overall Score</h3>
@@ -588,7 +588,7 @@ function generateReportHTML(
     <div class="issues-section">
       ${result.enhancedTechnical ? `
       <div style="margin-bottom: 30px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px;">
-        <h2 style="color: #3b82f6; margin-bottom: 15px;">Security & Server Configuration</h2>
+        <h2 style="color: ${branding.primaryColor || Colors.primary}; margin-bottom: 15px;">Security & Server Configuration</h2>
         <table style="width: 100%; border-collapse: collapse;">
           <tbody>
             <tr>
@@ -642,7 +642,7 @@ function generateReportHTML(
       
       ${result.mobileResponsiveness ? `
       <div style="margin-bottom: 30px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px;">
-        <h2 style="color: #3b82f6; margin-bottom: 15px;">Mobile Responsiveness</h2>
+        <h2 style="color: ${branding.primaryColor || Colors.primary}; margin-bottom: 15px;">Mobile Responsiveness</h2>
         <table style="width: 100%; border-collapse: collapse;">
           <tbody>
             <tr>
@@ -664,7 +664,7 @@ function generateReportHTML(
       
       ${result.serverTechnology ? `
       <div style="margin-bottom: 30px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px;">
-        <h2 style="color: #3b82f6; margin-bottom: 15px;">Technology Stack</h2>
+        <h2 style="color: ${branding.primaryColor || Colors.primary}; margin-bottom: 15px;">Technology Stack</h2>
         <table style="width: 100%; border-collapse: collapse;">
           <tbody>
             <tr>
@@ -695,20 +695,31 @@ function generateReportHTML(
   ${(result.technicalIssues || []).length > 0 ? `
   <div class="page">
     <h1>Technical SEO Issues</h1>
+    <div style="padding: 10px; background: ${Colors.bgLight}; border-left: 3px solid ${branding.primaryColor || Colors.primary}; border-radius: 4px; margin-bottom: 20px; font-size: 13px; color: ${Colors.textSecondary};">
+      <strong>Summary:</strong> ${result.technicalIssues.length} technical issue${result.technicalIssues.length !== 1 ? 's' : ''} found across ${result.summary.totalPages} pages
+    </div>
     <div class="issues-section">
-      ${(result.technicalIssues || []).slice(0, 20).map(issue => `
-        <div class="issue-item ${issue.severity.toLowerCase()}">
-          <div class="issue-title">[${issue.severity}] ${issue.message}</div>
-          ${issue.details ? `<div class="issue-details">${issue.details}</div>` : ''}
+      ${(result.technicalIssues || []).slice(0, 20).map(issue => {
+        const severityIcon = issue.severity === 'High' ? '🔴' : issue.severity === 'Medium' ? '🟡' : '🟢'
+        const severityColor = issue.severity === 'High' ? Colors.error : issue.severity === 'Medium' ? '#f59e0b' : Colors.success
+        return `
+        <div class="issue-item ${issue.severity.toLowerCase()}" style="margin-bottom: 20px; padding: 15px; background: ${issue.severity === 'High' ? '#fef2f2' : issue.severity === 'Medium' ? '#fffbeb' : '#f0fdf4'}; border-left: 4px solid ${severityColor}; border-radius: 6px;">
+          <div class="issue-title" style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">${severityIcon}</span>
+            <strong style="color: ${severityColor};">[${issue.severity}]</strong>
+            <span>${escapeHtml(issue.message)}</span>
+          </div>
+          ${issue.details ? `<div class="issue-details" style="margin-top: 8px; color: ${Colors.textSecondary};">${escapeHtml(issue.details)}</div>` : ''}
           ${issue.affectedPages && issue.affectedPages.length > 0 
-            ? `<div class="issue-pages">Affected: ${issue.affectedPages.length} page${issue.affectedPages.length !== 1 ? 's' : ''}</div>` 
+            ? `<div class="issue-pages" style="margin-top: 6px; font-size: 12px; color: ${Colors.textBody};">Affected: ${issue.affectedPages.length} page${issue.affectedPages.length !== 1 ? 's' : ''}</div>` 
             : ''}
-          <div class="fix-instructions">
-            <div class="fix-instructions-title">How to Fix:</div>
-            <div class="fix-instructions-content">${escapeHtml(getFixInstructions(issue))}</div>
+          <div class="fix-instructions" style="margin-top: 12px;">
+            <div class="fix-instructions-title" style="color: ${branding.primaryColor || Colors.primary}; margin-bottom: 6px;">How to Fix:</div>
+            <div class="fix-instructions-content" style="font-size: 13px; line-height: 1.6;">${escapeHtml(getFixInstructions(issue))}</div>
           </div>
         </div>
-      `).join('')}
+      `
+      }).join('')}
     </div>
   </div>
   ` : ''}
@@ -717,20 +728,37 @@ function generateReportHTML(
   ${(result.onPageIssues || []).length > 0 ? `
   <div class="page">
     <h1>On-Page SEO Issues</h1>
+    <div style="padding: 10px; background: ${Colors.bgLight}; border-left: 3px solid ${branding.primaryColor || Colors.primary}; border-radius: 4px; margin-bottom: 20px; font-size: 13px; color: ${Colors.textSecondary};">
+      <strong>Summary:</strong> ${result.onPageIssues.length} on-page issue${result.onPageIssues.length !== 1 ? 's' : ''} found. ${(() => {
+        const highCount = result.onPageIssues.filter(i => i.severity === 'High').length
+        const mediumCount = result.onPageIssues.filter(i => i.severity === 'Medium').length
+        return highCount > 0 || mediumCount > 0 
+          ? `${highCount} high priority, ${mediumCount} medium priority.`
+          : 'All issues are low priority.'
+      })()}
+    </div>
     <div class="issues-section">
-      ${(result.onPageIssues || []).slice(0, 20).map(issue => `
-        <div class="issue-item ${issue.severity.toLowerCase()}">
-          <div class="issue-title">[${issue.severity}] ${issue.message}</div>
-          ${issue.details ? `<div class="issue-details">${issue.details}</div>` : ''}
+      ${(result.onPageIssues || []).slice(0, 20).map(issue => {
+        const severityIcon = issue.severity === 'High' ? '🔴' : issue.severity === 'Medium' ? '🟡' : '🟢'
+        const severityColor = issue.severity === 'High' ? Colors.error : issue.severity === 'Medium' ? '#f59e0b' : Colors.success
+        return `
+        <div class="issue-item ${issue.severity.toLowerCase()}" style="margin-bottom: 20px; padding: 15px; background: ${issue.severity === 'High' ? '#fef2f2' : issue.severity === 'Medium' ? '#fffbeb' : '#f0fdf4'}; border-left: 4px solid ${severityColor}; border-radius: 6px;">
+          <div class="issue-title" style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">${severityIcon}</span>
+            <strong style="color: ${severityColor};">[${issue.severity}]</strong>
+            <span>${escapeHtml(issue.message)}</span>
+          </div>
+          ${issue.details ? `<div class="issue-details" style="margin-top: 8px; color: ${Colors.textSecondary};">${escapeHtml(issue.details)}</div>` : ''}
           ${issue.affectedPages && issue.affectedPages.length > 0 
-            ? `<div class="issue-pages">Affected: ${issue.affectedPages.length} page${issue.affectedPages.length !== 1 ? 's' : ''}</div>` 
+            ? `<div class="issue-pages" style="margin-top: 6px; font-size: 12px; color: ${Colors.textBody};">Affected: ${issue.affectedPages.length} page${issue.affectedPages.length !== 1 ? 's' : ''}</div>` 
             : ''}
-          <div class="fix-instructions">
-            <div class="fix-instructions-title">How to Fix:</div>
-            <div class="fix-instructions-content">${escapeHtml(getFixInstructions(issue))}</div>
+          <div class="fix-instructions" style="margin-top: 12px;">
+            <div class="fix-instructions-title" style="color: ${branding.primaryColor || Colors.primary}; margin-bottom: 6px;">How to Fix:</div>
+            <div class="fix-instructions-content" style="font-size: 13px; line-height: 1.6;">${escapeHtml(getFixInstructions(issue))}</div>
           </div>
         </div>
-      `).join('')}
+      `
+      }).join('')}
     </div>
   </div>
   ` : ''}
@@ -739,20 +767,66 @@ function generateReportHTML(
   ${(result.contentIssues || []).length > 0 ? `
   <div class="page">
     <h1>Content Quality Issues</h1>
+    <div style="padding: 10px; background: ${Colors.bgLight}; border-left: 3px solid ${branding.primaryColor || Colors.primary}; border-radius: 4px; margin-bottom: 20px; font-size: 13px; color: ${Colors.textSecondary};">
+      <strong>Summary:</strong> ${result.contentIssues.length} content issue${result.contentIssues.length !== 1 ? 's' : ''} found. ${(() => {
+        const thinContentIssues = result.contentIssues.filter(i => i.message.toLowerCase().includes('thin') || i.message.toLowerCase().includes('word count'))
+        if (thinContentIssues.length > 0) {
+          const thinPages = thinContentIssues.flatMap(i => i.affectedPages || []).filter((v, i, a) => a.indexOf(v) === i)
+          return `${thinPages.length} page${thinPages.length !== 1 ? 's' : ''} identified as thin content.`
+        }
+        return ''
+      })()}
+    </div>
     <div class="issues-section">
-      ${(result.contentIssues || []).slice(0, 20).map(issue => `
-        <div class="issue-item ${issue.severity.toLowerCase()}">
-          <div class="issue-title">[${issue.severity}] ${issue.message}</div>
-          ${issue.details ? `<div class="issue-details">${issue.details}</div>` : ''}
-          ${issue.affectedPages && issue.affectedPages.length > 0 
-            ? `<div class="issue-pages">Affected: ${issue.affectedPages.length} page${issue.affectedPages.length !== 1 ? 's' : ''}</div>` 
+      ${(result.contentIssues || []).slice(0, 20).map(issue => {
+        const severityIcon = issue.severity === 'High' ? '🔴' : issue.severity === 'Medium' ? '🟡' : '🟢'
+        const severityColor = issue.severity === 'High' ? Colors.error : issue.severity === 'Medium' ? '#f59e0b' : Colors.success
+        const isThinContent = issue.message.toLowerCase().includes('thin') || issue.message.toLowerCase().includes('word count')
+        const thinPages = isThinContent && issue.affectedPages && issue.affectedPages.length > 0 
+          ? issue.affectedPages.slice(0, 3).map(url => {
+              const page = result.pages.find(p => p.url === url)
+              const wordCount = page?.wordCount || 0
+              return { url, wordCount }
+            })
+          : []
+        
+        return `
+        <div class="issue-item ${issue.severity.toLowerCase()}" style="margin-bottom: 20px; padding: 15px; background: ${issue.severity === 'High' ? '#fef2f2' : issue.severity === 'Medium' ? '#fffbeb' : '#f0fdf4'}; border-left: 4px solid ${severityColor}; border-radius: 6px;">
+          <div class="issue-title" style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">${severityIcon}</span>
+            <strong style="color: ${severityColor};">[${issue.severity}]</strong>
+            <span>${escapeHtml(issue.message)}</span>
+          </div>
+          ${issue.details ? `<div class="issue-details" style="margin-top: 8px; color: ${Colors.textSecondary};">${escapeHtml(issue.details)}</div>` : ''}
+          ${isThinContent && thinPages.length > 0 ? `
+          <div style="margin-top: 10px; padding: 10px; background: ${Colors.bgLight}; border-radius: 4px; font-size: 12px;">
+            <strong style="color: ${Colors.textPrimary}; display: block; margin-bottom: 6px;">📄 Thin Pages Identified:</strong>
+            <ul style="margin: 0; padding-left: 20px; color: ${Colors.textSecondary};">
+              ${thinPages.map(({ url, wordCount }) => `
+                <li style="margin: 3px 0;">
+                  <a href="${escapeHtml(url)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(url.replace(/^https?:\/\/(www\.)?/, ''))}</a>
+                  <span style="color: ${Colors.textBody};"> (${wordCount} words)</span>
+                </li>
+              `).join('')}
+              ${issue.affectedPages && issue.affectedPages.length > 3 ? `<li style="color: ${Colors.textBody}; font-style: italic;">... and ${issue.affectedPages.length - 3} more page${issue.affectedPages.length - 3 !== 1 ? 's' : ''}</li>` : ''}
+            </ul>
+          </div>
+          ` : issue.affectedPages && issue.affectedPages.length > 0 
+            ? `<div class="issue-pages" style="margin-top: 6px; font-size: 12px; color: ${Colors.textBody};">Affected: ${issue.affectedPages.length} page${issue.affectedPages.length !== 1 ? 's' : ''}</div>` 
             : ''}
-          <div class="fix-instructions">
-            <div class="fix-instructions-title">How to Fix:</div>
-            <div class="fix-instructions-content">${escapeHtml(getFixInstructions(issue))}</div>
+          ${isThinContent ? `
+          <div style="margin-top: 10px; padding: 10px; background: #f0f9ff; border-left: 3px solid ${branding.primaryColor || Colors.primary}; border-radius: 4px; font-size: 12px; color: ${Colors.textSecondary};">
+            <strong style="color: ${Colors.textPrimary}; display: block; margin-bottom: 4px;">💡 SaaS Context:</strong>
+            For SaaS and product sites, thin content is often acceptable on landing pages and feature pages. However, consider adding: use cases, customer testimonials, integration details, or FAQ sections to improve SEO value without compromising design.
+          </div>
+          ` : ''}
+          <div class="fix-instructions" style="margin-top: 12px;">
+            <div class="fix-instructions-title" style="color: ${branding.primaryColor || Colors.primary}; margin-bottom: 6px;">How to Fix:</div>
+            <div class="fix-instructions-content" style="font-size: 13px; line-height: 1.6;">${escapeHtml(getFixInstructions(issue))}</div>
           </div>
         </div>
-      `).join('')}
+      `
+      }).join('')}
     </div>
   </div>
   ` : ''}
@@ -805,8 +879,38 @@ function generateReportHTML(
   ${result.pages.some(p => p.pageSpeedData || p.performanceMetrics) ? `
   <div class="page">
     <h1>Performance Metrics (Core Web Vitals)</h1>
-    <p style="margin-bottom: 20px;"><strong>CRITICAL FIX:</strong> Core Web Vitals shown below are from Google PageSpeed Insights API (when available). Crawler load time is shown separately.</p>
+    <div style="padding: 12px; background: ${Colors.bgLight}; border-left: 4px solid ${branding.primaryColor || Colors.primary}; border-radius: 6px; margin-bottom: 20px; font-size: 13px;">
+      <strong>📊 Legend:</strong> Core Web Vitals shown below are from Google PageSpeed Insights API (when available). Crawler load time is shown separately and is NOT real CWV. 
+      <span style="color: ${Colors.success};">🟢 Good</span> | 
+      <span style="color: #f59e0b;">🟡 Needs Improvement</span> | 
+      <span style="color: ${Colors.error};">🔴 Poor</span>
+    </div>
     ${generateCoreWebVitalsGraph(result.pages)}
+    ${(() => {
+      // Find slowest pages for highlighting
+      const pagesWithLoadTime = result.pages
+        .filter(p => p.loadTime)
+        .map(p => ({ page: p, loadTime: p.loadTime || 0 }))
+        .sort((a, b) => b.loadTime - a.loadTime)
+        .slice(0, 3)
+      
+      if (pagesWithLoadTime.length === 0) return ''
+      
+      return `
+      <div style="padding: 15px; background: #fef2f2; border-left: 4px solid ${Colors.error}; border-radius: 6px; margin-bottom: 20px;">
+        <strong style="color: ${Colors.error}; display: block; margin-bottom: 8px;">🐌 Slowest Pages (by Crawler Load Time):</strong>
+        <ul style="margin: 0; padding-left: 20px; color: ${Colors.textSecondary}; font-size: 13px;">
+          ${pagesWithLoadTime.map(({ page, loadTime }) => {
+            const color = loadTime > 2500 ? Colors.error : loadTime > 2000 ? '#f59e0b' : Colors.success
+            return `<li style="margin: 4px 0;">
+              <a href="${escapeHtml(page.url)}" style="color: ${branding.primaryColor || Colors.primary}; text-decoration: none;">${escapeHtml(page.url.replace(/^https?:\/\/(www\.)?/, ''))}</a>
+              <span style="color: ${color}; font-weight: bold;"> (${Math.round(loadTime)}ms)</span>
+            </li>`
+          }).join('')}
+        </ul>
+      </div>
+      `
+    })()}
     <div class="issues-section">
       ${result.pages.filter(p => p.pageSpeedData || p.performanceMetrics).slice(0, 10).map(page => {
         // CRITICAL FIX: ONLY use PageSpeed API scores for Core Web Vitals, NOT Playwright metrics
@@ -853,13 +957,13 @@ function generateReportHTML(
               ${lcp && (cls !== undefined || inp || fcp || ttfb) ? `
               <tr>
                 <td style="padding: 8px; font-weight: bold;">LCP: ${Math.round(lcp)} ms</td>
-                <td style="padding: 8px; ${lcp > 4000 ? 'color: #dc2626;' : lcp > 2500 ? 'color: #f59e0b;' : 'color: #10b981;'}">${lcp > 4000 ? 'Poor' : lcp > 2500 ? 'Needs Improvement' : 'Good'}</td>
+                <td style="padding: 8px; font-weight: ${lcp > 2500 ? 'bold' : 'normal'}; ${lcp > 4000 ? `color: ${Colors.error}; background: #fef2f2;` : lcp > 2500 ? 'color: #f59e0b; background: #fffbeb;' : `color: ${Colors.success}; background: #f0fdf4;`}">${lcp > 4000 ? '🔴 Poor' : lcp > 2500 ? '🟡 Needs Improvement' : '🟢 Good'}</td>
               </tr>
               ` : lcp ? `<tr><td style="padding: 8px; font-weight: bold;">LCP: ${Math.round(lcp)} ms</td><td style="padding: 8px; ${lcp > 4000 ? 'color: #dc2626;' : lcp > 2500 ? 'color: #f59e0b;' : 'color: #10b981;'}">${lcp > 4000 ? 'Poor' : lcp > 2500 ? 'Needs Improvement' : 'Good'}</td></tr>` : ''}
               ${cls !== undefined ? `
               <tr>
                 <td style="padding: 8px; font-weight: bold;">CLS: ${cls.toFixed(3)}</td>
-                <td style="padding: 8px; ${cls > 0.25 ? 'color: #dc2626;' : cls > 0.1 ? 'color: #f59e0b;' : 'color: #10b981;'}">${cls > 0.25 ? 'Poor' : cls > 0.1 ? 'Needs Improvement' : 'Good'}</td>
+                <td style="padding: 8px; font-weight: ${cls > 0.1 ? 'bold' : 'normal'}; ${cls > 0.25 ? `color: ${Colors.error}; background: #fef2f2;` : cls > 0.1 ? 'color: #f59e0b; background: #fffbeb;' : `color: ${Colors.success}; background: #f0fdf4;`}">${cls > 0.25 ? '🔴 Poor' : cls > 0.1 ? '🟡 Needs Improvement' : '🟢 Good'}</td>
               </tr>
               ` : ''}
               ${inp ? `
@@ -871,7 +975,7 @@ function generateReportHTML(
               ${fcp ? `
               <tr>
                 <td style="padding: 8px; font-weight: bold;">FCP: ${Math.round(fcp)} ms</td>
-                <td style="padding: 8px; ${fcp > 3000 ? 'color: #dc2626;' : fcp > 1800 ? 'color: #f59e0b;' : 'color: #10b981;'}">${fcp > 3000 ? 'Poor' : fcp > 1800 ? 'Needs Improvement' : 'Good'}</td>
+                <td style="padding: 8px; font-weight: ${fcp > 1800 ? 'bold' : 'normal'}; ${fcp > 3000 ? `color: ${Colors.error}; background: #fef2f2;` : fcp > 1800 ? 'color: #f59e0b; background: #fffbeb;' : `color: ${Colors.success}; background: #f0fdf4;`}">${fcp > 3000 ? '🔴 Poor' : fcp > 1800 ? '🟡 Needs Improvement' : '🟢 Good'}</td>
               </tr>
               ` : ''}
               ${ttfb ? `
@@ -909,7 +1013,24 @@ function generateReportHTML(
   ${result.pages.some(p => p.llmReadability) ? `
   <div class="page">
     <h1>LLM Readability Analysis</h1>
-    <p style="margin-bottom: 20px;">Analysis of dynamically rendered content that may be missed by LLMs and search engines:</p>
+    <div style="padding: 15px; background: ${Colors.bgLight}; border-left: 4px solid ${branding.primaryColor || Colors.primary}; border-radius: 6px; margin-bottom: 20px;">
+      <p style="margin: 0 0 8px 0; font-weight: 600; color: ${Colors.textPrimary};"><strong>What This Means:</strong></p>
+      <p style="margin: 0; font-size: 13px; color: ${Colors.textSecondary}; line-height: 1.6;">
+        LLM Readability measures how much of your page content is available to AI models and search engines. High JavaScript rendering means critical content loads after page load, which can hurt SEO and AI discoverability. Pages with high rendering percentages may suffer from reduced visibility in search results and AI-powered tools.
+      </p>
+    </div>
+    ${(() => {
+      const llmPages = result.pages.filter(p => p.llmReadability)
+      const highRenderingCount = llmPages.filter(p => p.llmReadability?.hasHighRendering).length
+      const avgRendering = llmPages.reduce((sum, p) => sum + (p.llmReadability?.renderingPercentage || 0), 0) / llmPages.length
+      
+      return `
+      <div style="padding: 12px; background: ${highRenderingCount > 0 ? '#fef2f2' : '#f0fdf4'}; border-left: 4px solid ${highRenderingCount > 0 ? Colors.error : Colors.success}; border-radius: 6px; margin-bottom: 20px; font-size: 13px;">
+        <strong>Summary:</strong> ${highRenderingCount} of ${llmPages.length} page${llmPages.length !== 1 ? 's' : ''} have high JavaScript rendering. Average rendering percentage: ${Math.round(avgRendering)}%.
+        ${highRenderingCount > 0 ? ` <span style="color: ${Colors.error}; font-weight: bold;">⚠️ These pages may have reduced SEO visibility.</span>` : ''}
+      </div>
+      `
+    })()}
     <div class="issues-section">
       ${result.pages.filter(p => p.llmReadability).slice(0, 10).map(page => {
         const llm = page.llmReadability!
@@ -976,9 +1097,9 @@ function generateReportHTML(
             ` : ''}
             
             ${llm.scriptBundleAnalysis && (llm.scriptBundleAnalysis.renderBlockingScripts > 0 || llm.scriptBundleAnalysis.largeBundles.length > 0) ? `
-            <div style="margin-top: 15px; padding: 10px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px;">
-              <strong style="color: #1e40af; display: block; margin-bottom: 5px;">📦 Script Analysis:</strong>
-              <div style="font-size: 12px; color: #1e3a8a;">
+            <div style="margin-top: 15px; padding: 10px; background: ${Colors.bgLight}; border-left: 3px solid ${branding.primaryColor || Colors.primary}; border-radius: 4px;">
+              <strong style="color: ${branding.primaryColor || Colors.primary}; display: block; margin-bottom: 5px;">📦 Script Analysis:</strong>
+              <div style="font-size: 12px; color: ${Colors.textSecondary};">
                 ${llm.scriptBundleAnalysis.renderBlockingScripts > 0 ? `
                 <div style="margin-bottom: 5px;">
                   <strong>Render-blocking scripts:</strong> ${llm.scriptBundleAnalysis.renderBlockingScripts}. Add 'async' or 'defer' attributes to non-critical scripts.
@@ -996,9 +1117,10 @@ function generateReportHTML(
           
           ${llm.hasHighRendering ? `
           <div class="fix-instructions" style="margin-top: 15px; padding: 12px; background: #fef2f2; border-radius: 6px;">
-            <div class="fix-instructions-title" style="font-weight: bold; color: #dc2626; margin-bottom: 8px;">⚠️ High Rendering Detected</div>
+            <div class="fix-instructions-title" style="font-weight: bold; color: ${Colors.error}; margin-bottom: 8px;">⚠️ High Rendering Detected</div>
             <div class="fix-instructions-content" style="font-size: 12px; line-height: 1.6; color: #991b1b;">
-              Your page has a high level of JavaScript rendering (significant HTML changes after page load). Dynamically rendered content may be missed by LLMs and search engines. Consider server-side rendering (SSR) or static site generation (SSG) for critical content.
+              Your page has a high level of JavaScript rendering (significant HTML changes after page load). Dynamically rendered content may be missed by LLMs and search engines. 
+              <strong>Quick Fix:</strong> Use server-side rendering (SSR) or static site generation (SSG) for critical content. Move H1 tags and key headings to server-rendered HTML.
             </div>
           </div>
           ` : ''}
@@ -1013,7 +1135,33 @@ function generateReportHTML(
   ${result.siteWide?.socialMedia ? `
   <div class="page">
     <h1>Social Media Presence</h1>
-    <p style="margin-bottom: 20px;">Analysis of social media integration and sharing optimization:</p>
+    <div style="padding: 12px; background: ${Colors.bgLight}; border-left: 4px solid ${branding.primaryColor || Colors.primary}; border-radius: 6px; margin-bottom: 20px; font-size: 13px;">
+      <p style="margin: 0 0 8px 0; font-weight: 600; color: ${Colors.textPrimary};"><strong>Context:</strong></p>
+      <p style="margin: 0; color: ${Colors.textSecondary}; line-height: 1.6;">
+        ${(() => {
+          const social = result.siteWide.socialMedia!
+          const hasOG = social.metaTags.openGraph.hasTags
+          const hasTwitter = social.metaTags.twitter.hasCards
+          const hasGTM = social.hasGoogleTagManager
+          const hasGA = social.hasGoogleAnalytics
+          
+          if (hasOG && hasTwitter && hasGTM) {
+            return '✅ Your social media setup is above average. You have Open Graph tags, Twitter Cards, and Google Tag Manager configured.'
+          } else if (hasOG || hasTwitter) {
+            return '⚠️ Your social media setup is partially complete. Consider adding missing tags and Google Tag Manager/GA4 for better tracking.'
+          } else {
+            return '❌ Your social media setup is below average. Add Open Graph tags, Twitter Cards, and Google Tag Manager/GA4 for better social sharing and tracking.'
+          }
+        })()}
+      </p>
+      ${(() => {
+        const social = result.siteWide.socialMedia!
+        if (!social.hasGoogleTagManager && !social.hasGoogleAnalytics) {
+          return `<p style="margin: 8px 0 0 0; color: ${Colors.error}; font-weight: 600;">⚠️ Missing: Google Tag Manager (GTM) or Google Analytics (GA4) not detected. These are critical for tracking and optimization.</p>`
+        }
+        return ''
+      })()}
+    </div>
     <div class="issues-section">
       ${(() => {
         const social = result.siteWide.socialMedia!
@@ -1056,15 +1204,15 @@ function generateReportHTML(
           <div class="issue-title">Social Media Links</div>
           <div class="issue-details">
             <strong>Status:</strong> ${linkCount > 0 ? `✅ Found ${linkCount} platform(s)` : '⚠️ No social links detected'}<br>
-            ${links.facebook ? `<strong>Facebook:</strong> <a href="${escapeHtml(links.facebook)}" style="color: #3b82f6;">${escapeHtml(links.facebook)}</a><br>` : ''}
-            ${links.twitter ? `<strong>Twitter/X:</strong> <a href="${escapeHtml(links.twitter)}" style="color: #3b82f6;">${escapeHtml(links.twitter)}</a><br>` : ''}
-            ${links.instagram ? `<strong>Instagram:</strong> <a href="${escapeHtml(links.instagram)}" style="color: #3b82f6;">${escapeHtml(links.instagram)}</a><br>` : ''}
-            ${links.youtube ? `<strong>YouTube:</strong> <a href="${escapeHtml(links.youtube)}" style="color: #3b82f6;">${escapeHtml(links.youtube)}</a><br>` : ''}
-            ${links.linkedin ? `<strong>LinkedIn:</strong> <a href="${escapeHtml(links.linkedin)}" style="color: #3b82f6;">${escapeHtml(links.linkedin)}</a><br>` : ''}
-            ${links.tiktok ? `<strong>TikTok:</strong> <a href="${escapeHtml(links.tiktok)}" style="color: #3b82f6;">${escapeHtml(links.tiktok)}</a><br>` : ''}
-            ${links.pinterest ? `<strong>Pinterest:</strong> <a href="${escapeHtml(links.pinterest)}" style="color: #3b82f6;">${escapeHtml(links.pinterest)}</a><br>` : ''}
-            ${links.github ? `<strong>GitHub:</strong> <a href="${escapeHtml(links.github)}" style="color: #3b82f6;">${escapeHtml(links.github)}</a><br>` : ''}
-            ${links.snapchat ? `<strong>Snapchat:</strong> <a href="${escapeHtml(links.snapchat)}" style="color: #3b82f6;">${escapeHtml(links.snapchat)}</a><br>` : ''}
+            ${links.facebook ? `<strong>Facebook:</strong> <a href="${escapeHtml(links.facebook)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.facebook)}</a><br>` : ''}
+            ${links.twitter ? `<strong>Twitter/X:</strong> <a href="${escapeHtml(links.twitter)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.twitter)}</a><br>` : ''}
+            ${links.instagram ? `<strong>Instagram:</strong> <a href="${escapeHtml(links.instagram)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.instagram)}</a><br>` : ''}
+            ${links.youtube ? `<strong>YouTube:</strong> <a href="${escapeHtml(links.youtube)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.youtube)}</a><br>` : ''}
+            ${links.linkedin ? `<strong>LinkedIn:</strong> <a href="${escapeHtml(links.linkedin)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.linkedin)}</a><br>` : ''}
+            ${links.tiktok ? `<strong>TikTok:</strong> <a href="${escapeHtml(links.tiktok)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.tiktok)}</a><br>` : ''}
+            ${links.pinterest ? `<strong>Pinterest:</strong> <a href="${escapeHtml(links.pinterest)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.pinterest)}</a><br>` : ''}
+            ${links.github ? `<strong>GitHub:</strong> <a href="${escapeHtml(links.github)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.github)}</a><br>` : ''}
+            ${links.snapchat ? `<strong>Snapchat:</strong> <a href="${escapeHtml(links.snapchat)}" style="color: ${branding.primaryColor || Colors.primary};">${escapeHtml(links.snapchat)}</a><br>` : ''}
           </div>
         </div>
         `
@@ -1075,8 +1223,8 @@ function generateReportHTML(
           <div class="issue-title">Tracking Pixels & Analytics</div>
           <div class="issue-details">
             <strong>Facebook Pixel:</strong> ${social.hasFacebookPixel ? '✅ Detected' : '⚠️ Not detected'}<br>
-            <strong>Google Analytics (GA4):</strong> ${social.hasGoogleAnalytics ? '✅ Detected' : '⚠️ Not detected'}<br>
-            <strong>Google Tag Manager:</strong> ${social.hasGoogleTagManager ? '✅ Detected' : '⚠️ Not detected'}<br>
+            <strong>Google Analytics (GA4):</strong> ${social.hasGoogleAnalytics ? '✅ Detected' : '⚠️ Not detected - <span style="color: #dc2626; font-weight: bold;">Critical for tracking</span>'}<br>
+            <strong>Google Tag Manager:</strong> ${social.hasGoogleTagManager ? '✅ Detected' : '⚠️ Not detected - <span style="color: #dc2626; font-weight: bold;">Recommended for advanced tracking</span>'}<br>
             ${social.pixelTracking ? `
               ${social.pixelTracking.facebookPixel ? `<strong>FB Pixel ID:</strong> ${escapeHtml(social.pixelTracking.facebookPixel)}<br>` : ''}
               ${social.pixelTracking.googleAnalytics ? `<strong>GA ID:</strong> ${escapeHtml(social.pixelTracking.googleAnalytics)}<br>` : ''}
@@ -1221,7 +1369,7 @@ function generateReportHTML(
               const isAutoDetected = result.competitorAnalysis?.autoDetectedCompetitors?.includes(c)
               const isUserProvided = result.competitorAnalysis?.userProvidedCompetitors?.includes(c)
               const label = isAutoDetected ? '🤖 Auto-detected' : isUserProvided ? '👤 You provided' : ''
-              return `<li style="margin: 4px 0;"><a href="${c}" style="color: #3b82f6;">${c.replace(/^https?:\/\/(www\.)?/, '')}</a> ${label ? `<span style="color: #666; font-size: 12px;">(${label})</span>` : ''}</li>`
+              return `<li style="margin: 4px 0;"><a href="${c}" style="color: ${branding.primaryColor || Colors.primary};">${c.replace(/^https?:\/\/(www\.)?/, '')}</a> ${label ? `<span style="color: ${Colors.textBody}; font-size: 12px;">(${label})</span>` : ''}</li>`
             }).join('')}
           </ul>
         ` : ''}
@@ -1278,19 +1426,40 @@ function generateReportHTML(
       <p style="color: #666; margin-bottom: 15px;">Common keywords found in competitor analysis:</p>
       <div style="display: flex; flex-wrap: wrap; gap: 8px;">
         ${result.competitorAnalysis.competitorKeywords && result.competitorAnalysis.competitorKeywords.length > 0 ? result.competitorAnalysis.competitorKeywords.map(kw => 
-          `<span style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 4px; font-size: 13px; color: #1e40af;">${escapeHtml(kw)}</span>`
+          `<span style="background: ${Colors.bgLight}; border: 1px solid ${branding.primaryColor || Colors.primary}; padding: 6px 12px; border-radius: 4px; font-size: 13px; color: ${branding.primaryColor || Colors.primary};">${escapeHtml(kw)}</span>`
         ).join('') : '<p style="color: #999; font-style: italic;">No competitor keywords found</p>'}
       </div>
     </div>
     
-    <div style="margin-top: 30px; padding: 15px; background: #f0f9ff; border-radius: 8px;">
-      <h3 style="color: #3b82f6; margin-bottom: 10px;">Recommendations</h3>
-      <ol style="padding-left: 20px;">
-        <li style="margin-bottom: 10px;">Create content targeting the identified keyword gaps to capture additional search traffic</li>
-        <li style="margin-bottom: 10px;">Optimize existing pages for shared keywords to improve rankings</li>
-        <li style="margin-bottom: 10px;">Monitor competitor content strategies and adapt your approach accordingly</li>
-        <li style="margin-bottom: 10px;">Focus on high-value keyword gaps that align with your business goals</li>
-      </ol>
+    ${result.competitorAnalysis.keywordGaps && result.competitorAnalysis.keywordGaps.length === 0 ? `
+    <div style="padding: 15px; background: ${Colors.bgLight}; border-left: 4px solid ${branding.primaryColor || Colors.primary}; border-radius: 6px; margin-bottom: 20px;">
+      <p style="margin: 0 0 8px 0; font-weight: 600; color: ${Colors.textPrimary};"><strong>Why No Keyword Gaps Found:</strong></p>
+      <p style="margin: 0; font-size: 13px; color: ${Colors.textSecondary}; line-height: 1.6;">
+        ${result.competitorAnalysis.allCompetitors && result.competitorAnalysis.allCompetitors.length > 0
+          ? `Your site already targets most of the keywords your competitors are using. This is positive, but consider expanding into related long-tail keywords and niche topics your competitors haven't covered yet.`
+          : `Competitor analysis couldn't identify clear gaps. This may mean your site already covers the main keywords in your niche, or competitors weren't successfully crawled. Consider manual competitor research for deeper insights.`
+        }
+      </p>
+    </div>
+    ` : ''}
+    
+    <div style="margin-top: 30px; padding: 15px; background: ${Colors.bgLight}; border-radius: 8px;">
+      <h3 style="color: ${branding.primaryColor || Colors.primary}; margin-bottom: 15px;">High-Value Opportunities</h3>
+      <ul style="padding-left: 20px; margin: 0; line-height: 1.8;">
+        ${result.competitorAnalysis.keywordGaps && result.competitorAnalysis.keywordGaps.length > 0 ? `
+        <li style="margin-bottom: 10px; color: ${Colors.textSecondary};"><strong style="color: ${Colors.textPrimary};">Content Opportunities:</strong> Create content targeting ${result.competitorAnalysis.keywordGaps.length} identified keyword gap${result.competitorAnalysis.keywordGaps.length !== 1 ? 's' : ''} to capture additional search traffic</li>
+        ` : `
+        <li style="margin-bottom: 10px; color: ${Colors.textSecondary};"><strong style="color: ${Colors.textPrimary};">Content Expansion:</strong> Research long-tail keywords and niche topics your competitors haven't covered to find untapped opportunities</li>
+        `}
+        ${result.competitorAnalysis.sharedKeywords && result.competitorAnalysis.sharedKeywords.length > 0 ? `
+        <li style="margin-bottom: 10px; color: ${Colors.textSecondary};"><strong style="color: ${Colors.textPrimary};">Optimization:</strong> Strengthen your content for ${result.competitorAnalysis.sharedKeywords.length} shared keyword${result.competitorAnalysis.sharedKeywords.length !== 1 ? 's' : ''} to improve rankings against competitors</li>
+        ` : ''}
+        <li style="margin-bottom: 10px; color: ${Colors.textSecondary};"><strong style="color: ${Colors.textPrimary};">Monitoring:</strong> Track competitor content strategies and adapt your approach to stay competitive</li>
+        <li style="margin-bottom: 10px; color: ${Colors.textSecondary};"><strong style="color: ${Colors.textPrimary};">Focus Areas:</strong> Prioritize keyword opportunities that align with your business goals and target audience</li>
+        ${result.competitorAnalysis.allCompetitors && result.competitorAnalysis.allCompetitors.length < 3 ? `
+        <li style="margin-bottom: 10px; color: ${Colors.textBody};"><strong style="color: ${Colors.textPrimary};">Expand Analysis:</strong> Consider analyzing more competitors (${3 - result.competitorAnalysis.allCompetitors.length} more recommended) for comprehensive gap analysis</li>
+        ` : ''}
+      </ul>
     </div>
   </div>
   ` : ''}
@@ -1897,9 +2066,9 @@ function generatePriorityActionPlan(result: AuditResult): string {
         ${issue.details && !issue.details.match(/\d+\s+of\s+\d+|Found on\s+\d+/i) ? `<div style="color: #6b7280; font-size: 12px; margin: 6px 0 8px 28px; line-height: 1.5;">${escapeHtml(issue.details.substring(0, 150))}${issue.details.length > 150 ? '...' : ''}</div>` : ''}
         <div style="display: flex; gap: 15px; margin-left: 28px; font-size: 12px;">
           <span style="color: #059669;">⏱️ <strong>${effort}</strong></span>
-          <span style="color: #3b82f6;">📅 <strong>${timeline}</strong></span>
+          <span style="color: ${branding.primaryColor || Colors.primary};">📅 <strong>${timeline}</strong></span>
         </div>
-        <div style="margin-top: 8px; margin-left: 28px; padding: 8px; background: #f0f9ff; border-radius: 4px; font-size: 12px; color: #1e40af;">
+        <div style="margin-top: 8px; margin-left: 28px; padding: 8px; background: ${Colors.bgLight}; border-radius: 4px; font-size: 12px; color: ${branding.primaryColor || Colors.primary};">
           <strong>How to Fix:</strong> ${escapeHtml(getFixInstructions(issue).split('\n')[0] || 'See detailed instructions below.')}
         </div>
       </div>`
@@ -1930,9 +2099,9 @@ function generatePriorityActionPlan(result: AuditResult): string {
         ${issue.details && !issue.details.match(/\d+\s+of\s+\d+|Found on\s+\d+/i) ? `<div style="color: #6b7280; font-size: 12px; margin: 6px 0 8px 28px; line-height: 1.5;">${escapeHtml(issue.details.substring(0, 150))}${issue.details.length > 150 ? '...' : ''}</div>` : ''}
         <div style="display: flex; gap: 15px; margin-left: 28px; font-size: 12px;">
           <span style="color: #059669;">⏱️ <strong>${effort}</strong></span>
-          <span style="color: #3b82f6;">📅 <strong>${timeline}</strong></span>
+          <span style="color: ${branding.primaryColor || Colors.primary};">📅 <strong>${timeline}</strong></span>
         </div>
-        <div style="margin-top: 8px; margin-left: 28px; padding: 8px; background: #f0f9ff; border-radius: 4px; font-size: 12px; color: #1e40af;">
+        <div style="margin-top: 8px; margin-left: 28px; padding: 8px; background: ${Colors.bgLight}; border-radius: 4px; font-size: 12px; color: ${branding.primaryColor || Colors.primary};">
           <strong>How to Fix:</strong> ${escapeHtml(getFixInstructions(issue).split('\n')[0] || 'See detailed instructions below.')}
         </div>
       </div>`
@@ -1978,7 +2147,7 @@ function generatePriorityActionPlan(result: AuditResult): string {
       const keywords = result.summary.extractedKeywords
       const columns = 8
       html += `<div style="margin-top: 30px;">
-      <h3 style="color: #3b82f6; margin-bottom: 10px;">Extracted Keywords</h3>
+      <h3 style="color: ${branding.primaryColor || Colors.primary}; margin-bottom: 10px;">Extracted Keywords</h3>
       <p style="color: #666; font-size: 14px; margin-bottom: 10px;">Keywords found in titles, headings, and meta descriptions:</p>
       <table style="width: 100%; margin-top: 10px; border-collapse: collapse;">
         <tbody>`
@@ -2096,12 +2265,13 @@ function getAddOnsList(addOns: any, tier?: string): string {
 /**
  * Generate score dials (circular progress indicators) - Agency tier visual
  */
-function generateScoreDials(summary: AuditResult['summary']): string {
+function generateScoreDials(summary: AuditResult['summary'], branding?: BrandingData): string {
+  const primaryColor = branding?.primaryColor || Colors.primary
   const scores = [
-    { label: 'Overall', value: summary.overallScore, color: '#3b82f6' },
-    { label: 'Technical', value: summary.technicalScore, color: '#ef4444' },
+    { label: 'Overall', value: summary.overallScore, color: primaryColor },
+    { label: 'Technical', value: summary.technicalScore, color: Colors.error },
     { label: 'On-Page', value: summary.onPageScore, color: '#f59e0b' },
-    { label: 'Content', value: summary.contentScore, color: '#10b981' },
+    { label: 'Content', value: summary.contentScore, color: Colors.success },
     { label: 'Accessibility', value: summary.accessibilityScore, color: '#8b5cf6' }
   ]
   
@@ -2262,10 +2432,11 @@ function getContextualNote(issue: Issue, result: AuditResult): string | null {
 /**
  * Generate score comparison chart (bar chart showing all category scores)
  */
-function generateScoreComparisonChart(summary: AuditResult['summary']): string {
+function generateScoreComparisonChart(summary: AuditResult['summary'], branding?: BrandingData): string {
+  const primaryColor = branding?.primaryColor || Colors.primary
   const scores = [
-    { name: 'Technical', value: summary.technicalScore, color: '#3b82f6' },
-    { name: 'On-Page', value: summary.onPageScore, color: '#10b981' },
+    { name: 'Technical', value: summary.technicalScore, color: primaryColor },
+    { name: 'On-Page', value: summary.onPageScore, color: Colors.success },
     { name: 'Content', value: summary.contentScore, color: '#f59e0b' },
     { name: 'Accessibility', value: summary.accessibilityScore, color: '#8b5cf6' }
   ]
@@ -2569,7 +2740,7 @@ function generateCompetitorComparisonTable(result: AuditResult): string {
       ` : ''}
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
         <thead>
-          <tr style="background: #3b82f6; color: white;">
+          <tr style="background: ${branding.primaryColor || Colors.primary}; color: white;">
             <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Competitor</th>
             <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Pages</th>
             <th style="padding: 12px; text-align: center; border: 1px solid #ddd;">Keywords</th>
@@ -2588,7 +2759,7 @@ function generateCompetitorComparisonTable(result: AuditResult): string {
             return `
             <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f9fafb'};">
               <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">
-                <a href="${comp.url}" style="color: #3b82f6; text-decoration: none;">${escapeHtml(comp.url.replace(/^https?:\/\/(www\.)?/, ''))}</a>
+                <a href="${comp.url}" style="color: ${branding.primaryColor || Colors.primary}; text-decoration: none;">${escapeHtml(comp.url.replace(/^https?:\/\/(www\.)?/, ''))}</a>
               </td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${comp.pageCount || 1}</td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${comp.keywords?.length || 0}</td>
@@ -2597,7 +2768,7 @@ function generateCompetitorComparisonTable(result: AuditResult): string {
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${structure?.schemaTypes?.length || 0}</td>
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${structure?.maxDepth !== undefined ? structure.maxDepth : 'N/A'}</td>
               ` : ''}
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px; font-weight: bold; color: #3b82f6;">${sitePages} pages</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px; font-weight: bold; color: ${branding.primaryColor || Colors.primary};">${sitePages} pages</td>
             </tr>
           `
           }).join('')}
@@ -2609,7 +2780,7 @@ function generateCompetitorComparisonTable(result: AuditResult): string {
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${Math.round(siteAvgWordCount)}</td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${result.pages.filter(p => p.hasSchemaMarkup).length}</td>
               <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">-</td>
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px; color: #3b82f6;">Baseline</td>
+              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px; color: ${branding.primaryColor || Colors.primary};">Baseline</td>
             </tr>
           ` : ''}
         </tbody>
