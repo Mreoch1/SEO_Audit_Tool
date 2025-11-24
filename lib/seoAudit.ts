@@ -1479,17 +1479,22 @@ async function crawlPages(
 
       // CRITICAL FIX: Check if this is the main/start page
       // Normalize URL for comparison (remove trailing slash, handle protocol differences)
-      const normalizedUrl = url.replace(/\/$/, '')
-      const normalizedStartUrl = startUrl.replace(/\/$/, '')
+      const normalizedUrl = url.replace(/\/$/, '').toLowerCase()
+      const normalizedStartUrl = startUrl.replace(/\/$/, '').toLowerCase()
       // Main page is the first page at depth 0 that matches the start URL
       // OR if we haven't found the main page yet and this matches
-      const isMainPage = normalizedUrl === normalizedStartUrl && depth === 0 && 
+      // Also check if URL matches after removing protocol (http vs https)
+      const urlWithoutProtocol = normalizedUrl.replace(/^https?:\/\//, '')
+      const startUrlWithoutProtocol = normalizedStartUrl.replace(/^https?:\/\//, '')
+      const isMainPage = (normalizedUrl === normalizedStartUrl || urlWithoutProtocol === startUrlWithoutProtocol) && 
+                         depth === 0 && 
                          (pages.length === 0 || !pages.some(p => {
-                           const pUrl = p.url.replace(/\/$/, '')
-                           return pUrl === normalizedStartUrl
+                           const pUrl = p.url.replace(/\/$/, '').toLowerCase().replace(/^https?:\/\//, '')
+                           return pUrl === startUrlWithoutProtocol
                          }))
       if (isMainPage) {
         console.log(`[Audit Progress] ✅ Main page identified: ${url} (will fetch PageSpeed data)`)
+        console.log(`[Audit Progress] Main page check: normalizedUrl=${normalizedUrl}, startUrl=${normalizedStartUrl}, depth=${depth}, pages.length=${pages.length}`)
       }
       const pageStartTime = Date.now()
       const pageData = await analyzePage(url, options.userAgent, needsImageDetails, isMainPage)
@@ -1779,6 +1784,7 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
     const pageSpeedData = await pageSpeedPromise
     if (pageSpeedData) {
       console.log(`[PageSpeed] ✅ Successfully retrieved PageSpeed data for ${url}`)
+      console.log(`[PageSpeed] Data structure: mobile.lcp=${pageSpeedData.mobile?.lcp}, desktop.lcp=${pageSpeedData.desktop?.lcp}`)
       // NEW: Validate performance metrics
       // Extract mobile metrics for validation (or use simplified structure if available)
       const metrics = (pageSpeedData as any).mobile || pageSpeedData
@@ -2645,22 +2651,26 @@ function analyzeSiteWideIssues(
       const h2Counts = pagesWithTitle.map(p => p.h2Count || 0)
       const sameH2Count = h2Counts.every(count => count === h2Counts[0])
       
-      // If pages have same title, similar word count, and same heading structure, likely template-based
-      const isTemplateBased = wordCountVariance && sameH1Count && sameH2Count && pageEntries.length >= 3
+      // CRITICAL FIX: Template detection should be more lenient
+      // Only mark as template if ALL conditions are met AND it's a very high percentage
+      // If less than 50% of pages have the same title, don't mark as template
+      const duplicatePercentage = (pageEntries.length / pages.length) * 100
+      const isTemplateBased = duplicatePercentage >= 50 && wordCountVariance && sameH1Count && sameH2Count && pageEntries.length >= 3
       
       if (isTemplateBased) {
-        // Template-based: Report once with context
+        // Template-based: Report once with context (but still count in siteWide)
         siteWide.duplicateTitles.push(...urls)
         issues.push({
           category: 'On-page',
           severity: 'Low', // Lower severity for template pages
           message: `Template-based duplicate title: "${title}"`,
-          details: `Found on ${urls.length} pages with similar structure (likely using the same template). Each page should have a unique title tag, or use canonical tags if they're intentionally duplicate content.`,
+          details: `Found on ${urls.length} pages (${Math.round(duplicatePercentage)}% of site) with similar structure (likely using the same template). Each page should have a unique title tag, or use canonical tags if they're intentionally duplicate content.`,
           affectedPages: urls,
           fixInstructions: `These ${urls.length} pages share the same title and similar structure, suggesting they use a template. Options: 1) Add unique titles to each page, 2) If content is intentionally duplicate, add canonical tags pointing to the preferred version, 3) Consider using dynamic title generation based on page content or URL.`
         })
       } else {
         // Not template-based: Regular duplicate title issue
+        // CRITICAL FIX: Still report even if it's a small number of pages
         siteWide.duplicateTitles.push(...urls)
         issues.push({
           category: 'On-page',

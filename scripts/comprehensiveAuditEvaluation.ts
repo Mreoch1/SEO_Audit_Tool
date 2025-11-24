@@ -70,17 +70,29 @@ async function main() {
     console.log(`   ✅ Schema: No issues reported`)
   }
 
-  // PageSpeed data check
-  const pagesWithPageSpeed = result.pages?.filter((p: any) => p.pageSpeedData) || []
+  // PageSpeed data check - CRITICAL FIX: Check for both pageSpeedData structure and valid data
+  const pagesWithPageSpeed = result.pages?.filter((p: any) => {
+    if (!p.pageSpeedData) return false
+    // Check if it has valid data (not just empty structure)
+    const psd = p.pageSpeedData
+    const hasMobileData = psd.mobile && (psd.mobile.lcp > 0 || psd.mobile.fcp > 0 || psd.mobile.cls > 0)
+    const hasDesktopData = psd.desktop && (psd.desktop.lcp > 0 || psd.desktop.fcp > 0 || psd.desktop.cls > 0)
+    return hasMobileData || hasDesktopData
+  }) || []
   if (pagesWithPageSpeed.length === 0 && result.pages?.length > 0) {
     evaluation.issues.push({
       category: 'Core Web Vitals',
       severity: 'High',
-      symptom: 'No PageSpeed data for any pages (0/20)',
-      rootCause: 'PageSpeed Insights API failing or not configured',
-      fix: 'Check API key, quota, error handling, and ensure API is called for main page'
+      symptom: `No PageSpeed data for any pages (0/${result.pages.length})`,
+      rootCause: 'PageSpeed Insights API failing or not configured, or main page not identified correctly',
+      fix: 'Check API key, quota, error handling, ensure main page is identified correctly, and verify API is called'
     })
     console.log(`   ❌ PageSpeed: No data (0/${result.pages.length} pages)`)
+    // Debug: Check if any pages have pageSpeedData but with zero values
+    const pagesWithEmptyPageSpeed = result.pages?.filter((p: any) => p.pageSpeedData && (!p.pageSpeedData.mobile?.lcp || p.pageSpeedData.mobile?.lcp === 0)) || []
+    if (pagesWithEmptyPageSpeed.length > 0) {
+      console.log(`   ⚠️  Found ${pagesWithEmptyPageSpeed.length} pages with pageSpeedData structure but zero values (API may have failed)`)
+    }
   } else {
     console.log(`   ✅ PageSpeed: ${pagesWithPageSpeed.length}/${result.pages.length} pages have data`)
   }
