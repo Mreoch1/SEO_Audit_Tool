@@ -2454,8 +2454,46 @@ function parseHtml(
   }
 
   // Remove all HTML tags and count words
-  const textContent = mainContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-  const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length
+  // CRITICAL FIX: Extract text content more accurately
+  // Remove script/style content, then extract visible text
+  const textContent = mainContent
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove scripts
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove styles
+    .replace(/<[^>]+>/g, ' ') // Remove HTML tags
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim()
+  
+  // Count words (filter out empty strings and very short tokens)
+  const wordCount = textContent
+    .split(/\s+/)
+    .filter(w => w.length > 0 && w.length > 1) // Filter single-character "words"
+    .length
+  
+  // CRITICAL FIX: If word count seems too low, try extracting from body tag as fallback
+  // This handles cases where main/article/section tags don't capture all content
+  if (wordCount < 50) {
+    const bodyMatch = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+    if (bodyMatch) {
+      const bodyText = bodyMatch[1]
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '') // Exclude nav
+        .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '') // Exclude header
+        .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '') // Exclude footer
+        .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '') // Exclude aside
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      
+      const bodyWordCount = bodyText
+        .split(/\s+/)
+        .filter(w => w.length > 0 && w.length > 1)
+        .length
+      
+      // Use the larger count (body might have more content)
+      return Math.max(wordCount, bodyWordCount)
+    }
+  }
 
   return {
     url,
@@ -2523,10 +2561,10 @@ function analyzeSiteWideIssues(
     }
   })
 
-  // Find duplicate titles
-  // Use more precise normalization - only normalize whitespace and case
-  // Don't remove separators or suffixes as they may be meaningful
-  const titleMap = new Map<string, string[]>()
+  // Find duplicate titles with template detection
+  // CRITICAL FIX: Detect template-based pages to avoid false positives
+  const titleMap = new Map<string, Array<{ url: string; page: PageData }>>()
+  
   pages.forEach(page => {
     if (page.title) {
       // Normalize: lowercase, trim, collapse multiple spaces to single space
@@ -2535,20 +2573,52 @@ function analyzeSiteWideIssues(
       if (!titleMap.has(normalized)) {
         titleMap.set(normalized, [])
       }
-      titleMap.get(normalized)!.push(page.url)
+      titleMap.get(normalized)!.push({ url: page.url, page })
     }
   })
 
-  titleMap.forEach((urls, title) => {
-    if (urls.length > 1) {
-      siteWide.duplicateTitles.push(...urls)
-      issues.push({
-        category: 'On-page',
-        severity: 'Medium',
-        message: `Duplicate page title: "${title}"`,
-        details: `Found on ${urls.length} pages`,
-        affectedPages: urls
-      })
+  titleMap.forEach((pageEntries, title) => {
+    if (pageEntries.length > 1) {
+      const urls = pageEntries.map(e => e.url)
+      const pagesWithTitle = pageEntries.map(e => e.page)
+      
+      // CRITICAL FIX: Template detection
+      // Check if pages share similar characteristics (likely template-based)
+      const wordCounts = pagesWithTitle.map(p => p.wordCount || 0)
+      const avgWordCount = wordCounts.reduce((a, b) => a + b, 0) / wordCounts.length
+      const wordCountVariance = wordCounts.every(wc => Math.abs(wc - avgWordCount) < 50) // Within 50 words
+      
+      const h1Counts = pagesWithTitle.map(p => p.h1Count || 0)
+      const sameH1Count = h1Counts.every(count => count === h1Counts[0])
+      
+      const h2Counts = pagesWithTitle.map(p => p.h2Count || 0)
+      const sameH2Count = h2Counts.every(count => count === h2Counts[0])
+      
+      // If pages have same title, similar word count, and same heading structure, likely template-based
+      const isTemplateBased = wordCountVariance && sameH1Count && sameH2Count && pageEntries.length >= 3
+      
+      if (isTemplateBased) {
+        // Template-based: Report once with context
+        siteWide.duplicateTitles.push(...urls)
+        issues.push({
+          category: 'On-page',
+          severity: 'Low', // Lower severity for template pages
+          message: `Template-based duplicate title: "${title}"`,
+          details: `Found on ${urls.length} pages with similar structure (likely using the same template). Each page should have a unique title tag, or use canonical tags if they're intentionally duplicate content.`,
+          affectedPages: urls,
+          fixInstructions: `These ${urls.length} pages share the same title and similar structure, suggesting they use a template. Options: 1) Add unique titles to each page, 2) If content is intentionally duplicate, add canonical tags pointing to the preferred version, 3) Consider using dynamic title generation based on page content or URL.`
+        })
+      } else {
+        // Not template-based: Regular duplicate title issue
+        siteWide.duplicateTitles.push(...urls)
+        issues.push({
+          category: 'On-page',
+          severity: 'Medium',
+          message: `Duplicate page title: "${title}"`,
+          details: `Found on ${urls.length} pages. Each page should have a unique title tag for better SEO.`,
+          affectedPages: urls
+        })
+      }
     }
   })
 
