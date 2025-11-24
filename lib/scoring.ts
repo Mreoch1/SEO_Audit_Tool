@@ -729,11 +729,13 @@ export function calculateAccessibilityScore(
   const viewportIssues = issues.filter(i => 
     i.category === 'Technical' && matchesIssue(i, ['viewport', 'mobile'])
   )
-  viewportIssues.forEach(issue => {
-    if (issue.severity === 'High') score -= 10 // Reduced from 15 - viewport is critical but shouldn't destroy score
-    else if (issue.severity === 'Medium') score -= 5
+  // CRITICAL FIX: Only penalize once per issue, not per page
+  if (viewportIssues.length > 0) {
+    const viewportIssue = viewportIssues[0] // Only count once
+    if (viewportIssue.severity === 'High') score -= 8 // Further reduced - single issue shouldn't destroy score
+    else if (viewportIssue.severity === 'Medium') score -= 4
     else score -= 2
-  })
+  }
   
   // Also check actual page data for missing viewport
   // CRITICAL FIX: Don't double-penalize - if viewport issue is already counted, don't count again
@@ -741,7 +743,7 @@ export function calculateAccessibilityScore(
   if (pagesWithoutViewport > 0 && viewportIssues.length === 0) {
     // Only deduct if viewport issue wasn't already counted as an issue
     const missingViewportRate = pagesWithoutViewport / pages.length
-    score -= Math.min(10, missingViewportRate * 10) // Reduced from 15
+    score -= Math.min(8, missingViewportRate * 8) // Further reduced
   }
   
   // Alt text issues (-40 points max) - CRITICAL: High severity

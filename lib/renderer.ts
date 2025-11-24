@@ -418,18 +418,43 @@ export async function renderPage(
       }
 
       // CRITICAL FIX: Extract title from rendered DOM (handles JS-rendered titles)
+      // Wait for title to stabilize (some sites update title after initial load)
       if (!browserInstance || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected during title extraction')
       }
 
       let renderedTitle: string | undefined
       try {
-        renderedTitle = await page.evaluate(() => {
-          return document.title || ''
-        })
+        // Wait for title to stabilize (check multiple times)
+        let previousTitle = ''
+        let stableCount = 0
+        for (let i = 0; i < 5; i++) {
+          await page.waitForTimeout(500) // Wait 500ms between checks
+          const currentTitle = await page.evaluate(() => document.title || '')
+          if (currentTitle === previousTitle && currentTitle) {
+            stableCount++
+            if (stableCount >= 2) {
+              // Title is stable
+              renderedTitle = currentTitle
+              break
+            }
+          } else {
+            stableCount = 0
+            previousTitle = currentTitle
+          }
+        }
+        // If title never stabilized, use the last value
+        if (!renderedTitle && previousTitle) {
+          renderedTitle = previousTitle
+        }
       } catch (error: any) {
         console.warn('[Renderer] Title extraction error:', error?.message || error)
-        renderedTitle = undefined
+        // Fallback: try once more
+        try {
+          renderedTitle = await page.evaluate(() => document.title || '')
+        } catch {
+          renderedTitle = undefined
+        }
       }
 
       // CRITICAL FIX: Extract H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)
