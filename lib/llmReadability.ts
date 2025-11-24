@@ -74,56 +74,39 @@ export function calculateRenderingPercentage(
     }
   }
   
-  // Calculate rendering percentage and similarity
-  // Rendering percentage = how much content was ADDED via JavaScript
-  // Similarity = how much of the initial HTML remains in rendered HTML
-  let percentage: number
+  // CRITICAL FIX: Rewritten rendering percentage and similarity calculation
+  // Rendering percentage = percentage of content ADDED via JavaScript (relative to initial)
+  // Similarity = percentage of initial HTML that remains in rendered HTML (content overlap)
+  
+  let renderingPercentage: number
   let similarity: number
   
-  // Calculate similarity first (how much of initial HTML is in rendered HTML)
-  // Use a simple character-based similarity
-  const minLength = Math.min(initialLength, renderedLength)
-  const maxLength = Math.max(initialLength, renderedLength)
-  
-  // Similarity = how much of the smaller HTML is present in the larger
-  // If rendered is larger, similarity = initial/rendered (how much of initial is in rendered)
-  // If initial is larger, similarity = rendered/initial (how much of rendered matches initial)
   if (renderedLength >= initialLength) {
-    // Content was added/rendered via JavaScript
+    // Content was ADDED via JavaScript (most common case)
+    // Rendering percentage = how much was added relative to initial
+    renderingPercentage = ((renderedLength - initialLength) / initialLength) * 100
+    // Similarity = how much of initial HTML is still present in rendered
+    // Use a simple ratio: initial/rendered (if rendered is 2x initial, similarity is 50%)
     similarity = (initialLength / renderedLength) * 100
-    // Rendering percentage = how much was ADDED (the difference)
-    percentage = ((renderedLength - initialLength) / initialLength) * 100
   } else {
-    // Rendered is smaller - calculate similarity as rendered/initial
+    // Rendered is SMALLER than initial (rare - usually means content was removed or minified)
+    // This shouldn't happen for normal JS-rendered sites, but handle gracefully
+    // Rendering percentage = 0% (no content was added, actually reduced)
+    renderingPercentage = 0
+    // Similarity = how much of rendered matches initial
     similarity = (renderedLength / initialLength) * 100
-    // Rendering percentage should reflect how much content is accessible
-    // If similarity is high (>95%), most content is accessible = high rendering percentage
-    // Rendering percentage = similarity (how much of initial is accessible in rendered)
-    percentage = similarity
   }
   
-  // CRITICAL FIX: Rendering percentage should represent how much content is accessible to LLMs
-  // If similarity is 99.7%, that means 99.7% of content is accessible = 99.7% rendering
-  // The old logic was inverted - it showed 0% when similarity was high
+  // Ensure rendering percentage is non-negative and capped at reasonable max
+  renderingPercentage = Math.max(0, renderingPercentage)
   
-  // Final rendering percentage: use similarity when rendered < initial (most content is accessible)
-  // When rendered >= initial, use the percentage of added content
-  let renderingPercentage: number
-  if (renderedLength >= initialLength) {
-    // Content was added - rendering percentage = how much was added
-    renderingPercentage = Math.max(0, Math.min(100, percentage))
-  } else {
-    // Rendered is smaller - similarity represents how much is accessible
-    // High similarity (99.7%) = 99.7% of content is accessible = 99.7% rendering
-    renderingPercentage = similarity
-  }
-  
-  // Cap display at 10,000% to avoid confusing extreme values
+  // Cap display at 10,000% to avoid confusing extreme values for very JS-heavy sites
   // Still flag as high rendering if >100%
   const displayPercentage = Math.min(renderingPercentage, 10000)
   
-  // Flag as high rendering if >100% (content doubled or more)
-  const hasHighRendering = renderingPercentage > 100
+  // Flag as high rendering if >100% (content doubled or more via JavaScript)
+  // Also flag if similarity is low (<50%) - means most content is JS-rendered
+  const hasHighRendering = renderingPercentage > 100 || similarity < 50
   
   // NEW: Agency tier - Enhanced diagnostics
   const hydrationIssues = analyzeHydrationIssues(initialHtml, renderedHtml)
