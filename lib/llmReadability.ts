@@ -91,13 +91,15 @@ export function calculateRenderingPercentage(
   } else {
     // Rendered is SMALLER than initial (rare - usually means content was removed or minified)
     // This shouldn't happen for normal JS-rendered sites, but handle gracefully
-    // Rendering percentage = 0% (no content was added, actually reduced)
+    // Rendering percentage = 0% (no content was added via JS, actually reduced)
+    // CRITICAL FIX: Always set to 0 when rendered < initial (don't calculate negative percentage)
     renderingPercentage = 0
-    // Similarity = how much of rendered matches initial
+    // Similarity = how much of rendered matches initial (percentage of initial that's still present)
     similarity = (renderedLength / initialLength) * 100
   }
   
-  // Ensure rendering percentage is non-negative and capped at reasonable max
+  // CRITICAL FIX: Ensure rendering percentage is non-negative (should already be, but double-check)
+  // Rendering percentage should never be negative - if rendered < initial, it's 0%
   renderingPercentage = Math.max(0, renderingPercentage)
   
   // Cap display at 10,000% to avoid confusing extreme values for very JS-heavy sites

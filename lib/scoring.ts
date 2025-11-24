@@ -736,8 +736,10 @@ export function calculateAccessibilityScore(
   })
   
   // Also check actual page data for missing viewport
+  // CRITICAL FIX: Don't double-penalize - if viewport issue is already counted, don't count again
   const pagesWithoutViewport = pages.filter(p => !p.hasViewport).length
-  if (pagesWithoutViewport > 0) {
+  if (pagesWithoutViewport > 0 && viewportIssues.length === 0) {
+    // Only deduct if viewport issue wasn't already counted as an issue
     const missingViewportRate = pagesWithoutViewport / pages.length
     score -= Math.min(15, missingViewportRate * 15) // Up to 15 points for missing viewport
   }
@@ -753,11 +755,17 @@ export function calculateAccessibilityScore(
   })
   
   // Also check actual page data for missing alt text
+  // CRITICAL FIX: Don't double-penalize - if alt text issue is already counted, reduce the penalty
   const totalImages = pages.reduce((sum, p) => sum + (p.imageCount || 0), 0)
   const totalMissingAlt = pages.reduce((sum, p) => sum + (p.missingAltCount || 0), 0)
   if (totalImages > 0) {
     const missingAltRate = totalMissingAlt / totalImages
-    score -= Math.min(weights.altText, missingAltRate * weights.altText)
+    // If alt issues are already counted, use a reduced penalty (max 20 instead of full weight)
+    // This prevents double-counting when issues are already reported
+    const altPenalty = altIssues.length > 0 
+      ? Math.min(20, missingAltRate * 20) // Reduced penalty if issues already counted
+      : Math.min(weights.altText, missingAltRate * weights.altText) // Full penalty if no issues reported
+    score -= altPenalty
   }
   
   // ARIA label issues (-20 points max)
