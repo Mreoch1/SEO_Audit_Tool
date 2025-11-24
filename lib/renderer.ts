@@ -327,9 +327,11 @@ export async function renderPage(
       // Set a realistic viewport
       await page.setViewport({ width: 1920, height: 1080 })
 
-      // Navigate and wait for DOM to load (stable and fast)
+      // Navigate and wait for DOM to load
+      // CRITICAL FIX: For Next.js/SPA apps, wait for 'load' or 'networkidle' to ensure client-side routing completes
+      // This ensures titles are updated by client-side JavaScript before we extract them
       const response = await page.goto(url, {
-        waitUntil: 'domcontentloaded',
+        waitUntil: 'networkidle0', // Wait for network to be idle (Next.js apps need this)
         timeout: 30000
       })
 
@@ -338,7 +340,26 @@ export async function renderPage(
       if (!browserInstance?.isConnected() || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected during page load')
       }
-      await page.waitForTimeout(2000)
+      
+      // CRITICAL FIX: For Next.js apps, wait for client-side hydration and title updates
+      // Wait for Next.js router to complete (if it's a Next.js app)
+      await page.waitForTimeout(3000) // Increased from 2000ms for Next.js apps
+      
+      // Also wait for any title updates that might happen after initial load
+      try {
+        await page.waitForFunction(
+          () => {
+            // Check if title exists and is not empty
+            const title = document.title || document.querySelector('title')?.textContent
+            return title && title.trim().length > 0
+          },
+          { timeout: 5000 }
+        ).catch(() => {
+          // If timeout, that's okay - title might already be set
+        })
+      } catch {
+        // Ignore - title might already be set
+      }
 
       const loadTime = Date.now() - startTime
 
