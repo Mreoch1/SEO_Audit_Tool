@@ -5,8 +5,13 @@
  * enabling detection of JS-rendered content, images, links, and performance metrics.
  */
 
-import puppeteer, { Browser, Page } from 'puppeteer'
+import puppeteer from 'puppeteer-extra'
+// import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import { Browser, Page } from 'puppeteer'
+
+// puppeteer.use(StealthPlugin()) // Disabled due to compatibility issues
 import * as fs from 'fs'
+import { measureCoreWebVitals, expandPageContent } from './browser-interactions'
 
 export interface RenderedPageData {
   html: string
@@ -52,9 +57,9 @@ let pageInstance: Page | null = null
  * Check if browser is healthy and connected
  */
 function isBrowserHealthy(): boolean {
-  return browserInstance !== null && 
-         browserInstance.isConnected() && 
-         (pageInstance === null || !pageInstance.isClosed())
+  return browserInstance !== null &&
+    browserInstance.isConnected() &&
+    (pageInstance === null || !pageInstance.isClosed())
 }
 
 /**
@@ -65,17 +70,17 @@ async function getBrowser(): Promise<Browser> {
   if (browserInstance && browserInstance.isConnected()) {
     return browserInstance
   }
-  
+
   // Browser doesn't exist or is disconnected - create new one
   if (browserInstance) {
     try {
-      await browserInstance.close().catch(() => {})
+      await browserInstance.close().catch(() => { })
     } catch {
       // Ignore errors when closing disconnected browser
     }
     browserInstance = null
   }
-  
+
   console.log('[Renderer] Launching new browser instance...')
   try {
     // Try to use system Chrome if available (more stable on macOS)
@@ -91,7 +96,7 @@ async function getBrowser(): Promise<Browser> {
         // Ignore if fs check fails
       }
     }
-    
+
     // Enhanced Chrome flags to prevent crashes on macOS
     // NOTE: Removed --single-process as it causes "Cannot use V8 Proxy resolver" error
     const launchOptions: any = {
@@ -142,20 +147,20 @@ async function getBrowser(): Promise<Browser> {
       // Use pipe mode for better stability (avoids WebSocket issues)
       pipe: true
     }
-    
+
     // Use system Chrome if available
     if (useSystemChrome) {
       launchOptions.executablePath = useSystemChrome
       console.log('[Renderer] Using system Chrome:', useSystemChrome)
     }
-    
+
     browserInstance = await puppeteer.launch(launchOptions)
-    
+
     // Verify browser is actually connected and working
     if (!browserInstance.isConnected()) {
       throw new Error('Browser launched but not connected')
     }
-    
+
     // Test browser with a simple page creation
     try {
       const testPage = await browserInstance.newPage()
@@ -163,22 +168,22 @@ async function getBrowser(): Promise<Browser> {
       console.log('[Renderer] Browser instance verified and ready')
     } catch (testError) {
       console.error('[Renderer] Browser test failed, closing and retrying:', testError)
-      await browserInstance.close().catch(() => {})
+      await browserInstance.close().catch(() => { })
       throw new Error(`Browser test failed: ${testError instanceof Error ? testError.message : 'Unknown error'}`)
     }
-    
+
     // Handle browser disconnection with debouncing
     // The disconnected event can fire during normal operations (especially during long waits),
     // so we need to verify actual disconnection before logging or cleaning up
     let disconnectTimeout: NodeJS.Timeout | null = null
     let disconnectLogged = false // Prevent spam of disconnection messages
-    
+
     browserInstance.on('disconnected', () => {
       // Debounce the disconnection check - sometimes this fires temporarily during page operations
       if (disconnectTimeout) {
         clearTimeout(disconnectTimeout)
       }
-      
+
       disconnectTimeout = setTimeout(() => {
         // Double-check that browser is actually disconnected
         if (browserInstance && !browserInstance.isConnected()) {
@@ -194,7 +199,7 @@ async function getBrowser(): Promise<Browser> {
         }
       }, 2000) // Wait 2 seconds before confirming disconnection
     })
-    
+
     return browserInstance
   } catch (launchError: any) {
     console.error('[Renderer] Failed to launch browser:', launchError)
@@ -209,7 +214,7 @@ async function getBrowser(): Promise<Browser> {
  */
 async function getPage(): Promise<Page> {
   const browser = await getBrowser()
-  
+
   // Reuse existing page if it's still open AND browser is connected
   if (pageInstance && !pageInstance.isClosed() && browser.isConnected()) {
     // Verify page is still functional by checking if we can access the URL
@@ -226,14 +231,14 @@ async function getPage(): Promise<Page> {
       pageInstance = null
     }
   }
-  
+
   // Create new page
   pageInstance = await browser.newPage()
-  
+
   // Set default timeouts to prevent hanging
   pageInstance.setDefaultNavigationTimeout(30000)
   pageInstance.setDefaultTimeout(30000)
-  
+
   return pageInstance
 }
 
@@ -256,7 +261,7 @@ export async function closeBrowser(): Promise<void> {
     }
     pageInstance = null
   }
-  
+
   if (browserInstance) {
     try {
       await browserInstance.close()
@@ -281,7 +286,7 @@ export async function renderPage(
     throw new Error(`Cannot render non-HTML file: ${url}`)
   }
   let lastError: Error | null = null
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       // CRITICAL FIX: Add exponential backoff and better error handling
@@ -289,11 +294,11 @@ export async function renderPage(
         const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
         console.log(`[Renderer] Waiting ${backoffDelay}ms before retry ${attempt + 1}/${maxRetries + 1}...`)
         await new Promise(resolve => setTimeout(resolve, backoffDelay))
-        
+
         // Force browser cleanup before retry
         if (browserInstance) {
           try {
-            await browserInstance.close().catch(() => {})
+            await browserInstance.close().catch(() => { })
           } catch {
             // Ignore cleanup errors
           }
@@ -301,168 +306,77 @@ export async function renderPage(
           pageInstance = null
         }
       }
-      
+
       const page = await getPage()
-      
+
       // CRITICAL: Verify browser is still connected before proceeding
       if (!browserInstance || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected before page operation')
       }
-      
+
       // Set user agent
       await page.setUserAgent(userAgent)
-      
+
       // Set viewport
       await page.setViewport({ width: 1920, height: 1080 })
-      
+
       const startTime = Date.now()
-      
-      // Navigate and wait for network to be idle (reduced timeout for faster audits)
+
+      // Set a realistic viewport
+      await page.setViewport({ width: 1920, height: 1080 })
+
+      // Navigate and wait for DOM to load (stable and fast)
       const response = await page.goto(url, {
-        waitUntil: 'domcontentloaded', // Changed from networkidle2 to domcontentloaded for faster loading
-        timeout: 20000 // Reduced from 30000 to 20000
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
       })
-      
-      // Wait a bit for JS to execute, but don't wait for all network requests
+
+      // Wait longer for JS to execute and for any anti-bot checks to complete
       // Check connection before waiting
-      if (!browserInstance || !browserInstance.isConnected()) {
+      if (!browserInstance?.isConnected() || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected during page load')
       }
       await page.waitForTimeout(2000)
-      
+
       const loadTime = Date.now() - startTime
-      
+
       // Get status code
       const statusCode = response?.status() || 200
-      
+
       // Get content type
       const contentType = response?.headers()['content-type'] || 'text/html'
-      
+
       // Get rendered HTML (after JS execution) - with connection check
       if (!browserInstance || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected before content extraction')
       }
       const renderedHtml = await page.content()
-      
+
       // Measure Core Web Vitals
       const metrics = await measureCoreWebVitals(page)
-      
+
       // CRITICAL FIX: Wait for dynamic content to load
       // Try to expand infinite scroll, load more buttons, accordions, tabs
       // Add connection checks throughout to prevent hanging on disconnected browser
       try {
-        // Step 1: Scroll down to trigger infinite scroll (3 scrolls)
-        for (let i = 0; i < 3; i++) {
-          // Check connection before each scroll
-          if (!browserInstance || !browserInstance.isConnected()) {
-            throw new Error('Browser disconnected during content expansion')
-          }
-          await page.evaluate(() => {
-            window.scrollTo(0, document.body.scrollHeight)
-          })
-          await page.waitForTimeout(1000) // Wait for content to load
-        }
-        
-        // Step 2: Click "Load More" buttons (multiple rounds)
-        for (let round = 0; round < 3; round++) {
-          // Check connection before each round
-          if (!browserInstance || !browserInstance.isConnected()) {
-            throw new Error('Browser disconnected during button clicking')
-          }
-          const clicked = await page.evaluate(() => {
-            const loadMoreButtons = Array.from(document.querySelectorAll('button, a, [role="button"]')).filter((el: any) => {
-              const text = (el.textContent || el.getAttribute('aria-label') || '').toLowerCase()
-              const isVisible = el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0
-              return isVisible && (
-                text.includes('load more') || 
-                text.includes('show more') || 
-                text.includes('see more') ||
-                text.includes('view more') ||
-                text.includes('expand')
-              )
-            })
-            loadMoreButtons.forEach((btn: any) => {
-              try {
-                btn.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                btn.click()
-              } catch {}
-            })
-            return loadMoreButtons.length
-          })
-          
-          if (clicked === 0) break // No more buttons to click
-          await page.waitForTimeout(2000) // Wait for content to load
-        }
-        
-        // Step 3: Expand tabbed content (click tabs to reveal hidden content)
-        if (!browserInstance || !browserInstance.isConnected()) {
-          throw new Error('Browser disconnected before tab expansion')
-        }
-        await page.evaluate(() => {
-          const tabs = Array.from(document.querySelectorAll('[role="tab"], .tab, [data-tab]')).filter((el: any) => {
-            const isVisible = el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0
-            return isVisible && !el.classList.contains('active') && !el.classList.contains('selected')
-          })
-          tabs.slice(0, 5).forEach((tab: any) => {
-            try {
-              tab.scrollIntoView({ behavior: 'smooth', block: 'center' })
-              tab.click()
-            } catch {}
-          })
-        })
-        await page.waitForTimeout(1500)
-        
-        // Step 4: Expand accordions (multiple rounds)
-        for (let round = 0; round < 2; round++) {
-          // Check connection before each round
-          if (!browserInstance || !browserInstance.isConnected()) {
-            throw new Error('Browser disconnected during accordion expansion')
-          }
-          const expanded = await page.evaluate(() => {
-            const accordions = Array.from(document.querySelectorAll(
-              '[aria-expanded="false"], .accordion:not(.active), [data-accordion]:not(.active)'
-            )).filter((el: any) => {
-              const isVisible = el.offsetParent !== null && el.offsetWidth > 0 && el.offsetHeight > 0
-              return isVisible
-            })
-            accordions.slice(0, 10).forEach((acc: any) => {
-              try {
-                acc.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                acc.click()
-              } catch {}
-            })
-            return accordions.length
-          })
-          
-          if (expanded === 0) break
-          await page.waitForTimeout(1500)
-        }
-        
-        // Step 5: Final scroll to bottom to trigger any remaining lazy loading
-        if (!browserInstance || !browserInstance.isConnected()) {
-          throw new Error('Browser disconnected before final scroll')
-        }
-        await page.evaluate(() => {
-          window.scrollTo(0, document.body.scrollHeight)
-        })
-        await page.waitForTimeout(2000) // Wait for final content to load
+        await expandPageContent(page, browserInstance)
       } catch {
         // If expansion fails, continue with what we have
       }
-      
+
       // Get final HTML (in case lazy loading added content)
       // Final connection check before data extraction
       if (!browserInstance || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected before final data extraction')
       }
       const finalHtml = await page.content()
-      
+
       // Analyze images and links while page is still open
       // Add connection checks for each analysis step
       if (!browserInstance || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected during image/link analysis')
       }
-      
+
       // Wrap analysis in try-catch to handle page JavaScript interference
       let imageData, linkData, h1Data
       try {
@@ -471,30 +385,30 @@ export async function renderPage(
         console.warn('[Renderer] Image analysis error, using empty data:', error?.message || error)
         imageData = { imageCount: 0, missingAltCount: 0, images: [] }
       }
-      
+
       if (!browserInstance || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected during link analysis')
       }
-      
+
       try {
         linkData = await analyzeLinks(page, url)
       } catch (error: any) {
         console.warn('[Renderer] Link analysis error, using empty data:', error?.message || error)
         linkData = { internalLinkCount: 0, externalLinkCount: 0, links: [] }
       }
-      
+
       // CRITICAL FIX: Extract H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)
       if (!browserInstance || !browserInstance.isConnected()) {
         throw new Error('Browser disconnected during H1 extraction')
       }
-      
+
       try {
         h1Data = await extractH1sFromDOM(page)
       } catch (error: any) {
         console.warn('[Renderer] H1 extraction error, using empty data:', error?.message || error)
         h1Data = { h1Count: 0, h1Text: [] }
       }
-      
+
       // Don't close the page - we'll reuse it for next page in same audit
       // Just navigate away to clear state (but check browser is still connected first)
       // CRITICAL: Add connection health check before navigation
@@ -506,9 +420,9 @@ export async function renderPage(
               throw new Error('Page is not responsive')
             })
             // Page is healthy, clear it
-            await page.goto('about:blank', { 
-              waitUntil: 'domcontentloaded', 
-              timeout: 5000 
+            await page.goto('about:blank', {
+              waitUntil: 'domcontentloaded',
+              timeout: 5000
             }).catch(() => {
               // If navigation fails, page might be dead - mark for recreation
               pageInstance = null
@@ -525,7 +439,7 @@ export async function renderPage(
         // Ignore errors when clearing page, but mark for recreation
         pageInstance = null
       }
-      
+
       return {
         html: renderedHtml,
         renderedHtml: finalHtml,
@@ -543,21 +457,21 @@ export async function renderPage(
       const errorMessage = error?.message || String(error)
       const isConnectionError = /ECONNRESET|socket hang up|Connection closed|Target closed|Browser disconnected/i.test(errorMessage)
       const isBrowserCrash = /Failed to launch the browser process|browser process|Failed to launch/i.test(errorMessage)
-      
+
       // Check if browser is actually disconnected
       const isActuallyDisconnected = !browserInstance || !browserInstance.isConnected()
-      
+
       // Force browser cleanup on any error
       if (browserInstance) {
         try {
-          await browserInstance.close().catch(() => {})
+          await browserInstance.close().catch(() => { })
         } catch {
           // Ignore cleanup errors
         }
         browserInstance = null
         pageInstance = null
       }
-      
+
       // If it's a connection/browser error and we have retries left, try again
       if ((isConnectionError || isBrowserCrash || isActuallyDisconnected) && attempt < maxRetries) {
         // Only log if it's not a simple disconnection (those are common and handled automatically)
@@ -568,7 +482,7 @@ export async function renderPage(
         // For routine disconnections, silently retry (they're common during long operations)
         continue
       }
-      
+
       // If out of retries or non-recoverable error, throw
       if (attempt === maxRetries) {
         console.error(`[Renderer] Failed to render ${url} after ${attempt + 1} attempts: ${errorMessage}`)
@@ -576,159 +490,12 @@ export async function renderPage(
       }
     }
   }
-  
+
   // Should never reach here, but TypeScript needs it
   throw lastError || new Error(`Failed to render ${url}`)
 }
 
-/**
- * Measure Core Web Vitals and performance metrics
- */
-async function measureCoreWebVitals(page: Page): Promise<RenderedPageData['metrics']> {
-  const metrics: RenderedPageData['metrics'] = {}
-  
-  try {
-    // Inject performance measurement script
-    await page.evaluateOnNewDocument(() => {
-      // LCP (Largest Contentful Paint)
-      if (typeof PerformanceObserver !== 'undefined') {
-        let lcpValue = 0
-        new PerformanceObserver((list) => {
-          const entries = list.getEntries()
-          const lastEntry = entries[entries.length - 1] as any
-          lcpValue = lastEntry.renderTime || lastEntry.loadTime || 0
-          ;(window as any).__lcp = lcpValue
-        }).observe({ entryTypes: ['largest-contentful-paint'] })
-        
-        // CLS (Cumulative Layout Shift)
-        let clsValue = 0
-        new PerformanceObserver((list) => {
-          for (const entry of list.getEntries() as any[]) {
-            if (!entry.hadRecentInput) {
-              clsValue += entry.value
-            }
-          }
-          ;(window as any).__cls = clsValue
-        }).observe({ entryTypes: ['layout-shift'] })
-        
-        // FID (First Input Delay)
-        new PerformanceObserver((list) => {
-          for (const entry of list.getEntries() as any[]) {
-            const fid = entry.processingStart - entry.startTime
-            if (!(window as any).__fid) {
-              ;(window as any).__fid = fid
-            }
-          }
-        }).observe({ entryTypes: ['first-input'] })
-        
-        // TBT (Total Blocking Time) - measure long tasks
-        const longTasks: number[] = []
-        new PerformanceObserver((list) => {
-          for (const entry of list.getEntries() as any[]) {
-            if (entry.duration > 50) {
-              longTasks.push(entry.duration - 50)
-            }
-          }
-          ;(window as any).__tbt = longTasks.reduce((a, b) => a + b, 0)
-        }).observe({ entryTypes: ['longtask'] })
-        
-        // FCP (First Contentful Paint)
-        new PerformanceObserver((list) => {
-          for (const entry of list.getEntries()) {
-            if (entry.name === 'first-contentful-paint') {
-              ;(window as any).__fcp = entry.startTime
-            }
-          }
-        }).observe({ entryTypes: ['paint'] })
-      }
-    })
-    
-    // Wait for page to stabilize and metrics to be collected
-    await page.waitForTimeout(5000) // Increased wait time
-    
-    // Try to wait for LCP if it hasn't fired yet
-    try {
-      await page.evaluate(() => {
-        return new Promise<void>((resolve) => {
-          if ((window as any).__lcp) {
-            resolve()
-            return
-          }
-          // Wait up to 5 more seconds for LCP
-          const checkInterval = setInterval(() => {
-            if ((window as any).__lcp) {
-              clearInterval(checkInterval)
-              resolve()
-            }
-          }, 500)
-          setTimeout(() => {
-            clearInterval(checkInterval)
-            resolve()
-          }, 5000)
-        })
-      })
-    } catch {
-      // Continue if this fails
-    }
-    
-    // Extract metrics - check multiple times for late-arriving metrics
-    let pageMetrics = await page.evaluate(() => {
-      const nav = performance.getEntriesByType('navigation')[0] as any
-      const paintEntries = performance.getEntriesByType('paint') as any[]
-      const fcpEntry = paintEntries.find((e: any) => e.name === 'first-contentful-paint')
-      
-      return {
-        lcp: (window as any).__lcp || 0,
-        cls: (window as any).__cls !== undefined ? (window as any).__cls : 0,
-        fid: (window as any).__fid || 0,
-        tbt: (window as any).__tbt || 0,
-        fcp: (window as any).__fcp || (fcpEntry ? fcpEntry.startTime : 0),
-        ttfb: nav ? nav.responseStart - nav.requestStart : 0
-      }
-    })
-    
-    // Wait a bit more and check again for late metrics
-    await page.waitForTimeout(2000)
-    const updatedMetrics = await page.evaluate(() => {
-      const nav = performance.getEntriesByType('navigation')[0] as any
-      return {
-        lcp: (window as any).__lcp || 0,
-        cls: (window as any).__cls !== undefined ? (window as any).__cls : 0,
-        fid: (window as any).__fid || 0,
-        tbt: (window as any).__tbt || 0,
-        fcp: (window as any).__fcp || 0,
-        ttfb: nav ? nav.responseStart - nav.requestStart : 0
-      }
-    })
-    
-    // Use the latest values
-    pageMetrics = {
-      lcp: updatedMetrics.lcp || pageMetrics.lcp,
-      cls: updatedMetrics.cls || pageMetrics.cls,
-      fid: updatedMetrics.fid || pageMetrics.fid,
-      tbt: updatedMetrics.tbt || pageMetrics.tbt,
-      fcp: updatedMetrics.fcp || pageMetrics.fcp,
-      ttfb: updatedMetrics.ttfb || pageMetrics.ttfb
-    }
-    
-    // Include metrics if they have reasonable values
-    // CLS can be 0, so check if it's been set (not undefined)
-    if (pageMetrics.lcp > 0) metrics.lcp = Math.round(pageMetrics.lcp)
-    if (pageMetrics.cls !== undefined && pageMetrics.cls !== null) {
-      metrics.cls = Math.round(pageMetrics.cls * 1000) / 1000 // Round to 3 decimals
-    }
-    if (pageMetrics.fid > 0) metrics.fid = Math.round(pageMetrics.fid)
-    if (pageMetrics.tbt > 0) metrics.tbt = Math.round(pageMetrics.tbt)
-    if (pageMetrics.fcp > 0) metrics.fcp = Math.round(pageMetrics.fcp)
-    if (pageMetrics.ttfb > 0) metrics.ttfb = Math.round(pageMetrics.ttfb)
-    
-  } catch (error) {
-    // If metrics collection fails, continue without them
-    console.warn('Failed to collect performance metrics:', error)
-  }
-  
-  return metrics
-}
+// measureCoreWebVitals moved to browser-interactions.ts
 
 /**
  * Analyze images from rendered page
@@ -750,89 +517,89 @@ export async function analyzeImages(page: Page, baseUrl: string): Promise<{
       try {
         const images: any[] = []
         const baseHost = new URL(baseUrl).hostname
-        
+
         // Regular img tags (these NEED alt attributes)
         const imgElements: any[] = []
-    document.querySelectorAll('img').forEach(img => {
-      const imageData = {
-        src: img.src || img.getAttribute('src') || '',
-        alt: img.alt || img.getAttribute('alt') || undefined,
-        isLazy: img.loading === 'lazy' || 
-                img.hasAttribute('data-src') || 
-                img.hasAttribute('data-lazy'),
-        isBackground: false
-      }
-      imgElements.push(imageData)
-      images.push(imageData)
-    })
-    
-    // Picture elements (these don't need alt - the <img> inside does)
-    // We'll track them but not count them for alt text purposes
-    document.querySelectorAll('picture source').forEach(source => {
-      const srcset = (source as HTMLSourceElement).srcset || source.getAttribute('srcset')
-      if (srcset) {
-        images.push({
-          src: srcset,
-          alt: undefined,
-          isLazy: false,
-          isBackground: false,
-          isPictureSource: true // Mark as picture source
-        })
-      }
-    })
-    
-    // Background images (CSS) - these don't need alt attributes
-    document.querySelectorAll('*').forEach(el => {
-      const style = window.getComputedStyle(el)
-      const bgImage = style.backgroundImage
-      if (bgImage && bgImage !== 'none' && bgImage !== 'initial') {
-        const match = bgImage.match(/url\(['"]?([^'"]+)['"]?\)/)
-        if (match && match[1]) {
-          images.push({
-            src: match[1],
-            alt: undefined,
-            isLazy: false,
-            isBackground: true
-          })
-        }
-      }
-    })
-    
-    // Also check data attributes for lazy-loaded images
-    document.querySelectorAll('[data-src], [data-lazy-src], [data-bg]').forEach(el => {
-      const src = el.getAttribute('data-src') || 
-                  el.getAttribute('data-lazy-src') || 
-                  el.getAttribute('data-bg')
-      if (src) {
-        const imageData = {
-          src,
-          alt: el.getAttribute('alt') || undefined,
-          isLazy: true,
-          isBackground: el.hasAttribute('data-bg')
-        }
-        // Only count as img element if it's not a background image
-        if (!el.hasAttribute('data-bg')) {
+        document.querySelectorAll('img').forEach(img => {
+          const imageData = {
+            src: img.src || img.getAttribute('src') || '',
+            alt: img.alt || img.getAttribute('alt') || undefined,
+            isLazy: img.loading === 'lazy' ||
+              img.hasAttribute('data-src') ||
+              img.hasAttribute('data-lazy'),
+            isBackground: false
+          }
           imgElements.push(imageData)
-        }
-        images.push(imageData)
-      }
-    })
-    
-    // Remove duplicates (same src)
-    const uniqueImages = Array.from(
-      new Map(images.map(img => [img.src, img])).values()
-    )
-    
-    // Remove duplicates from img elements only (for alt counting)
-    const uniqueImgElements = Array.from(
-      new Map(imgElements.map(img => [img.src, img])).values()
-    )
-    
-    // Count missing alt ONLY for <img> elements (not background images or picture sources)
-    const missingAltCount = uniqueImgElements.filter(img => 
-      !img.alt || img.alt.trim() === '' || img.alt === 'undefined'
-    ).length
-    
+          images.push(imageData)
+        })
+
+        // Picture elements (these don't need alt - the <img> inside does)
+        // We'll track them but not count them for alt text purposes
+        document.querySelectorAll('picture source').forEach(source => {
+          const srcset = (source as HTMLSourceElement).srcset || source.getAttribute('srcset')
+          if (srcset) {
+            images.push({
+              src: srcset,
+              alt: undefined,
+              isLazy: false,
+              isBackground: false,
+              isPictureSource: true // Mark as picture source
+            })
+          }
+        })
+
+        // Background images (CSS) - these don't need alt attributes
+        document.querySelectorAll('*').forEach(el => {
+          const style = window.getComputedStyle(el)
+          const bgImage = style.backgroundImage
+          if (bgImage && bgImage !== 'none' && bgImage !== 'initial') {
+            const match = bgImage.match(/url\(['"]?([^'"]+)['"]?\)/)
+            if (match && match[1]) {
+              images.push({
+                src: match[1],
+                alt: undefined,
+                isLazy: false,
+                isBackground: true
+              })
+            }
+          }
+        })
+
+        // Also check data attributes for lazy-loaded images
+        document.querySelectorAll('[data-src], [data-lazy-src], [data-bg]').forEach(el => {
+          const src = el.getAttribute('data-src') ||
+            el.getAttribute('data-lazy-src') ||
+            el.getAttribute('data-bg')
+          if (src) {
+            const imageData = {
+              src,
+              alt: el.getAttribute('alt') || undefined,
+              isLazy: true,
+              isBackground: el.hasAttribute('data-bg')
+            }
+            // Only count as img element if it's not a background image
+            if (!el.hasAttribute('data-bg')) {
+              imgElements.push(imageData)
+            }
+            images.push(imageData)
+          }
+        })
+
+        // Remove duplicates (same src)
+        const uniqueImages = Array.from(
+          new Map(images.map(img => [img.src, img])).values()
+        )
+
+        // Remove duplicates from img elements only (for alt counting)
+        const uniqueImgElements = Array.from(
+          new Map(imgElements.map(img => [img.src, img])).values()
+        )
+
+        // Count missing alt ONLY for <img> elements (not background images or picture sources)
+        const missingAltCount = uniqueImgElements.filter(img =>
+          !img.alt || img.alt.trim() === '' || img.alt === 'undefined'
+        ).length
+
         return {
           imageCount: uniqueImgElements.length, // Only count <img> elements for alt text purposes
           missingAltCount: missingAltCount,
@@ -870,84 +637,84 @@ export async function analyzeLinks(page: Page, baseUrl: string): Promise<{
       try {
         const links: any[] = []
         const baseHost = new URL(baseUrl).hostname
-        
+
         // CRITICAL FIX: Only count links in main content areas, exclude nav/footer/header
         // Find main content container
-        const mainContent = document.querySelector('main') || 
-                       document.querySelector('article') || 
-                       document.querySelector('[role="main"]') ||
-                       document.body
-    
-    // Exclude navigation, header, footer, and aside elements
-    const excludedSelectors = 'nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]'
-    const excludedElements = new Set<Element>()
-    document.querySelectorAll(excludedSelectors).forEach(el => excludedElements.add(el))
-    
-    // Helper to check if element is in excluded area
-    const isInExcludedArea = (element: Element): boolean => {
-      let current: Element | null = element
-      while (current && current !== document.body) {
-        if (excludedElements.has(current)) return true
-        current = current.parentElement
-      }
-      return false
-    }
-    
-    // Regular anchor tags - only in main content
-    mainContent.querySelectorAll('a[href]').forEach(a => {
-      // Skip if link is in excluded area (nav/footer/header)
-      if (isInExcludedArea(a)) return
-      try {
-        const href = (a as HTMLAnchorElement).href || a.getAttribute('href')
-        if (!href) return
-        
-        const url = new URL(href, baseUrl)
-        links.push({
-          href: url.toString(),
-          text: (a.textContent || '').trim() || a.getAttribute('aria-label') || '',
-          isInternal: url.hostname === baseHost
+        const mainContent = document.querySelector('main') ||
+          document.querySelector('article') ||
+          document.querySelector('[role="main"]') ||
+          document.body
+
+        // Exclude navigation, header, footer, and aside elements
+        const excludedSelectors = 'nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]'
+        const excludedElements = new Set<Element>()
+        document.querySelectorAll(excludedSelectors).forEach(el => excludedElements.add(el))
+
+        // Helper to check if element is in excluded area
+        const isInExcludedArea = (element: Element): boolean => {
+          let current: Element | null = element
+          while (current && current !== document.body) {
+            if (excludedElements.has(current)) return true
+            current = current.parentElement
+          }
+          return false
+        }
+
+        // Regular anchor tags - only in main content
+        mainContent.querySelectorAll('a[href]').forEach(a => {
+          // Skip if link is in excluded area (nav/footer/header)
+          if (isInExcludedArea(a)) return
+          try {
+            const href = (a as HTMLAnchorElement).href || a.getAttribute('href')
+            if (!href) return
+
+            const url = new URL(href, baseUrl)
+            links.push({
+              href: url.toString(),
+              text: (a.textContent || '').trim() || a.getAttribute('aria-label') || '',
+              isInternal: url.hostname === baseHost
+            })
+          } catch {
+            // Relative URL - count as internal
+            const href = a.getAttribute('href')
+            if (href && !href.startsWith('#')) {
+              links.push({
+                href: href,
+                text: (a.textContent || '').trim() || a.getAttribute('aria-label') || '',
+                isInternal: true
+              })
+            }
+          }
         })
-      } catch {
-        // Relative URL - count as internal
-        const href = a.getAttribute('href')
-        if (href && !href.startsWith('#')) {
-          links.push({
-            href: href,
-            text: (a.textContent || '').trim() || a.getAttribute('aria-label') || '',
-            isInternal: true
-          })
-        }
-      }
-    })
-    
-    // Button-based navigation (onclick with window.location or similar)
-    document.querySelectorAll('button, [role="button"], [onclick]').forEach(btn => {
-      const onclick = btn.getAttribute('onclick') || ''
-      const match = onclick.match(/(?:window\.location|location\.href)\s*=\s*['"]([^'"]+)['"]/)
-      if (match) {
-        try {
-          const url = new URL(match[1], baseUrl)
-          links.push({
-            href: match[1],
-            text: (btn.textContent || '').trim() || btn.getAttribute('aria-label') || '',
-            isInternal: url.hostname === baseHost
-          })
-        } catch {
-          // Relative URL
-          links.push({
-            href: match[1],
-            text: (btn.textContent || '').trim() || btn.getAttribute('aria-label') || '',
-            isInternal: true
-          })
-        }
-      }
-    })
-    
-    // Remove duplicates
-    const uniqueLinks = Array.from(
-      new Map(links.map(link => [link.href, link])).values()
-    )
-    
+
+        // Button-based navigation (onclick with window.location or similar)
+        document.querySelectorAll('button, [role="button"], [onclick]').forEach(btn => {
+          const onclick = btn.getAttribute('onclick') || ''
+          const match = onclick.match(/(?:window\.location|location\.href)\s*=\s*['"]([^'"]+)['"]/)
+          if (match) {
+            try {
+              const url = new URL(match[1], baseUrl)
+              links.push({
+                href: match[1],
+                text: (btn.textContent || '').trim() || btn.getAttribute('aria-label') || '',
+                isInternal: url.hostname === baseHost
+              })
+            } catch {
+              // Relative URL
+              links.push({
+                href: match[1],
+                text: (btn.textContent || '').trim() || btn.getAttribute('aria-label') || '',
+                isInternal: true
+              })
+            }
+          }
+        })
+
+        // Remove duplicates
+        const uniqueLinks = Array.from(
+          new Map(links.map(link => [link.href, link])).values()
+        )
+
         return {
           internalLinkCount: uniqueLinks.filter(l => l.isInternal).length,
           externalLinkCount: uniqueLinks.filter(l => !l.isInternal).length,
@@ -983,37 +750,37 @@ export async function extractH1sFromDOM(page: Page): Promise<{
       // Use try-catch to handle any page JavaScript interference
       try {
         const h1s: string[] = []
-    
-    // Function to recursively extract H1s, including from shadow DOM
-    const extractH1s = (root: Document | ShadowRoot | Element) => {
-      // Regular H1 elements
-      root.querySelectorAll('h1').forEach(h1 => {
-        const text = h1.textContent?.trim() || ''
-        if (text) {
-          h1s.push(text)
+
+        // Function to recursively extract H1s, including from shadow DOM
+        const extractH1s = (root: Document | ShadowRoot | Element) => {
+          // Regular H1 elements
+          root.querySelectorAll('h1').forEach(h1 => {
+            const text = h1.textContent?.trim() || ''
+            if (text) {
+              h1s.push(text)
+            }
+          })
+
+          // Check shadow DOM (for Web Components)
+          root.querySelectorAll('*').forEach(el => {
+            if (el.shadowRoot) {
+              extractH1s(el.shadowRoot)
+            }
+          })
         }
-      })
-      
-      // Check shadow DOM (for Web Components)
-      root.querySelectorAll('*').forEach(el => {
-        if (el.shadowRoot) {
-          extractH1s(el.shadowRoot)
-        }
-      })
-    }
-    
-    // Start extraction from document
-    extractH1s(document)
-    
-    // Also check for React/Next.js hydration - look for elements that might become H1s
-    // Some frameworks render H1s with data attributes or specific classes
-    document.querySelectorAll('[data-h1], .h1, [role="heading"][aria-level="1"]').forEach(el => {
-      const text = el.textContent?.trim() || ''
-      if (text && !h1s.includes(text)) {
-        h1s.push(text)
-      }
-    })
-    
+
+        // Start extraction from document
+        extractH1s(document)
+
+        // Also check for React/Next.js hydration - look for elements that might become H1s
+        // Some frameworks render H1s with data attributes or specific classes
+        document.querySelectorAll('[data-h1], .h1, [role="heading"][aria-level="1"]').forEach(el => {
+          const text = el.textContent?.trim() || ''
+          if (text && !h1s.includes(text)) {
+            h1s.push(text)
+          }
+        })
+
         return {
           h1Count: h1s.length,
           h1Text: h1s
