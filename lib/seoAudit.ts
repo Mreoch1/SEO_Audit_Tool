@@ -1481,7 +1481,13 @@ async function crawlPages(
       // Normalize URL for comparison (remove trailing slash, handle protocol differences)
       const normalizedUrl = url.replace(/\/$/, '')
       const normalizedStartUrl = startUrl.replace(/\/$/, '')
-      const isMainPage = normalizedUrl === normalizedStartUrl && depth === 0 && pages.length === 0
+      // Main page is the first page at depth 0 that matches the start URL
+      // OR if we haven't found the main page yet and this matches
+      const isMainPage = normalizedUrl === normalizedStartUrl && depth === 0 && 
+                         (pages.length === 0 || !pages.some(p => {
+                           const pUrl = p.url.replace(/\/$/, '')
+                           return pUrl === normalizedStartUrl
+                         }))
       if (isMainPage) {
         console.log(`[Audit Progress] ✅ Main page identified: ${url} (will fetch PageSpeed data)`)
       }
