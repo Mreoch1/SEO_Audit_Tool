@@ -161,21 +161,21 @@ function generateReportHTML(
       align-items: center;
       min-height: 100vh;
       text-align: center;
-      padding: 100px 40px 40px 40px;
+      padding: 40px 40px 40px 40px; /* CRITICAL FIX: Reduced top padding from 100px to 40px to move logo upward */
       position: relative;
     }
     .logo {
-      max-width: 375px;
-      margin-bottom: 30px;
+      max-width: 500px; /* CRITICAL FIX: Increased from 375px to 500px (~33% larger) */
+      width: 500px; /* Ensure consistent sizing */
+      margin: 0 auto 30px auto; /* CRITICAL FIX: Explicitly center with auto margins */
       display: block;
-      margin-left: auto;
-      margin-right: auto;
     }
     .brand-name {
-      font-size: 42px;
+      font-size: 56px; /* CRITICAL FIX: Increased from 42px to 56px (~33% larger) to match logo size increase */
       font-weight: bold;
       color: ${branding.primaryColor};
-      margin-bottom: 8px;
+      margin: 0 auto 8px auto; /* CRITICAL FIX: Explicitly center with auto margins */
+      text-align: center;
     }
     .brand-subtitle {
       font-size: 18px;

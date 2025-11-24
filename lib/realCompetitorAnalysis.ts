@@ -204,21 +204,41 @@ export async function analyzeCompetitors(
   competitorData: CompetitorKeywordData[]
   keywordGaps: KeywordGap[]
 }> {
-  console.log(`[Competitor] Analyzing ${competitorUrls.length} competitor URLs...`)
+  console.log(`[Competitor] 🔍 Analyzing ${competitorUrls.length} competitor URLs: ${competitorUrls.join(', ')}`)
   
-  // Fetch all competitors in parallel (with limit)
+  // CRITICAL FIX: Fetch all competitors in parallel (with limit)
   const batchSize = 3 // Process 3 at a time to avoid overwhelming
   const competitorData: CompetitorKeywordData[] = []
+  const failedUrls: string[] = []
   
   for (let i = 0; i < competitorUrls.length; i += batchSize) {
     const batch = competitorUrls.slice(i, i + batchSize)
+    console.log(`[Competitor] Processing batch ${Math.floor(i / batchSize) + 1}: ${batch.join(', ')}`)
     const results = await Promise.all(
-      batch.map(url => analyzeCompetitorUrl(url, userAgent))
+      batch.map(async (url) => {
+        try {
+          const result = await analyzeCompetitorUrl(url, userAgent)
+          if (!result) {
+            failedUrls.push(url)
+            console.warn(`[Competitor] ⚠️ Failed to analyze: ${url}`)
+          } else {
+            console.log(`[Competitor] ✅ Successfully analyzed: ${url} (${result.keywords.length} keywords)`)
+          }
+          return result
+        } catch (error) {
+          failedUrls.push(url)
+          console.error(`[Competitor] ❌ Error analyzing ${url}:`, error instanceof Error ? error.message : error)
+          return null
+        }
+      })
     )
     competitorData.push(...results.filter((r): r is CompetitorKeywordData => r !== null))
   }
   
-  console.log(`[Competitor] Successfully analyzed ${competitorData.length} competitors`)
+  console.log(`[Competitor] ✅ Successfully analyzed ${competitorData.length}/${competitorUrls.length} competitors`)
+  if (failedUrls.length > 0) {
+    console.warn(`[Competitor] ⚠️ Failed to analyze ${failedUrls.length} competitor(s): ${failedUrls.join(', ')}`)
+  }
   
   // Build keyword frequency map across all competitors
   const keywordFrequency = new Map<string, { count: number; urls: Set<string> }>()

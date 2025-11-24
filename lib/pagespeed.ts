@@ -33,9 +33,17 @@ export async function fetchPageSpeedInsights(url: string): Promise<PageSpeedData
   const API_KEY = process.env.PAGESPEED_INSIGHTS_API_KEY
   
   if (!API_KEY) {
-    console.warn('PageSpeed Insights API key not configured. Skipping PageSpeed analysis.')
+    console.warn('[PageSpeed] ❌ API key not configured. Set PAGESPEED_INSIGHTS_API_KEY environment variable.')
+    console.warn('[PageSpeed] Get your API key at: https://developers.google.com/speed/docs/insights/v5/get-started')
     return null
   }
+  
+  if (API_KEY.length < 20) {
+    console.warn('[PageSpeed] ⚠️ API key appears invalid (too short). Check PAGESPEED_INSIGHTS_API_KEY.')
+    return null
+  }
+  
+  console.log(`[PageSpeed] 🔍 Fetching PageSpeed data for: ${url}`)
 
   try {
     // Fetch mobile and desktop data in parallel
@@ -98,34 +106,69 @@ async function fetchPageSpeedForStrategy(
 
     if (!response.ok) {
       let errorMessage = `PageSpeed API returned ${response.status}`
+      let errorCode = ''
+      let quotaExceeded = false
+      
       try {
         const errorData = await response.json()
-        if (errorData?.error?.message) {
-          errorMessage = errorData.error.message
-          // Check for common error types
-          if (errorMessage.includes('FAILED_DOCUMENT_REQUEST') || errorMessage.includes('ERR_TIMED_OUT')) {
-            console.warn(`PageSpeed API: Page ${url} timed out or couldn't be loaded (${strategy}). This is normal for slow websites.`)
+        if (errorData?.error) {
+          errorMessage = errorData.error.message || errorMessage
+          errorCode = errorData.error.code || ''
+          
+          // Check for quota/rate limit errors
+          if (errorCode === 429 || errorMessage.includes('quota') || errorMessage.includes('rate limit') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+            quotaExceeded = true
+            console.error(`[PageSpeed] ❌ QUOTA EXCEEDED (${strategy}): ${errorMessage}`)
+            console.error(`[PageSpeed] 💡 Solution: Wait 24 hours or upgrade your Google Cloud quota`)
+            console.error(`[PageSpeed] 💡 Check quota at: https://console.cloud.google.com/apis/api/pagespeedonline.googleapis.com/quotas`)
+          } else if (errorCode === 403 || errorMessage.includes('API key') || errorMessage.includes('permission')) {
+            console.error(`[PageSpeed] ❌ API KEY ERROR (${strategy}): ${errorMessage}`)
+            console.error(`[PageSpeed] 💡 Solution: Verify API key is correct and has PageSpeed Insights API enabled`)
+            console.error(`[PageSpeed] 💡 Enable API at: https://console.cloud.google.com/apis/library/pagespeedonline.googleapis.com`)
+          } else if (errorMessage.includes('FAILED_DOCUMENT_REQUEST') || errorMessage.includes('ERR_TIMED_OUT')) {
+            console.warn(`[PageSpeed] ⚠️ TIMEOUT (${strategy}): Page ${url} timed out or couldn't be loaded. This is normal for slow websites.`)
           } else if (errorMessage.includes('INVALID_URL')) {
-            console.warn(`PageSpeed API: Invalid URL ${url} (${strategy})`)
+            console.warn(`[PageSpeed] ⚠️ INVALID URL (${strategy}): ${url}`)
           } else {
-            console.warn(`PageSpeed API error (${strategy}): ${errorMessage}`)
+            console.error(`[PageSpeed] ❌ ERROR (${strategy}): ${errorMessage} (Code: ${errorCode})`)
           }
         } else {
-          console.warn(`PageSpeed API error (${strategy}): ${response.status}`)
+          // HTTP error without JSON error body
+          if (response.status === 429) {
+            quotaExceeded = true
+            console.error(`[PageSpeed] ❌ QUOTA EXCEEDED (${strategy}): HTTP 429 - Rate limit exceeded`)
+          } else if (response.status === 403) {
+            console.error(`[PageSpeed] ❌ PERMISSION DENIED (${strategy}): HTTP 403 - Check API key permissions`)
+          } else {
+            console.error(`[PageSpeed] ❌ HTTP ERROR (${strategy}): ${response.status} ${response.statusText}`)
+          }
         }
       } catch (e) {
         // Response might not be JSON
-        console.warn(`PageSpeed API error (${strategy}): ${response.status} - Unable to parse error response`)
+        console.error(`[PageSpeed] ❌ PARSE ERROR (${strategy}): ${response.status} - Unable to parse error response`)
+        if (response.status === 429) {
+          console.error(`[PageSpeed] 💡 Likely quota exceeded. Check Google Cloud Console.`)
+        }
       }
+      
       // Return null gracefully - the audit will continue without PageSpeed data
       return null
     }
 
     const data = await response.json()
 
+    // CRITICAL FIX: Validate response structure
+    if (!data.lighthouseResult) {
+      console.error(`[PageSpeed] ❌ Invalid response structure (${strategy}): Missing lighthouseResult`)
+      console.error(`[PageSpeed] Response keys: ${Object.keys(data).join(', ')}`)
+      return null
+    }
+
     // Extract Core Web Vitals from Lighthouse results
     const audits = data.lighthouseResult?.audits || {}
     const lighthouseResult = data.lighthouseResult
+    
+    console.log(`[PageSpeed] ✅ Successfully fetched data (${strategy}) for ${url}`)
 
     // Extract metrics with validation
     // PageSpeed API returns values in milliseconds for timing metrics
@@ -231,11 +274,17 @@ async function fetchPageSpeedForStrategy(
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.warn(`PageSpeed Insights fetch timeout for ${strategy}: ${url} (exceeded 60s limit). This is normal for slow websites.`)
+      console.error(`[PageSpeed] ❌ TIMEOUT (${strategy}): ${url} exceeded 60s limit. This is normal for slow websites.`)
     } else if (error instanceof Error && error.message.includes('fetch')) {
-      console.warn(`PageSpeed Insights fetch failed for ${strategy}: Network error (${url}). The audit will continue without PageSpeed data.`)
+      console.error(`[PageSpeed] ❌ NETWORK ERROR (${strategy}): ${url}`)
+      console.error(`[PageSpeed] Error: ${error.message}`)
+      console.error(`[PageSpeed] 💡 Check internet connection and firewall settings`)
     } else {
-      console.warn(`PageSpeed Insights fetch failed for ${strategy}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error(`[PageSpeed] ❌ UNEXPECTED ERROR (${strategy}): ${url}`)
+      console.error(`[PageSpeed] Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      if (error instanceof Error && error.stack) {
+        console.error(`[PageSpeed] Stack: ${error.stack}`)
+      }
     }
     // Return null gracefully - the audit will continue without PageSpeed data
     return null
