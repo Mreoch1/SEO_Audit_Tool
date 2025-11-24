@@ -850,18 +850,21 @@ export function calculateAccessibilityScore(
     hasFormLabelChecks
   ].filter(Boolean).length
   
-  // If we've only done basic checks (alt text + viewport), reduce score
+  // CRITICAL FIX: Only penalize for incomplete audit if we have multiple issues
+  // If we only have 1 issue, we're doing a basic audit which is acceptable
   // A comprehensive accessibility audit should check at least 3-4 of these areas
-  if (comprehensiveChecksPerformed < 2) {
+  // But don't penalize if we only found 1 issue (basic audit is fine for that)
+  if (comprehensiveChecksPerformed < 2 && totalAccessibilityIssues > 1) {
     // We're only doing basic checks (alt text + viewport), not comprehensive
-    // Reduce score by 20-40 points to reflect incomplete audit
-    const incompleteAuditPenalty = comprehensiveChecksPerformed === 0 ? 40 : 20
+    // But only penalize if we have multiple issues (suggests we should have done more checks)
+    const incompleteAuditPenalty = comprehensiveChecksPerformed === 0 ? 20 : 10 // Reduced penalties
     score = Math.max(0, score - incompleteAuditPenalty)
   }
   
-  // Additional penalty: If score is still 100 but we haven't checked comprehensive factors, cap it
-  if (score >= 95 && comprehensiveChecksPerformed < 3) {
-    score = Math.min(score, 80) // Cap at 80 if we haven't done comprehensive checks
+  // Additional penalty: If score is still very high but we haven't checked comprehensive factors, cap it
+  // But only if we have multiple issues (single issue audits don't need comprehensive checks)
+  if (score >= 95 && comprehensiveChecksPerformed < 3 && totalAccessibilityIssues > 1) {
+    score = Math.min(score, 85) // Cap at 85 if we haven't done comprehensive checks (reduced from 80)
   }
   
   return Math.max(0, Math.round(score))
