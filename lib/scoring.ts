@@ -801,6 +801,45 @@ export function calculateAccessibilityScore(
     score = Math.min(score, 85) // Cap at 85 if high priority issues exist or viewport missing
   }
   
+  // CRITICAL FIX: Penalize score if comprehensive accessibility checks haven't been performed
+  // True accessibility requires checks for: ARIA, contrast, keyboard nav, form labels, landmarks, etc.
+  // If we're only checking alt text and viewport, we haven't done a comprehensive audit
+  const hasAriaChecks = ariaIssues.length > 0 || issues.some(i => 
+    i.category === 'Accessibility' && (matchesIssue(i, ['aria', 'role', 'landmark']) || 
+    i.message.toLowerCase().includes('aria') || i.message.toLowerCase().includes('role'))
+  )
+  const hasContrastChecks = contrastIssues.length > 0 || issues.some(i => 
+    i.category === 'Accessibility' && matchesIssue(i, ['contrast', 'color'])
+  )
+  const hasKeyboardChecks = keyboardIssues.length > 0 || issues.some(i => 
+    i.category === 'Accessibility' && matchesIssue(i, ['keyboard', 'navigation', 'tab'])
+  )
+  const hasFormLabelChecks = issues.some(i => 
+    i.category === 'Accessibility' && matchesIssue(i, ['form', 'label', 'input'])
+  )
+  
+  // Count how many comprehensive checks were performed
+  const comprehensiveChecksPerformed = [
+    hasAriaChecks,
+    hasContrastChecks,
+    hasKeyboardChecks,
+    hasFormLabelChecks
+  ].filter(Boolean).length
+  
+  // If we've only done basic checks (alt text + viewport), reduce score
+  // A comprehensive accessibility audit should check at least 3-4 of these areas
+  if (comprehensiveChecksPerformed < 2) {
+    // We're only doing basic checks (alt text + viewport), not comprehensive
+    // Reduce score by 20-40 points to reflect incomplete audit
+    const incompleteAuditPenalty = comprehensiveChecksPerformed === 0 ? 40 : 20
+    score = Math.max(0, score - incompleteAuditPenalty)
+  }
+  
+  // Additional penalty: If score is still 100 but we haven't checked comprehensive factors, cap it
+  if (score >= 95 && comprehensiveChecksPerformed < 3) {
+    score = Math.min(score, 80) // Cap at 80 if we haven't done comprehensive checks
+  }
+  
   return Math.max(0, Math.round(score))
 }
 

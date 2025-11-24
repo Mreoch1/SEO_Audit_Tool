@@ -5,7 +5,7 @@
  */
 
 import puppeteer from 'puppeteer'
-import { AuditResult } from './types'
+import { AuditResult, Issue } from './types'
 import { generateDetailedSummary } from './reportSummary'
 
 export interface BrandingData {
@@ -360,6 +360,13 @@ function generateReportHTML(
     </div>
   </div>
   
+  <!-- Simple One-Page Summary (Client-Friendly) -->
+  <div class="page">
+    <h1>📋 Quick Reference: What to Fix First</h1>
+    <p style="margin-bottom: 20px; font-size: 16px; color: #666;">Here's the order to fix things for maximum SEO impact:</p>
+    ${generateSimpleFixOrder(result)}
+  </div>
+  
   <!-- Service Details -->
   ${result.raw.options.tier || (result.raw.options.addOns && Object.keys(result.raw.options.addOns).length > 0) ? `
   <div class="page">
@@ -395,6 +402,13 @@ function generateReportHTML(
     <div class="summary-text">${detailedSummary.replace(/\n/g, '<br>')}</div>
   </div>
   
+  <!-- Quick Wins / TL;DR (Client-Friendly Summary) -->
+  <div class="page">
+    <h1>🎯 Quick Wins: Fix These 5 Things First</h1>
+    <p style="margin-bottom: 20px; font-size: 16px; color: #666;">If you only have time to fix a few things, start here. These will have the biggest impact on your SEO:</p>
+    ${generateQuickWinsSummary(result)}
+  </div>
+  
   <!-- Priority Action Plan -->
   <div class="page">
     <h1>Priority Action Plan</h1>
@@ -405,7 +419,9 @@ function generateReportHTML(
   <!-- Scores Overview -->
   <div class="page">
     <h1>SEO Scores Overview</h1>
+    <p style="margin-bottom: 20px; color: #666;">Visual breakdown of your SEO performance across all categories:</p>
     ${generateScoreDials(summary)}
+    ${generateScoreComparisonChart(summary)}
     <div class="scores-grid" style="margin-top: 30px;">
       <div class="score-card">
         <h3>Overall Score</h3>
@@ -439,6 +455,117 @@ function generateReportHTML(
       ${summary.lowSeverityIssues} Low Priority
     </p>
   </div>
+  
+  <!-- Enhanced Technical SEO Summary (Standard+ tiers) -->
+  ${result.enhancedTechnical || result.mobileResponsiveness || result.serverTechnology ? `
+  <div class="page">
+    <h1>Enhanced Technical SEO Analysis</h1>
+    <p style="margin-bottom: 20px;">Comprehensive technical analysis including security headers, server configuration, mobile optimization, and technology stack:</p>
+    <div class="issues-section">
+      ${result.enhancedTechnical ? `
+      <div style="margin-bottom: 30px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #3b82f6; margin-bottom: 15px;">Security & Server Configuration</h2>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tbody>
+            <tr>
+              <td style="padding: 8px; font-weight: bold; width: 40%;">HTTPS:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.https ? 'color: #10b981;' : 'color: #dc2626;'}">${result.enhancedTechnical.https ? '✅ Enabled' : '❌ Not Enabled'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">HSTS Header:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.hsts ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.enhancedTechnical.hsts ? '✅ Present' : '⚠️ Missing'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">CSP Header:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.csp ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.enhancedTechnical.csp ? '✅ Present' : '⚠️ Missing'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">X-Frame-Options:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.xFrameOptions ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.enhancedTechnical.xFrameOptions ? '✅ Present' : '⚠️ Missing'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">X-Content-Type-Options:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.xContentTypeOptions ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.enhancedTechnical.xContentTypeOptions ? '✅ Present' : '⚠️ Missing'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Referrer-Policy:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.referrerPolicy ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.enhancedTechnical.referrerPolicy ? '✅ Present' : '⚠️ Missing'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">HTTP Version:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.httpVersion === 'http/3' || result.enhancedTechnical.httpVersion === 'http/2' ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.enhancedTechnical.httpVersion.toUpperCase()}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Compression:</td>
+              <td style="padding: 8px;">
+                ${result.enhancedTechnical.compression.brotli ? '<span style="color: #10b981;">✅ Brotli</span>' : ''}
+                ${result.enhancedTechnical.compression.gzip ? '<span style="color: #10b981;">✅ GZIP</span>' : ''}
+                ${!result.enhancedTechnical.compression.gzip && !result.enhancedTechnical.compression.brotli ? '<span style="color: #dc2626;">❌ None</span>' : ''}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Cache-Control:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.caching.hasCacheControl ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.enhancedTechnical.caching.hasCacheControl ? '✅ Present' : '⚠️ Missing'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">ETag:</td>
+              <td style="padding: 8px; ${result.enhancedTechnical.caching.hasETag ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.enhancedTechnical.caching.hasETag ? '✅ Present' : '⚠️ Missing'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
+      
+      ${result.mobileResponsiveness ? `
+      <div style="margin-bottom: 30px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #3b82f6; margin-bottom: 15px;">Mobile Responsiveness</h2>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tbody>
+            <tr>
+              <td style="padding: 8px; font-weight: bold; width: 40%;">Viewport Meta Tag:</td>
+              <td style="padding: 8px; ${result.mobileResponsiveness.hasViewport ? 'color: #10b981;' : 'color: #dc2626;'}">${result.mobileResponsiveness.hasViewport ? '✅ Present' : '❌ Missing'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Responsive Design:</td>
+              <td style="padding: 8px; ${result.mobileResponsiveness.responsiveDesign ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.mobileResponsiveness.responsiveDesign ? '✅ Detected' : '⚠️ Not Detected'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Mobile-Friendly:</td>
+              <td style="padding: 8px; ${result.mobileResponsiveness.mobileFriendly ? 'color: #10b981;' : 'color: #f59e0b;'}">${result.mobileResponsiveness.mobileFriendly ? '✅ Yes' : '⚠️ Needs Improvement'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
+      
+      ${result.serverTechnology ? `
+      <div style="margin-bottom: 30px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #3b82f6; margin-bottom: 15px;">Technology Stack</h2>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tbody>
+            <tr>
+              <td style="padding: 8px; font-weight: bold; width: 40%;">CMS:</td>
+              <td style="padding: 8px;">${result.serverTechnology.cms !== 'Unknown' ? result.serverTechnology.cms : 'Custom/Unknown'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Framework:</td>
+              <td style="padding: 8px;">${result.serverTechnology.framework !== 'Unknown' ? result.serverTechnology.framework : 'Custom/Unknown'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">CDN:</td>
+              <td style="padding: 8px;">${result.serverTechnology.cdn !== 'Unknown' ? result.serverTechnology.cdn : 'Not Detected'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Server:</td>
+              <td style="padding: 8px;">${result.serverTechnology.server !== 'Unknown' ? result.serverTechnology.server : 'Not Detected'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
+    </div>
+  </div>
+  ` : ''}
   
   <!-- Technical Issues -->
   ${(result.technicalIssues || []).length > 0 ? `
@@ -1532,16 +1659,31 @@ function generatePriorityActionPlan(result: AuditResult): string {
   const hasHighFromArray = highPriority.length > 0
   const hasMediumFromArray = mediumPriority.length > 0
   
+  // CRITICAL FIX: Trust summary counts as source of truth
+  // If summary shows issues, we MUST show them (even if arrays are temporarily empty)
   // Only show "no issues" if BOTH the arrays AND summary confirm no issues
-  if (!hasHighFromArray && !hasMediumFromArray && !hasHighFromSummary && !hasMediumFromSummary) {
+  const totalPriorityFromSummary = hasHighFromSummary || hasMediumFromSummary
+  const totalPriorityFromArrays = hasHighFromArray || hasMediumFromArray
+  
+  if (!totalPriorityFromSummary && !totalPriorityFromArrays) {
+    // Both summary and arrays confirm no issues
     html += `<p style="color: #10b981; font-weight: bold;">✅ No high or medium priority issues found. Your site is in excellent shape!</p>`
-  } else if (hasHighFromSummary || hasMediumFromSummary) {
-    // If summary shows issues but arrays are empty, log a warning and show a message
-    if (!hasHighFromArray && !hasMediumFromArray) {
-      console.warn('[PDF] Priority Action Plan: Summary shows issues but filtered arrays are empty. This may indicate a severity categorization issue.')
-      html += `<p style="color: #f59e0b; font-weight: bold;">⚠️ ${result.summary.highSeverityIssues + result.summary.mediumSeverityIssues} priority issue(s) detected. See detailed issues sections below.</p>`
-    }
+  } else if (totalPriorityFromSummary && !totalPriorityFromArrays) {
+    // Summary shows issues but arrays are empty - this is a data consistency bug
+    // Show the issues from summary counts and log a warning
+    console.warn('[PDF] Priority Action Plan: Summary shows issues but filtered arrays are empty. This may indicate a severity categorization issue.')
+    const totalPriorityCount = result.summary.highSeverityIssues + result.summary.mediumSeverityIssues
+    html += `<div style="margin-bottom: 30px; padding: 15px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+      <h2 style="color: #92400e; margin-bottom: 10px; font-size: 16px;">⚠️ ${totalPriorityCount} Priority Issue(s) Detected</h2>
+      <p style="color: #78350f; margin-bottom: 8px; font-size: 14px;">
+        ${result.summary.highSeverityIssues > 0 ? `<strong>High Priority:</strong> ${result.summary.highSeverityIssues} issue(s)` : ''}
+        ${result.summary.highSeverityIssues > 0 && result.summary.mediumSeverityIssues > 0 ? ' • ' : ''}
+        ${result.summary.mediumSeverityIssues > 0 ? `<strong>Medium Priority:</strong> ${result.summary.mediumSeverityIssues} issue(s)` : ''}
+      </p>
+      <p style="color: #78350f; font-size: 13px; margin: 0;">Please review the detailed issues sections below for specific recommendations.</p>
+    </div>`
   }
+  // If arrays have issues, they're already displayed above (lines 1493-1527)
   
   // Add keywords section if available
   if (result.summary.extractedKeywords && result.summary.extractedKeywords.length > 0) {
@@ -1709,6 +1851,246 @@ function generateScoreDials(summary: AuditResult['summary']): string {
 /**
  * Generate issue distribution chart - Agency tier visual
  */
+/**
+ * Generate Quick Wins / TL;DR summary (client-friendly, non-technical)
+ */
+function generateQuickWinsSummary(result: AuditResult): string {
+  const { summary, technicalIssues = [], onPageIssues = [], contentIssues = [], accessibilityIssues = [] } = result
+  
+  // Get top 5 high-priority issues
+  const allHighPriority = [
+    ...(technicalIssues || []).filter(i => i.severity === 'High'),
+    ...(onPageIssues || []).filter(i => i.severity === 'High'),
+    ...(contentIssues || []).filter(i => i.severity === 'High'),
+    ...(accessibilityIssues || []).filter(i => i.severity === 'High')
+  ].slice(0, 5)
+  
+  // If we don't have 5 high-priority, add medium-priority
+  const allMediumPriority = [
+    ...(technicalIssues || []).filter(i => i.severity === 'Medium'),
+    ...(onPageIssues || []).filter(i => i.severity === 'Medium'),
+    ...(contentIssues || []).filter(i => i.severity === 'Medium'),
+    ...(accessibilityIssues || []).filter(i => i.severity === 'Medium')
+  ]
+  
+  const top5 = allHighPriority.length >= 5 
+    ? allHighPriority.slice(0, 5)
+    : [...allHighPriority, ...allMediumPriority].slice(0, 5)
+  
+  if (top5.length === 0) {
+    return `
+    <div style="padding: 20px; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 8px;">
+      <p style="margin: 0; font-weight: bold; color: #10b981;">✅ Great News!</p>
+      <p style="margin: 8px 0 0 0; color: #666;">
+        Your site has no critical issues that need immediate attention. Focus on the medium and low-priority items to further optimize your SEO performance.
+      </p>
+    </div>
+    `
+  }
+  
+  let html = '<ol style="padding-left: 20px; line-height: 1.8;">'
+  
+  top5.forEach((issue, idx) => {
+    const affectedCount = issue.affectedPages?.length || 0
+    const affectedText = affectedCount > 0 ? ` (${affectedCount} ${affectedCount === 1 ? 'page' : 'pages'})` : ''
+    
+    // Add contextual note about whether this is "normal" for certain site types
+    const contextualNote = getContextualNote(issue, result)
+    
+    html += `
+    <li style="margin-bottom: 20px; padding: 15px; background: ${idx < 2 ? '#fef2f2' : '#fffbeb'}; border-left: 4px solid ${idx < 2 ? '#dc2626' : '#f59e0b'}; border-radius: 6px;">
+      <div style="font-weight: bold; font-size: 16px; color: #1f2937; margin-bottom: 8px;">
+        ${escapeHtml(issue.message)}${affectedText}
+      </div>
+      <div style="color: #4b5563; font-size: 14px; margin-bottom: 8px;">
+        ${escapeHtml(issue.details || 'No additional details available.')}
+      </div>
+      ${contextualNote ? `
+      <div style="margin-top: 8px; padding: 8px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px; font-size: 12px; color: #1e40af;">
+        <strong>💡 Context:</strong> ${contextualNote}
+      </div>
+      ` : ''}
+      <div style="margin-top: 10px; font-size: 13px; color: #059669;">
+        <strong>Quick Fix:</strong> ${escapeHtml(getFixInstructions(issue).split('\n')[0] || 'See detailed instructions in the Priority Action Plan section.')}
+      </div>
+    </li>
+    `
+  })
+  
+  html += '</ol>'
+  
+  return html
+}
+
+/**
+ * Get contextual note about whether an issue is "normal" for certain site types
+ */
+function getContextualNote(issue: Issue, result: AuditResult): string | null {
+  const msg = issue.message.toLowerCase()
+  const { serverTechnology, pages } = result
+  
+  // JavaScript-rendered content issues
+  if (msg.includes('javascript') || msg.includes('rendered') || msg.includes('h1') && msg.includes('js')) {
+    const isModernFramework = serverTechnology?.framework && ['Next.js', 'React', 'Vue.js', 'Angular'].includes(serverTechnology.framework)
+    if (isModernFramework) {
+      return `This is common with modern JavaScript frameworks like ${serverTechnology.framework}. While search engines can render JS, it's still better to server-side render critical content like H1s for faster indexing.`
+    }
+    return `This is increasingly common with modern websites that use client-side rendering. Search engines can handle it, but server-side rendering (SSR) or static generation is still recommended for critical content.`
+  }
+  
+  // Compression issues
+  if (msg.includes('compression') || msg.includes('gzip') || msg.includes('brotli')) {
+    return `This is a standard server configuration issue. Most hosting providers (WordPress, Shopify, etc.) enable compression by default, but custom servers or some platforms require manual setup.`
+  }
+  
+  // Missing alt tags
+  if (msg.includes('alt') || msg.includes('image')) {
+    const imageHeavyPages = pages.filter(p => (p.imageCount || 0) > 10).length
+    if (imageHeavyPages > 5) {
+      return `Image-heavy sites (portfolios, galleries, e-commerce) often have this issue. It's worth fixing for both SEO and accessibility compliance.`
+    }
+  }
+  
+  // Thin content
+  if (msg.includes('thin') || msg.includes('word count') || msg.includes('content')) {
+    const thinPages = pages.filter(p => (p.wordCount || 0) < 300).length
+    if (thinPages > pages.length * 0.5) {
+      return `Many modern websites (especially SaaS, portfolios, or landing pages) have thin content. This is normal for certain page types, but consider adding more context for better SEO.`
+    }
+  }
+  
+  // Missing schema
+  if (msg.includes('schema') || msg.includes('structured data')) {
+    return `Many sites don't use schema markup, but it's becoming increasingly important for rich results in search. It's a quick win that can improve click-through rates.`
+  }
+  
+  // Duplicate titles/meta
+  if (msg.includes('duplicate')) {
+    return `This often happens with template-based sites (WordPress themes, page builders) where multiple pages share similar content. Easy to fix with unique titles.`
+  }
+  
+  return null
+}
+
+/**
+ * Generate score comparison chart (bar chart showing all category scores)
+ */
+function generateScoreComparisonChart(summary: AuditResult['summary']): string {
+  const scores = [
+    { name: 'Technical', value: summary.technicalScore, color: '#3b82f6' },
+    { name: 'On-Page', value: summary.onPageScore, color: '#10b981' },
+    { name: 'Content', value: summary.contentScore, color: '#f59e0b' },
+    { name: 'Accessibility', value: summary.accessibilityScore, color: '#8b5cf6' }
+  ]
+  
+  const maxHeight = 200 // Maximum bar height in pixels
+  const maxScore = 100
+  
+  return `
+    <div style="margin: 30px 0; padding: 20px; background: #f9fafb; border-radius: 8px;">
+      <h3 style="margin-bottom: 15px; color: #333;">Category Score Comparison</h3>
+      <div style="display: flex; align-items: flex-end; height: ${maxHeight + 60}px; gap: 15px; margin-bottom: 15px;">
+        ${scores.map(score => {
+          const barHeight = (score.value / maxScore) * maxHeight
+          const scoreColor = score.value >= 80 ? '#10b981' : score.value >= 60 ? '#f59e0b' : '#ef4444'
+          
+          return `
+          <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 100%; background: ${scoreColor}; height: ${barHeight}px; border-radius: 4px 4px 0 0; margin-bottom: 5px; position: relative;">
+              <div style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); font-size: 14px; font-weight: bold; color: #1f2937; white-space: nowrap;">
+                ${score.value}
+              </div>
+            </div>
+            <div style="font-size: 12px; font-weight: bold; color: #4b5563; margin-top: 5px; text-align: center;">
+              ${score.name}
+            </div>
+          </div>
+          `
+        }).join('')}
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6b7280; margin-top: 10px;">
+        <span>0</span>
+        <span>50</span>
+        <span>100</span>
+      </div>
+    </div>
+  `
+}
+
+/**
+ * Generate simple fix order (one-page summary)
+ */
+function generateSimpleFixOrder(result: AuditResult): string {
+  const { summary, technicalIssues = [], onPageIssues = [], contentIssues = [], accessibilityIssues = [] } = result
+  
+  // Get top issues by priority
+  const allHigh = [
+    ...(technicalIssues || []).filter(i => i.severity === 'High'),
+    ...(onPageIssues || []).filter(i => i.severity === 'High'),
+    ...(contentIssues || []).filter(i => i.severity === 'High'),
+    ...(accessibilityIssues || []).filter(i => i.severity === 'High')
+  ].slice(0, 5)
+  
+  const allMedium = [
+    ...(technicalIssues || []).filter(i => i.severity === 'Medium'),
+    ...(onPageIssues || []).filter(i => i.severity === 'Medium'),
+    ...(contentIssues || []).filter(i => i.severity === 'Medium'),
+    ...(accessibilityIssues || []).filter(i => i.severity === 'Medium')
+  ].slice(0, 5)
+  
+  let html = '<div style="line-height: 1.8;">'
+  
+  if (allHigh.length > 0) {
+    html += `
+    <div style="margin-bottom: 30px; padding: 20px; background: #fef2f2; border-left: 4px solid #dc2626; border-radius: 8px;">
+      <h2 style="color: #dc2626; margin: 0 0 15px 0; font-size: 20px;">Week 1: High Priority (${allHigh.length} issues)</h2>
+      <ol style="margin: 0; padding-left: 20px; color: #374151;">
+        ${allHigh.map(issue => {
+          const affected = issue.affectedPages?.length || 0
+          const affectedText = affected > 0 ? ` <span style="color: #6b7280;">(${affected} ${affected === 1 ? 'page' : 'pages'})</span>` : ''
+          return `<li style="margin-bottom: 10px;"><strong>${escapeHtml(issue.message)}</strong>${affectedText}</li>`
+        }).join('')}
+      </ol>
+    </div>
+    `
+  }
+  
+  if (allMedium.length > 0) {
+    html += `
+    <div style="margin-bottom: 30px; padding: 20px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 8px;">
+      <h2 style="color: #d97706; margin: 0 0 15px 0; font-size: 20px;">Week 2: Medium Priority (${allMedium.length} issues)</h2>
+      <ol style="margin: 0; padding-left: 20px; color: #374151;">
+        ${allMedium.map(issue => {
+          const affected = issue.affectedPages?.length || 0
+          const affectedText = affected > 0 ? ` <span style="color: #6b7280;">(${affected} ${affected === 1 ? 'page' : 'pages'})</span>` : ''
+          return `<li style="margin-bottom: 10px;"><strong>${escapeHtml(issue.message)}</strong>${affectedText}</li>`
+        }).join('')}
+      </ol>
+    </div>
+    `
+  }
+  
+  if (allHigh.length === 0 && allMedium.length === 0) {
+    html += `
+    <div style="padding: 20px; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 8px;">
+      <p style="margin: 0; font-weight: bold; color: #10b981;">✅ Great News!</p>
+      <p style="margin: 8px 0 0 0; color: #666;">Your site has no critical issues. Focus on the low-priority items to further optimize your SEO performance.</p>
+    </div>
+    `
+  }
+  
+  html += `
+  <div style="margin-top: 30px; padding: 15px; background: #eff6ff; border-radius: 6px;">
+    <p style="margin: 0; color: #1e40af; font-size: 14px;">
+      <strong>💡 Tip:</strong> See the detailed "Priority Action Plan" section (page 7) for step-by-step fix instructions for each issue.
+    </p>
+  </div>
+  </div>
+  `
+  
+  return html
+}
+
 function generateIssueDistributionChart(summary: AuditResult['summary']): string {
   const totalIssues = summary.highSeverityIssues + summary.mediumSeverityIssues + summary.lowSeverityIssues
   if (totalIssues === 0) return ''

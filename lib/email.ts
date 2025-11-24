@@ -81,21 +81,23 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
     text: options.text,
     html: options.html,
     attachments: options.attachments,
-    // Add headers to improve deliverability
+    // Add headers to improve deliverability (Zoho-optimized)
     headers: {
       'Message-ID': messageId,
       'X-Mailer': 'SEO Audit Pro',
-      'X-Priority': '1', // Normal priority
+      'X-Priority': '3', // Normal priority (1=high, 3=normal, 5=low)
       'Importance': 'normal',
-      'List-Unsubscribe': `<mailto:${from}?subject=unsubscribe>`, // Unsubscribe header
-      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click', // One-click unsubscribe
-      'Precedence': 'bulk', // Mark as transactional/bulk
+      'Precedence': 'normal', // Changed from 'bulk' - transactional emails should be 'normal'
       'Auto-Submitted': 'auto-generated', // Mark as automated
       'Content-Type': 'text/html; charset=UTF-8',
-      'MIME-Version': '1.0'
+      'MIME-Version': '1.0',
+      // Remove spam trigger words from headers
+      'X-Entity-Ref-ID': messageId // Unique reference for tracking
     },
     // Add priority for better inbox placement
-    priority: 'normal'
+    priority: 'normal',
+    // Zoho-specific: Ensure proper encoding
+    encoding: 'UTF-8'
   })
 }
 

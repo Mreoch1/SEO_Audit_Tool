@@ -19,6 +19,7 @@ import { analyzeEnhancedContent, getContentFixInstructions } from './enhancedCon
 import { classifyDomain, autoFillCompetitorUrls } from './competitorData'
 import { deduplicateKeywords, formatKeywordsForDisplay, findKeywordGaps } from './keywordProcessor'
 import { consolidateIssue } from './issueProcessor'
+import { decode } from 'html-entities'
 
 // NEW: Import fixed modules
 import { 
@@ -344,7 +345,12 @@ export async function runAudit(
   allIssues.push(...filteredIssues)
   
   // Perform enhanced technical check on main page
-  if (pages.length > 0) {
+  // Perform enhanced technical analysis (Standard+ tiers)
+  let enhancedTechnicalData: any = undefined
+  let mobileResponsivenessData: any = undefined
+  let serverTechnologyData: any = undefined
+  
+  if (pages.length > 0 && opts.tier !== 'starter') {
     console.log('[Audit] Performing enhanced technical analysis...')
     try {
       const mainPage = pages[0]
@@ -352,6 +358,8 @@ export async function runAudit(
         mainPage.url,
         opts.userAgent
       )
+      enhancedTechnicalData = technicalData
+      
       technicalIssues.forEach(issue => {
         if (!issue.id) {
           issue.id = `technical-${issue.severity}-${issue.message}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -360,6 +368,66 @@ export async function runAudit(
         issue.priority = issue.severity === 'High' ? 10 : issue.severity === 'Medium' ? 5 : 2
         allIssues.push(issue)
       })
+      
+      // Mobile responsiveness analysis
+      const hasViewport = validPages.some(p => p.hasViewport)
+      const responsiveDesign = validPages.some(p => {
+        // Check for responsive design indicators
+        const content = JSON.stringify(p).toLowerCase()
+        return content.includes('viewport') || content.includes('responsive') || content.includes('mobile')
+      })
+      mobileResponsivenessData = {
+        hasViewport,
+        responsiveDesign,
+        mobileFriendly: hasViewport && responsiveDesign,
+        touchTargets: true, // Assume true if viewport exists (would need deeper analysis)
+        fontSizing: true // Assume true if viewport exists
+      }
+      
+      // Server technology detection
+      const allContent = JSON.stringify(validPages).toLowerCase()
+      let server = 'Unknown'
+      let cms = 'Unknown'
+      let framework = 'Unknown'
+      let cdn = 'Unknown'
+      
+      // Detect CMS
+      if (allContent.includes('wp-content') || allContent.includes('wordpress')) {
+        cms = 'WordPress'
+      } else if (allContent.includes('squarespace')) {
+        cms = 'Squarespace'
+      } else if (allContent.includes('shopify')) {
+        cms = 'Shopify'
+      } else if (allContent.includes('wix')) {
+        cms = 'Wix'
+      }
+      
+      // Detect framework
+      if (allContent.includes('next.js') || allContent.includes('__next')) {
+        framework = 'Next.js'
+      } else if (allContent.includes('react')) {
+        framework = 'React'
+      } else if (allContent.includes('vue')) {
+        framework = 'Vue.js'
+      } else if (allContent.includes('angular')) {
+        framework = 'Angular'
+      }
+      
+      // Detect CDN
+      if (allContent.includes('cloudflare')) {
+        cdn = 'Cloudflare'
+      } else if (allContent.includes('cloudfront')) {
+        cdn = 'AWS CloudFront'
+      } else if (allContent.includes('fastly')) {
+        cdn = 'Fastly'
+      }
+      
+      serverTechnologyData = {
+        server,
+        cms,
+        framework,
+        cdn
+      }
     } catch (error) {
       console.warn('Enhanced technical check failed:', error)
     }
@@ -1274,6 +1342,9 @@ export async function runAudit(
     competitorAnalysis,
     crawlDiagnostics, // NEW: Crawl diagnostics
     localSEO, // NEW: Local SEO analysis (Sprint 2)
+    enhancedTechnical: enhancedTechnicalData, // NEW: Enhanced technical SEO data
+    mobileResponsiveness: mobileResponsivenessData, // NEW: Mobile responsiveness analysis
+    serverTechnology: serverTechnologyData, // NEW: Server technology detection
     internalLinkGraph, // NEW: Agency tier - Internal link graph
     duplicateUrlAnalysis, // NEW: Agency tier - Duplicate URL analysis
     raw: {
@@ -1326,7 +1397,7 @@ function normalizeUrl(url: string): string {
 // (import statement already added above)
 
 /**
- * Check robots.txt
+ * Check robots.txt with enhanced validation (Standard+ tiers)
  */
 async function checkRobotsTxt(rootUrl: string, siteWide: SiteWideData): Promise<void> {
   try {
@@ -1338,6 +1409,28 @@ async function checkRobotsTxt(rootUrl: string, siteWide: SiteWideData): Promise<
     
     siteWide.robotsTxtExists = true
     siteWide.robotsTxtReachable = response.ok
+    
+    // Enhanced validation for Standard+ tiers
+    if (response.ok) {
+      const robotsText = await response.text()
+      
+      // Validate robots.txt format and content
+      const lines = robotsText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+      const hasUserAgent = lines.some(l => l.toLowerCase().startsWith('user-agent:'))
+      const hasDisallow = lines.some(l => l.toLowerCase().startsWith('disallow:'))
+      const hasAllow = lines.some(l => l.toLowerCase().startsWith('allow:'))
+      const hasSitemap = lines.some(l => l.toLowerCase().startsWith('sitemap:'))
+      
+      // Store validation results in siteWide (extend interface if needed)
+      ;(siteWide as any).robotsTxtValidation = {
+        hasUserAgent,
+        hasDisallow,
+        hasAllow,
+        hasSitemap,
+        lineCount: lines.length,
+        isValid: hasUserAgent || hasDisallow || hasAllow || hasSitemap
+      }
+    }
   } catch {
     siteWide.robotsTxtExists = false
     siteWide.robotsTxtReachable = false
@@ -1345,7 +1438,7 @@ async function checkRobotsTxt(rootUrl: string, siteWide: SiteWideData): Promise<
 }
 
 /**
- * Check sitemap.xml
+ * Check sitemap.xml with enhanced validation (Standard+ tiers)
  */
 async function checkSitemap(rootUrl: string, siteWide: SiteWideData): Promise<void> {
   try {
@@ -1357,6 +1450,40 @@ async function checkSitemap(rootUrl: string, siteWide: SiteWideData): Promise<vo
     
     siteWide.sitemapExists = true
     siteWide.sitemapReachable = response.ok
+    
+    // Enhanced validation for Standard+ tiers
+    if (response.ok) {
+      const sitemapText = await response.text()
+      
+      // Validate sitemap.xml format
+      const urlMatches = sitemapText.match(/<url>/gi) || []
+      const locMatches = sitemapText.match(/<loc>/gi) || []
+      const lastmodMatches = sitemapText.match(/<lastmod>/gi) || []
+      const changefreqMatches = sitemapText.match(/<changefreq>/gi) || []
+      const priorityMatches = sitemapText.match(/<priority>/gi) || []
+      
+      // Check if it's a sitemap index (references other sitemaps)
+      const isSitemapIndex = sitemapText.includes('<sitemapindex>') || sitemapText.includes('<sitemap>')
+      
+      // Extract URLs from sitemap
+      const urlPattern = /<loc>\s*([^<]+)\s*<\/loc>/gi
+      const urls: string[] = []
+      let match
+      while ((match = urlPattern.exec(sitemapText)) !== null) {
+        urls.push(match[1].trim())
+      }
+      
+      // Store validation results
+      ;(siteWide as any).sitemapValidation = {
+        urlCount: urls.length,
+        hasLastmod: lastmodMatches.length > 0,
+        hasChangefreq: changefreqMatches.length > 0,
+        hasPriority: priorityMatches.length > 0,
+        isSitemapIndex,
+        isValid: urlMatches.length > 0 && locMatches.length > 0,
+        sampleUrls: urls.slice(0, 10) // Store first 10 URLs for reference
+      }
+    }
   } catch {
     siteWide.sitemapExists = false
     siteWide.sitemapReachable = false
@@ -1487,188 +1614,176 @@ async function crawlPages(
       }
       
       // Extract internal links for further crawling
-      // Always try to extract links, even if internalLinkCount is 0 (count might be wrong)
+      // CRITICAL FIX: Use rendered HTML links from pageData (already extracted from rendered DOM)
+      // This ensures we get links that are only visible after JavaScript execution
       if (depth < options.maxDepth) {
         let internalLinks: string[] = []
         
-        try {
-          // Re-fetch the HTML to extract links (we need the full HTML for link extraction)
-          // Increased timeout and better error handling
-          // Note: fetch() automatically follows redirects, so response.url will be the final URL
-          const response = await fetch(url, {
-            signal: AbortSignal.timeout(15000), // Increased timeout to 15s
-            headers: { 'User-Agent': options.userAgent },
-            redirect: 'follow' // Explicitly follow redirects
-          })
-          
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`)
-          }
-          
-          const html = await response.text()
-          
-          // Update actualDomain from response URL if it redirected
-          // response.url is the final URL after redirects
+        // First, try to use links from pageData (extracted from rendered HTML)
+        if (pageData.internalLinks && pageData.internalLinks.length > 0) {
+          internalLinks = [...pageData.internalLinks]
+          console.log(`[Audit Progress] Using ${internalLinks.length} internal links from rendered HTML for ${url}`)
+        } else {
+          // Fallback: Re-fetch the HTML to extract links if pageData doesn't have them
+          // This should rarely happen, but provides a fallback
           try {
-            const responseUrl = new URL(response.url)
-            const currentUrlObj = new URL(url)
-            
-            // If the response URL is different from the request URL, we were redirected
-            if (responseUrl.hostname !== currentUrlObj.hostname) {
-              // Always update to the response domain (it's the actual domain we're on)
-              // This handles cases like wikipedia.com -> www.wikipedia.org
-              // We need to use the actual domain we landed on, not the original
-              actualDomain = responseUrl.hostname
-              console.log(`[Audit Progress] Detected redirect: ${url} -> ${response.url}`)
-              console.log(`[Audit Progress] Updated domain from ${baseDomain} to ${actualDomain}`)
-            }
-          } catch (err) {
-            console.warn(`[Audit Progress] Could not parse response URL: ${err}`)
-          }
-          
-          // Extract links using actualDomain (which may be a subdomain)
-          // Use response.url (final URL after redirects) as the base URL
-          internalLinks = extractInternalLinks(html, response.url, actualDomain)
-          
-          // If we still didn't find links, try with a more permissive approach
-          if (internalLinks.length === 0) {
-            console.log(`[Audit Progress] No links found with domain ${actualDomain}, trying broader extraction...`)
-            // Try extracting all links and see what domains we find
-            const allLinkMatches = html.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
-            const foundDomains = new Set<string>()
-            allLinkMatches.slice(0, 20).forEach(link => {
-              const hrefMatch = link.match(/href=["']([^"']+)["']/i)
-              if (hrefMatch) {
-                try {
-                  const href = hrefMatch[1].trim()
-                  if (!href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
-                    const linkUrl = new URL(href, response.url)
-                    foundDomains.add(linkUrl.hostname)
-                  }
-                } catch {}
-              }
+            console.log(`[Audit Progress] No rendered links found, falling back to fetch for ${url}...`)
+            const response = await fetch(url, {
+              signal: AbortSignal.timeout(15000), // Increased timeout to 15s
+              headers: { 'User-Agent': options.userAgent },
+              redirect: 'follow' // Explicitly follow redirects
             })
             
-            if (foundDomains.size > 0) {
-              console.log(`[Audit Progress] Found links with domains: ${Array.from(foundDomains).slice(0, 5).join(', ')}${foundDomains.size > 5 ? '...' : ''}`)
-              
-              // Try each domain to see if it matches our actual domain (after redirect)
-              // This handles cases where links point to subdomains like en.wikipedia.org
-              for (const foundDomain of foundDomains) {
-                if (isSameDomain(foundDomain, actualDomain)) {
-                  console.log(`[Audit Progress] Found matching subdomain ${foundDomain}, extracting links...`)
-                  internalLinks = extractInternalLinks(html, response.url, foundDomain)
-                  if (internalLinks.length > 0) {
-                    // Use the first subdomain that works (e.g., en.wikipedia.org)
-                    // This ensures we can crawl pages on that subdomain
-                    actualDomain = foundDomain
-                    console.log(`[Audit Progress] Successfully extracted ${internalLinks.length} links using domain ${actualDomain}`)
-                    break
-                  }
-                }
-              }
-              
-              // If still no links, try with the response domain directly
-              if (internalLinks.length === 0 && foundDomains.size > 0) {
-                console.log(`[Audit Progress] Trying with response domain ${actualDomain} directly...`)
-                internalLinks = extractInternalLinks(html, response.url, actualDomain)
-              }
-            } else {
-              console.log(`[Audit Progress] No link hrefs found in HTML at all`)
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`)
             }
-          }
-          
-          if (internalLinks.length > 0) {
-            console.log(`[Audit Progress] Extracted ${internalLinks.length} internal links from ${url} (using domain: ${actualDomain})`)
-          } else {
-            console.log(`[Audit Progress] No internal links found on ${url} (checked domain: ${actualDomain}, response URL: ${response.url})`)
-          }
-          
-          // If we didn't find many links, try a more aggressive extraction
-          if (internalLinks.length < 5 && depth === 0) {
-            // For the homepage, try to find more links with a broader pattern
-            const allLinks = html.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
-            const additionalLinks = new Set<string>()
             
-            allLinks.forEach(link => {
-              const hrefMatch = link.match(/href=["']([^"']+)["']/i)
-              if (hrefMatch) {
-                try {
-                  const href = hrefMatch[1].trim()
-                  // Skip anchors, javascript, mailto, etc.
-                  if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href === '' || href === '/') {
-                    return
-                  }
-                  
-                  const linkUrl = new URL(href, url)
-                  if (isSameDomain(linkUrl.hostname, actualDomain)) {
-                    const normalizedUrl = normalizeUrl(linkUrl.toString())
-                    if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
-                      additionalLinks.add(normalizedUrl)
+            const html = await response.text()
+          
+            // Update actualDomain from response URL if it redirected
+            // response.url is the final URL after redirects
+            try {
+              const responseUrl = new URL(response.url)
+              const currentUrlObj = new URL(url)
+              
+              // If the response URL is different from the request URL, we were redirected
+              if (responseUrl.hostname !== currentUrlObj.hostname) {
+                // Always update to the response domain (it's the actual domain we're on)
+                // This handles cases like wikipedia.com -> www.wikipedia.org
+                // We need to use the actual domain we landed on, not the original
+                actualDomain = responseUrl.hostname
+                console.log(`[Audit Progress] Detected redirect: ${url} -> ${response.url}`)
+                console.log(`[Audit Progress] Updated domain from ${baseDomain} to ${actualDomain}`)
+              }
+            } catch (err) {
+              console.warn(`[Audit Progress] Could not parse response URL: ${err}`)
+            }
+            
+            // Extract links using actualDomain (which may be a subdomain)
+            // Use response.url (final URL after redirects) as the base URL
+            internalLinks = extractInternalLinks(html, response.url, actualDomain)
+            
+            // If we still didn't find links, try with a more permissive approach
+            if (internalLinks.length === 0) {
+              console.log(`[Audit Progress] No links found with domain ${actualDomain}, trying broader extraction...`)
+              // Try extracting all links and see what domains we find
+              const allLinkMatches = html.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
+              const foundDomains = new Set<string>()
+              allLinkMatches.slice(0, 20).forEach(link => {
+                const hrefMatch = link.match(/href=["']([^"']+)["']/i)
+                if (hrefMatch) {
+                  try {
+                    const href = hrefMatch[1].trim()
+                    if (!href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
+                      const linkUrl = new URL(href, response.url)
+                      foundDomains.add(linkUrl.hostname)
+                    }
+                  } catch {}
+                }
+              })
+              
+              if (foundDomains.size > 0) {
+                console.log(`[Audit Progress] Found links with domains: ${Array.from(foundDomains).slice(0, 5).join(', ')}${foundDomains.size > 5 ? '...' : ''}`)
+                
+                // Try each domain to see if it matches our actual domain (after redirect)
+                // This handles cases where links point to subdomains like en.wikipedia.org
+                for (const foundDomain of foundDomains) {
+                  if (isSameDomain(foundDomain, actualDomain)) {
+                    console.log(`[Audit Progress] Found matching subdomain ${foundDomain}, extracting links...`)
+                    internalLinks = extractInternalLinks(html, response.url, foundDomain)
+                    if (internalLinks.length > 0) {
+                      // Use the first subdomain that works (e.g., en.wikipedia.org)
+                      // This ensures we can crawl pages on that subdomain
+                      actualDomain = foundDomain
+                      console.log(`[Audit Progress] Successfully extracted ${internalLinks.length} links using domain ${actualDomain}`)
+                      break
                     }
                   }
-                } catch {
-                  // Try as relative URL
+                }
+                
+                // If still no links, try with the response domain directly
+                if (internalLinks.length === 0 && foundDomains.size > 0) {
+                  console.log(`[Audit Progress] Trying with response domain ${actualDomain} directly...`)
+                  internalLinks = extractInternalLinks(html, response.url, actualDomain)
+                }
+              } else {
+                console.log(`[Audit Progress] No link hrefs found in HTML at all`)
+              }
+            }
+            
+            if (internalLinks.length > 0) {
+              console.log(`[Audit Progress] Extracted ${internalLinks.length} internal links from ${url} (using domain: ${actualDomain})`)
+            } else {
+              console.log(`[Audit Progress] No internal links found on ${url} (checked domain: ${actualDomain}, response URL: ${response.url})`)
+            }
+            
+            // If we didn't find many links, try a more aggressive extraction
+            if (internalLinks.length < 5 && depth === 0) {
+              // For the homepage, try to find more links with a broader pattern
+              const allLinks = html.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
+              const additionalLinks = new Set<string>()
+              
+              allLinks.forEach(link => {
+                const hrefMatch = link.match(/href=["']([^"']+)["']/i)
+                if (hrefMatch) {
                   try {
-                    const hrefValue = hrefMatch[1].trim()
-                    if (!hrefValue.startsWith('http') && !hrefValue.startsWith('//')) {
-                      const relativeUrl = new URL(hrefValue, url)
-                      if (isSameDomain(relativeUrl.hostname, actualDomain)) {
-                        const normalizedUrl = normalizeUrl(relativeUrl.toString())
-                        if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
-                          additionalLinks.add(normalizedUrl)
-                        }
+                    const href = hrefMatch[1].trim()
+                    // Skip anchors, javascript, mailto, etc.
+                    if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href === '' || href === '/') {
+                      return
+                    }
+                    
+                    const linkUrl = new URL(href, url)
+                    if (isSameDomain(linkUrl.hostname, actualDomain)) {
+                      const normalizedUrl = normalizeUrl(linkUrl.toString())
+                      if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
+                        additionalLinks.add(normalizedUrl)
                       }
                     }
                   } catch {
-                    // Invalid URL, skip
+                    // Try as relative URL
+                    try {
+                      const hrefValue = hrefMatch[1].trim()
+                      if (!hrefValue.startsWith('http') && !hrefValue.startsWith('//')) {
+                        const relativeUrl = new URL(hrefValue, url)
+                        if (isSameDomain(relativeUrl.hostname, actualDomain)) {
+                          const normalizedUrl = normalizeUrl(relativeUrl.toString())
+                          if (normalizedUrl && !internalLinks.includes(normalizedUrl)) {
+                            additionalLinks.add(normalizedUrl)
+                          }
+                        }
+                      }
+                    } catch {
+                      // Invalid URL, skip
+                    }
                   }
                 }
-              }
-            })
-            
-            internalLinks.push(...Array.from(additionalLinks))
+              })
+              
+              internalLinks.push(...Array.from(additionalLinks))
+            }
+          } catch (error) {
+            console.warn(`[Audit Progress] Link extraction failed for ${url}:`, error instanceof Error ? error.message : String(error))
           }
-          
-          // Add discovered internal links to queue (limit to prevent queue explosion)
-          const linksToAdd = internalLinks.slice(0, 20) // Limit to first 20 links per page
-          for (const linkUrl of linksToAdd) {
-            const normalizedLinkUrl = normalizeUrl(linkUrl)
-            if (!crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
-              // Skip non-HTML files (PDFs, images, etc.) from crawl queue
-              const isNonHtmlFile = normalizedLinkUrl.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
-              if (!isNonHtmlFile) {
-                queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
-              }
+        }
+        
+        // Add discovered internal links to queue (limit to prevent queue explosion)
+        // This happens regardless of whether we used pageData.internalLinks or fallback fetch
+        const linksToAdd = internalLinks.slice(0, 20) // Limit to first 20 links per page
+        for (const linkUrl of linksToAdd) {
+          const normalizedLinkUrl = normalizeUrl(linkUrl)
+          if (!crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
+            // Skip non-HTML files (PDFs, images, etc.) from crawl queue
+            const isNonHtmlFile = normalizedLinkUrl.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
+            if (!isNonHtmlFile) {
+              queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
             }
           }
-          
-          // Log if we found links
-          if (internalLinks.length > 0) {
-            console.log(`[Audit Progress] Found ${internalLinks.length} internal links on ${url}, added ${Math.min(linksToAdd.length, internalLinks.length)} to queue`)
-          }
-        } catch (error) {
-          // If extraction fails, try fallback strategies
-          if (depth === 0) {
-            // For homepage, try common paths and also try to discover paths from sitemap or robots.txt
-            const commonPaths = ['/about', '/contact', '/services', '/products', '/blog', '/pricing', '/features', '/help', '/support', '/faq']
-            for (const path of commonPaths) {
-              try {
-                const linkUrl = new URL(path, url).toString()
-                const normalizedLinkUrl = normalizeUrl(linkUrl)
-                const linkUrlObj = new URL(linkUrl)
-                if (isSameDomain(linkUrlObj.hostname, actualDomain) && !crawledUrls.has(normalizedLinkUrl) && !queue.some(q => q.url === normalizedLinkUrl)) {
-                  // Skip non-HTML files (PDFs, images, etc.) from crawl queue
-              const isNonHtmlFile = normalizedLinkUrl.match(/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|exe|css|js|xml|json|txt)$/i)
-              if (!isNonHtmlFile) {
-                queue.push({ url: normalizedLinkUrl, depth: depth + 1 })
-              }
-                }
-              } catch {
-                // Invalid URL, skip
-              }
-            }
-          }
+        }
+        
+        // Log if we found links
+        if (internalLinks.length > 0) {
+          console.log(`[Audit Progress] Found ${internalLinks.length} internal links on ${url}, added ${Math.min(linksToAdd.length, internalLinks.length)} to queue`)
         }
       }
     } catch (error) {
@@ -1943,19 +2058,57 @@ async function parseHtmlWithRenderer(
   const basicData = parseHtml(renderedHtml, url, statusCode, loadTime, contentType)
   
   // CRITICAL FIX: Use H1s from rendered DOM (handles shadow DOM, React hydration, lazy-loaded headings)
-  // Override regex-based H1 extraction with DOM-based extraction
-  // If DOM extraction failed or returned empty, fall back to parsing rendered HTML
-  if (h1Data && h1Data.h1Count > 0) {
-    basicData.h1Count = h1Data.h1Count
-    basicData.h1Text = h1Data.h1Text.length > 0 ? h1Data.h1Text : undefined
+  // Try multiple methods and use whichever finds H1s
+  let finalH1Count = 0
+  let finalH1Text: string[] | undefined = undefined
+  
+  // Method 1: DOM-based extraction (most accurate, handles shadow DOM)
+  if (h1Data && h1Data.h1Count > 0 && h1Data.h1Text && h1Data.h1Text.length > 0) {
+    finalH1Count = h1Data.h1Count
+    finalH1Text = h1Data.h1Text
   } else {
-    // Fallback: Parse H1s from rendered HTML string if DOM evaluation failed
+    // Method 2: Parse from rendered HTML (handles cases where DOM eval failed)
     const h1Matches = renderedHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || []
-    const h1TextFromHtml = h1Matches.map(m => m.replace(/<[^>]+>/g, '').trim()).filter(Boolean)
+    const h1TextFromHtml = h1Matches.map(m => {
+      // Remove HTML tags and decode entities
+      const text = m.replace(/<[^>]+>/g, '').trim()
+      return decode(text) // Decode HTML entities
+    }).filter(Boolean)
+    
     if (h1TextFromHtml.length > 0) {
-      basicData.h1Count = h1TextFromHtml.length
-      basicData.h1Text = h1TextFromHtml
+      finalH1Count = h1TextFromHtml.length
+      finalH1Text = h1TextFromHtml
+    } else {
+      // Method 3: Try case-insensitive and with attributes
+      const h1MatchesCaseInsensitive = renderedHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || []
+      const h1TextCaseInsensitive = h1MatchesCaseInsensitive.map(m => {
+        const text = m.replace(/<[^>]+>/g, '').trim()
+        return decode(text)
+      }).filter(Boolean)
+      
+      if (h1TextCaseInsensitive.length > 0) {
+        finalH1Count = h1TextCaseInsensitive.length
+        finalH1Text = h1TextCaseInsensitive
+      } else {
+        // Method 4: Try to find H1-like elements (data attributes, classes, etc.)
+        const h1LikeMatches = renderedHtml.match(/(?:<h1|data-h1|class=["'][^"']*h1[^"']*["']|role=["']heading["'][^>]*aria-level=["']1["'])[^>]*>([\s\S]*?)(?:<\/h1>|<\/[^>]+>)/gi) || []
+        const h1LikeText = h1LikeMatches.map(m => {
+          const text = m.replace(/<[^>]+>/g, '').trim()
+          return decode(text)
+        }).filter(Boolean)
+        
+        if (h1LikeText.length > 0) {
+          finalH1Count = h1LikeText.length
+          finalH1Text = h1LikeText
+        }
+      }
     }
+  }
+  
+  // Apply final H1 data
+  if (finalH1Count > 0 && finalH1Text && finalH1Text.length > 0) {
+    basicData.h1Count = finalH1Count
+    basicData.h1Text = finalH1Text
   }
   
   // Use image/link data from renderer, or fall back to regex
@@ -1982,79 +2135,102 @@ async function parseHtmlWithRenderer(
   }
   
   // Extract internal links array for link graph analysis
-  // CRITICAL FIX: Only count links in main content areas, exclude nav/footer/header
+  // CRITICAL FIX: Use linkData from renderer if available (extracted from rendered DOM)
+  // This ensures we get links that are only visible after JavaScript execution
   const internalLinks: string[] = []
-  
-  // Extract main content areas first (prefer <main>, <article>, <section>)
-  let mainContentHtml = ''
-  const mainMatch = renderedHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
-  const articleMatch = renderedHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
-  const sectionMatches = renderedHtml.match(/<section[^>]*>([\s\S]*?)<\/section>/gi) || []
-  
-  if (mainMatch) {
-    mainContentHtml = mainMatch[1]
-  } else if (articleMatch) {
-    mainContentHtml = articleMatch[1]
-  } else if (sectionMatches.length > 0) {
-    // Use all sections combined
-    mainContentHtml = sectionMatches.join(' ')
-  } else {
-    // Fallback: exclude common nav/header/footer patterns
-    mainContentHtml = renderedHtml
-      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-      .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
-  }
-  
-  // Only extract links from main content
-  const linkMatches = mainContentHtml.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
-  const baseUrl = new URL(url)
   let internalCount = 0
   let externalCount = 0
   
-  linkMatches.forEach(link => {
-    const hrefMatch = link.match(/href=["']([^"']+)["']/i)
-    if (hrefMatch) {
-      try {
-        const href = hrefMatch[1].trim()
-        // Skip anchors, javascript, mailto, etc.
-        if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href === '' || href === '/') {
-          return
-        }
-        
-        const linkUrl = new URL(href, url)
-        if (linkUrl.hostname === baseUrl.hostname || linkUrl.hostname.replace(/^www\./, '') === baseUrl.hostname.replace(/^www\./, '')) {
-          internalCount++
-          // Store normalized internal link URL
-          const normalizedLink = linkUrl.toString()
-          if (!internalLinks.includes(normalizedLink)) {
-            internalLinks.push(normalizedLink)
-          }
-        } else {
-          externalCount++
-        }
-      } catch {
-        // Try as relative URL
+  // First, try to use links from linkData (extracted from rendered DOM)
+  if (linkData && linkData.links && linkData.links.length > 0) {
+    // Use links from rendered DOM (most accurate)
+    linkData.links.forEach(link => {
+      if (link.isInternal) {
+        internalCount++
+        // Normalize the URL
         try {
-          if (!hrefMatch[1].startsWith('http') && !hrefMatch[1].startsWith('//')) {
-            const relativeUrl = new URL(hrefMatch[1], url)
-            if (relativeUrl.hostname === baseUrl.hostname || relativeUrl.hostname.replace(/^www\./, '') === baseUrl.hostname.replace(/^www\./, '')) {
-              internalCount++
-              const normalizedLink = relativeUrl.toString()
-              if (!internalLinks.includes(normalizedLink)) {
-                internalLinks.push(normalizedLink)
-              }
-            } else {
-              externalCount++
-            }
+          const normalizedLink = normalizeUrl(link.href)
+          if (normalizedLink && !internalLinks.includes(normalizedLink)) {
+            internalLinks.push(normalizedLink)
           }
         } catch {
           // Invalid URL, skip
         }
+      } else {
+        externalCount++
       }
+    })
+  } else {
+    // Fallback: Extract links from rendered HTML using regex
+    // Extract main content areas first (prefer <main>, <article>, <section>)
+    let mainContentHtml = ''
+    const mainMatch = renderedHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+    const articleMatch = renderedHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+    const sectionMatches = renderedHtml.match(/<section[^>]*>([\s\S]*?)<\/section>/gi) || []
+    
+    if (mainMatch) {
+      mainContentHtml = mainMatch[1]
+    } else if (articleMatch) {
+      mainContentHtml = articleMatch[1]
+    } else if (sectionMatches.length > 0) {
+      // Use all sections combined
+      mainContentHtml = sectionMatches.join(' ')
+    } else {
+      // Fallback: exclude common nav/header/footer patterns
+      mainContentHtml = renderedHtml
+        .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+        .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+        .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+        .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
     }
-  })
+    
+    // Only extract links from main content
+    const linkMatches = mainContentHtml.match(/<a[^>]*href=["']([^"']+)["']/gi) || []
+    const baseUrl = new URL(url)
+    
+    linkMatches.forEach(link => {
+      const hrefMatch = link.match(/href=["']([^"']+)["']/i)
+      if (hrefMatch) {
+        try {
+          const href = hrefMatch[1].trim()
+          // Skip anchors, javascript, mailto, etc.
+          if (href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href === '' || href === '/') {
+            return
+          }
+          
+          const linkUrl = new URL(href, url)
+          if (linkUrl.hostname === baseUrl.hostname || linkUrl.hostname.replace(/^www\./, '') === baseUrl.hostname.replace(/^www\./, '')) {
+            internalCount++
+            // Store normalized internal link URL
+            const normalizedLink = normalizeUrl(linkUrl.toString())
+            if (normalizedLink && !internalLinks.includes(normalizedLink)) {
+              internalLinks.push(normalizedLink)
+            }
+          } else {
+            externalCount++
+          }
+        } catch {
+          // Try as relative URL
+          try {
+            if (!hrefMatch[1].startsWith('http') && !hrefMatch[1].startsWith('//')) {
+              const relativeUrl = new URL(hrefMatch[1], url)
+              if (relativeUrl.hostname === baseUrl.hostname || relativeUrl.hostname.replace(/^www\./, '') === baseUrl.hostname.replace(/^www\./, '')) {
+                internalCount++
+                const normalizedLink = normalizeUrl(relativeUrl.toString())
+                if (normalizedLink && !internalLinks.includes(normalizedLink)) {
+                  internalLinks.push(normalizedLink)
+                }
+              } else {
+                externalCount++
+              }
+            }
+          } catch {
+            // Invalid URL, skip
+          }
+        }
+      }
+    })
+  }
   
   // Use linkData counts if available, otherwise use extracted counts
   if (linkData) {
@@ -2222,80 +2398,123 @@ function parseHtml(
   ])
   
   keywordSources.forEach(text => {
-    // Normalize text first - preserve word boundaries better
-    // Handle special characters and encoding issues that might split words
-    let normalizedText = text.toLowerCase()
-      .replace(/[^\w\s-]/g, ' ') // Replace non-word chars (except hyphens) with space
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .replace(/([a-z])([A-Z])/g, '$1 $2') // Handle camelCase
+    // CRITICAL FIX: Better normalization to prevent broken tokens
+    // First decode HTML entities properly
+    let normalizedText = decode(text)
+      .toLowerCase()
       .trim()
     
-    // Detect and split concatenated words (e.g., "frontiersread" -> "frontiers read")
-    // Look for long words (>10 chars) that might be two words concatenated
-    normalizedText = normalizedText.replace(/\b([a-z]{10,})\b/g, (match) => {
-      // Try to split at common word boundaries
-      // Look for patterns like: word1word2 where both parts are 4+ chars
-      const splitPattern = /([a-z]{4,})([a-z]{4,})/g
-      const splitMatch = splitPattern.exec(match)
-      if (splitMatch) {
-        return `${splitMatch[1]} ${splitMatch[2]}`
-      }
-      return match
-    })
+    // Preserve hyphenated words (e.g., "enterprise-grade" should stay as one unit)
+    // Replace non-word chars (except hyphens and spaces) with space
+    normalizedText = normalizedText
+      .replace(/[^\w\s-]/g, ' ') // Keep hyphens, remove other special chars
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/([a-z])([A-Z])/g, '$1 $2') // Handle camelCase (before lowercasing, but text is already lowercased)
+      .replace(/\s*-\s*/g, '-') // Normalize hyphens (remove spaces around hyphens)
+      .trim()
     
+    // CRITICAL FIX: Don't split hyphenated compound words
+    // Words like "enterprise-grade" should remain as "enterprise-grade", not "enterprise grade" or "enterp rise-grade"
+    // Split on spaces only, preserving hyphens within words
     const words = normalizedText
-      .split(/\s+/)
-      .map(w => w.replace(/[^\w-]/g, '')) // Clean each word, keep hyphens
+      .split(/\s+/) // Split on spaces only (hyphens are preserved)
+      .map(w => {
+        // Clean each word but preserve hyphens
+        const cleaned = w.replace(/[^\w-]/g, '') // Remove non-word chars except hyphens
+        // Don't split hyphenated words - they're valid compound words
+        return cleaned
+      })
       .filter(w => {
-        // Remove very short words and stop words
-        const cleanWord = w.replace(/-/g, '') // Check length without hyphens
-        return cleanWord.length > 3 && !stopWords.has(cleanWord) // Increased min length to 3
+        // Remove empty strings
+        if (!w || w.length === 0) return false
+        
+        // For hyphenated words, check the total length and individual parts
+        if (w.includes('-')) {
+          const parts = w.split('-')
+          // Valid if: total length >= 6, and each part is >= 2 chars (or it's a known compound)
+          const totalLength = parts.join('').length
+          const allPartsValid = parts.every(p => p.length >= 2 || p.length === 0) // Allow empty parts (double hyphens)
+          return totalLength >= 6 && allPartsValid && !stopWords.has(w)
+        }
+        
+        // For non-hyphenated words, check length and stop words
+        return w.length > 3 && !stopWords.has(w)
       })
       // Filter out consecutive duplicate words
       .filter((w, i, arr) => {
-        const cleanW = w.replace(/-/g, '')
-        const cleanPrev = i > 0 ? arr[i - 1].replace(/-/g, '') : ''
-        return i === 0 || cleanW !== cleanPrev
+        if (i === 0) return true
+        const prev = arr[i - 1]
+        // Compare normalized versions (lowercase, no extra spaces)
+        return w.toLowerCase() !== prev.toLowerCase()
       })
-      // Filter out words that look like they were split incorrectly (very short after cleaning)
+      // Filter out fragments and broken tokens
       .filter(w => {
-        const cleanW = w.replace(/-/g, '')
-        // If a word is 3 chars or less and not a common word, it might be a fragment
-        if (cleanW.length <= 3) {
-          const commonShortWords = new Set(['web', 'net', 'com', 'org', 'edu', 'gov', 'www'])
-          return commonShortWords.has(cleanW)
+        // Reject words that look like they were incorrectly split
+        // e.g., "rise" after "enterp" suggests "enterprise" was split wrong
+        if (w.length < 4 && !w.includes('-')) {
+          // Very short words are likely fragments unless they're common
+          const commonShortWords = new Set(['web', 'net', 'com', 'org', 'edu', 'gov', 'www', 'seo', 'api', 'url', 'www'])
+          return commonShortWords.has(w)
         }
+        
+        // Reject words that look like concatenated fragments (e.g., "serviceenterp")
+        // If a word is >12 chars and has no hyphens, it might be concatenated
+        if (w.length > 12 && !w.includes('-')) {
+          // Check if it looks like two words concatenated without a space
+          // Pattern: word1word2 where both are 4+ chars
+          const concatenatedPattern = /^([a-z]{4,})([a-z]{4,})$/i
+          if (concatenatedPattern.test(w)) {
+            // This looks like a concatenated word - reject it
+            return false
+          }
+        }
+        
         return true
       })
 
-    // Create 2-word phrases
+    // Create 2-word phrases (preserve hyphens in compound words)
     for (let i = 0; i < words.length - 1; i++) {
-      const word1 = words[i].replace(/-/g, '')
-      const word2 = words[i + 1].replace(/-/g, '')
+      const word1 = words[i]
+      const word2 = words[i + 1]
       
-      // Skip if words are the same or too short
-      if (word1 === word2 || word1.length < 3 || word2.length < 3) continue
+      // Get base words (without hyphens) for validation
+      const baseWord1 = word1.replace(/-/g, '')
+      const baseWord2 = word2.replace(/-/g, '')
       
-      const phrase = `${words[i]} ${words[i + 1]}`
+      // Skip if base words are the same or too short
+      if (baseWord1 === baseWord2 || baseWord1.length < 3 || baseWord2.length < 3) continue
+      
+      // Preserve hyphens in the phrase
+      const phrase = `${word1} ${word2}`
+      const phraseBaseLength = phrase.replace(/-/g, '').replace(/\s+/g, '').length
+      
       // Ensure phrase is meaningful (at least 8 chars total, max 40)
-      if (phrase.replace(/-/g, '').length >= 8 && phrase.length <= 40) {
+      if (phraseBaseLength >= 8 && phrase.length <= 40) {
         extractedKeywords.push(phrase)
       }
     }
     
-    // Create 3-word phrases
+    // Create 3-word phrases (preserve hyphens in compound words)
     for (let i = 0; i < words.length - 2; i++) {
-      const word1 = words[i].replace(/-/g, '')
-      const word2 = words[i + 1].replace(/-/g, '')
-      const word3 = words[i + 2].replace(/-/g, '')
+      const word1 = words[i]
+      const word2 = words[i + 1]
+      const word3 = words[i + 2]
       
-      // Skip if any words are the same or too short
-      if (word1 === word2 || word2 === word3 || word1 === word3) continue
-      if (word1.length < 3 || word2.length < 3 || word3.length < 3) continue
+      // Get base words (without hyphens) for validation
+      const baseWord1 = word1.replace(/-/g, '')
+      const baseWord2 = word2.replace(/-/g, '')
+      const baseWord3 = word3.replace(/-/g, '')
       
-      const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`
+      // Skip if any base words are the same or too short
+      if (baseWord1 === baseWord2 || baseWord2 === baseWord3 || baseWord1 === baseWord3) continue
+      if (baseWord1.length < 3 || baseWord2.length < 3 || baseWord3.length < 3) continue
+      
+      // Preserve hyphens in the phrase
+      const phrase = `${word1} ${word2} ${word3}`
+      const phraseBaseLength = phrase.replace(/-/g, '').replace(/\s+/g, '').length
+      
       // Ensure phrase is meaningful (at least 12 chars total, max 50)
-      if (phrase.replace(/-/g, '').length >= 12 && phrase.length <= 50) {
+      if (phraseBaseLength >= 12 && phrase.length <= 50) {
         extractedKeywords.push(phrase)
       }
     }

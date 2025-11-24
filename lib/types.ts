@@ -218,6 +218,20 @@ export interface AuditResult {
   competitorAnalysis?: CompetitorAnalysis
   crawlDiagnostics?: CrawlDiagnostics // NEW: Crawl diagnostics
   localSEO?: LocalSEOAnalysis // NEW: Local SEO analysis
+  enhancedTechnical?: import('./enhancedTechnical').EnhancedTechnicalData // NEW: Enhanced technical SEO data
+  mobileResponsiveness?: {
+    hasViewport: boolean
+    responsiveDesign: boolean
+    mobileFriendly: boolean
+    touchTargets: boolean
+    fontSizing: boolean
+  }
+  serverTechnology?: {
+    server: string
+    cms: string
+    framework: string
+    cdn: string
+  }
   // NEW: Agency tier - Internal link graph and duplicate URL analysis
   internalLinkGraph?: import('./internalLinkGraph').InternalLinkGraph
   duplicateUrlAnalysis?: import('./duplicateUrlCleaner').DuplicateUrlAnalysis

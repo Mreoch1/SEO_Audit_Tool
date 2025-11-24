@@ -203,16 +203,8 @@ async function main() {
       
       const auditPromise = runAudit(url, auditOptions)
 
-      // Add timeout based on tier (longer for larger crawls)
-      const timeoutMinutes = tier === 'agency' ? 60 : // 60 minutes for Agency (200 pages)
-                           tier === 'professional' ? 45 : // 45 minutes for Professional (50 pages)
-                           tier === 'standard' ? 30 : // 30 minutes for Standard (20 pages)
-                           15 // 15 minutes for Starter (5 pages)
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Audit timed out after ${timeoutMinutes} minutes`)), timeoutMinutes * 60 * 1000)
-      })
-
-      auditResult = await Promise.race([auditPromise, timeoutPromise]) as Awaited<ReturnType<typeof runAudit>>
+      // Run audit without timeout - let it complete fully
+      auditResult = await auditPromise
       
       if (progressInterval) {
         clearInterval(progressInterval)
@@ -421,6 +413,46 @@ async function main() {
                                 Your comprehensive SEO audit for <strong style="color: #111827;"><a href="${escapedUrl}" style="color: ${primaryColor}; text-decoration: none; font-weight: 600;">${escapedUrl}</a></strong> has been completed.
                             </p>
                             
+                            <!-- TL;DR Quick Summary -->
+                            ${(() => {
+                              const highCount = auditResult.summary.highSeverityIssues
+                              const mediumCount = auditResult.summary.mediumSeverityIssues
+                              const topHighIssues = [
+                                ...(auditResult.technicalIssues || []).filter(i => i.severity === 'High').slice(0, 2),
+                                ...(auditResult.onPageIssues || []).filter(i => i.severity === 'High').slice(0, 2),
+                                ...(auditResult.contentIssues || []).filter(i => i.severity === 'High').slice(0, 1),
+                                ...(auditResult.accessibilityIssues || []).filter(i => i.severity === 'High').slice(0, 1)
+                              ].slice(0, 5)
+                              
+                              if (highCount === 0 && mediumCount === 0) {
+                                return `
+                                <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; border-radius: 6px; margin: 0 0 24px 0;">
+                                    <p style="margin: 0 0 8px 0; color: #065f46; font-size: 16px; font-weight: 600;">✅ Great News!</p>
+                                    <p style="margin: 0; color: #047857; font-size: 14px; line-height: 1.6;">Your site has no critical issues. Focus on the low-priority items to further optimize your SEO performance.</p>
+                                </div>
+                                `
+                              }
+                              
+                              const issueBullets = topHighIssues.map(issue => {
+                                const affected = issue.affectedPages?.length || 0
+                                const affectedText = affected > 0 ? ` (${affected} ${affected === 1 ? 'page' : 'pages'})` : ''
+                                return `<li style="margin-bottom: 8px; color: #374151; font-size: 14px;">${issue.message}${affectedText}</li>`
+                              }).join('')
+                              
+                              return `
+                              <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; border-radius: 6px; margin: 0 0 24px 0;">
+                                  <p style="margin: 0 0 12px 0; color: #991b1b; font-size: 16px; font-weight: 600;">🎯 Top Issues Found:</p>
+                                  <ul style="margin: 0; padding-left: 20px; color: #374151; font-size: 14px; line-height: 1.8;">
+                                      ${issueBullets}
+                                      ${highCount > 5 ? `<li style="margin-top: 8px; color: #6b7280; font-size: 13px;">...and ${highCount - topHighIssues.length} more high-priority issue${highCount - topHighIssues.length !== 1 ? 's' : ''}</li>` : ''}
+                                  </ul>
+                                  <p style="margin: 12px 0 0 0; color: #6b7280; font-size: 13px; line-height: 1.6;">
+                                      <strong>Priority:</strong> ${highCount} high, ${mediumCount} medium. See full details in the attached PDF report.
+                                  </p>
+                              </div>
+                              `
+                            })()}
+                            
                             <!-- Score Cards -->
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 32px 0;">
                                 <tr>
@@ -465,8 +497,11 @@ async function main() {
                                 <p style="margin: 0 0 16px 0; color: #374151; font-size: 14px; line-height: 1.6;">
                                     A detailed PDF report is attached to this email with comprehensive analysis, actionable recommendations, and page-level findings. Check your email attachments to download and view the full report.
                                 </p>
-                                <p style="margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6;">
-                                    <strong>Tip:</strong> If you don't see the attachment, check your email client's attachment panel or spam folder.
+                                <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; line-height: 1.6;">
+                                    <strong>Tip:</strong> If you don't see the attachment, check your email client's attachment panel.
+                                </p>
+                                <p style="margin: 0; color: #dc2626; font-size: 12px; line-height: 1.6; font-weight: 500;">
+                                    ⚠️ <strong>Important:</strong> This email may land in your spam/junk folder. Please check there if you don't see it in your inbox.
                                 </p>
                             </div>
                             
@@ -531,8 +566,10 @@ Professional SEO Auditing Services
 This is an automated email from your SEO audit system. If you have questions, please reply to this email.
     `.trim()
 
-    const cleanUrl = url.replace(/^https?:\/\//, '').replace(/\/$/, '')
-    const subject = `SEO Audit Complete — No Internal Errors (${url})`
+    const cleanUrl = url.replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '')
+    // Warmer, more human subject line
+    const domainName = cleanUrl.split('/')[0].split('.')[0]
+    const subject = `Your SEO Audit for ${cleanUrl} is Ready 📄`
 
     // Send email automatically (no user interaction required)
     // Continue execution regardless of email success or failure
@@ -547,7 +584,7 @@ This is an automated email from your SEO audit system. If you have questions, pl
         text: emailText,
         html: emailHtml,
         attachments: [{
-          filename: `seo-audit-report-${cleanUrl.replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().split('T')[0]}.pdf`,
+          filename: `${domainName.charAt(0).toUpperCase() + domainName.slice(1)}-SEO-Audit.pdf`,
           content: pdfBuffer
         }]
       })
