@@ -804,9 +804,11 @@ export function calculateAccessibilityScore(
     i.severity === 'High'
   )
   const hasMissingViewport = pages.some(p => !p.hasViewport)
-  const totalAccessibilityIssues = issues.filter(i => 
-    i.category === 'Accessibility' || (i.category === 'Technical' && matchesIssue(i, ['viewport']))
-  ).length
+  // CRITICAL FIX: Count accessibility issues separately from viewport (Technical) issues
+  // Viewport is counted in accessibility scoring but is technically a Technical issue
+  const accessibilityOnlyIssues = issues.filter(i => i.category === 'Accessibility').length
+  const viewportAsAccessibility = viewportIssues.length > 0 ? 1 : 0 // Count viewport as 1 issue, not per page
+  const totalAccessibilityIssues = accessibilityOnlyIssues + viewportAsAccessibility
   
   // CRITICAL FIX: Only cap if there are multiple issues
   // For single issues, allow much higher scores (80+ for single viewport issue, 85+ for single alt issue)
