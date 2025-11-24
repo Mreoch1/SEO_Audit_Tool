@@ -1439,7 +1439,9 @@ async function crawlPages(
   issues: Issue[],
   needsImageDetails = false
 ): Promise<void> {
-  const queue: Array<{ url: string; depth: number }> = [{ url: startUrl, depth: 0 }]
+  // CRITICAL FIX: Normalize startUrl to ensure consistent comparison
+  const normalizedStartUrl = startUrl.replace(/\/$/, '') // Remove trailing slash
+  const queue: Array<{ url: string; depth: number }> = [{ url: normalizedStartUrl, depth: 0 }]
   const issueMap = new Map<string, Issue>()
   const startTime = Date.now()
 
@@ -1475,10 +1477,13 @@ async function crawlPages(
         continue // Skip to next URL in queue
       }
 
-      // Check if this is the main/start page
-      const isMainPage = url === startUrl && depth === 0
+      // CRITICAL FIX: Check if this is the main/start page
+      // Normalize URL for comparison (remove trailing slash, handle protocol differences)
+      const normalizedUrl = url.replace(/\/$/, '')
+      const normalizedStartUrl = startUrl.replace(/\/$/, '')
+      const isMainPage = normalizedUrl === normalizedStartUrl && depth === 0 && pages.length === 0
       if (isMainPage) {
-        console.log(`[Audit Progress] Main page identified: ${url}`)
+        console.log(`[Audit Progress] ✅ Main page identified: ${url} (will fetch PageSpeed data)`)
       }
       const pageStartTime = Date.now()
       const pageData = await analyzePage(url, options.userAgent, needsImageDetails, isMainPage)

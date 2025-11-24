@@ -811,11 +811,14 @@ export function calculateAccessibilityScore(
     i.category === 'Accessibility' || (i.category === 'Technical' && matchesIssue(i, ['viewport']))
   ).length
   
-  // Only cap if there are multiple issues or many pages affected
+  // CRITICAL FIX: Only cap if there are multiple issues
+  // For single issues, allow higher scores (60+ for single viewport issue, 70+ for single alt issue)
   if (hasHighPriorityIssues && totalAccessibilityIssues > 1) {
     score = Math.min(score, 85) // Cap at 85 if multiple high priority issues exist
   } else if (hasHighPriorityIssues || hasMissingViewport) {
-    score = Math.min(score, 90) // Cap at 90 for single issue
+    // Single issue: allow score up to 70 (viewport) or 80 (alt text)
+    const maxScoreForSingleIssue = viewportIssues.length > 0 ? 70 : 80
+    score = Math.min(score, maxScoreForSingleIssue)
   }
   
   // CRITICAL FIX: Penalize score if comprehensive accessibility checks haven't been performed
