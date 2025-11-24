@@ -29,7 +29,7 @@ export interface PageSpeedData {
 /**
  * Fetch PageSpeed Insights data for a URL
  */
-export async function fetchPageSpeedInsights(url: string): Promise<PageSpeedData | null> {
+export async function fetchPageSpeedInsights(url: string, retries: number = 2): Promise<PageSpeedData | null> {
   const API_KEY = process.env.PAGESPEED_INSIGHTS_API_KEY
   
   if (!API_KEY) {
@@ -43,7 +43,7 @@ export async function fetchPageSpeedInsights(url: string): Promise<PageSpeedData
     return null
   }
   
-  console.log(`[PageSpeed] 🔍 Fetching PageSpeed data for: ${url}`)
+  console.log(`[PageSpeed] 🔍 Fetching PageSpeed data for: ${url}${retries > 0 ? ` (${retries} retries available)` : ''}`)
 
   try {
     // Fetch mobile and desktop data in parallel
@@ -81,6 +81,18 @@ export async function fetchPageSpeedInsights(url: string): Promise<PageSpeedData
       }
     }
 
+    // Both failed - retry if we have retries left
+    if (!mobileResult && !desktopResult && retries > 0) {
+      const isTimeout = (mobileSettled.status === 'rejected' && mobileSettled.reason?.name === 'AbortError') ||
+                        (desktopSettled.status === 'rejected' && desktopSettled.reason?.name === 'AbortError')
+      
+      if (isTimeout) {
+        console.warn(`[PageSpeed] ⚠️ Timeout detected, retrying (${retries} attempts left)...`)
+        await new Promise(resolve => setTimeout(resolve, 2000)) // Wait 2s before retry
+        return fetchPageSpeedInsights(url, retries - 1)
+      }
+    }
+    
     // Both failed - log the reasons
     if (mobileSettled.status === 'rejected') {
       console.warn(`[PageSpeed] ❌ Mobile strategy failed:`, mobileSettled.reason)
@@ -88,11 +100,21 @@ export async function fetchPageSpeedInsights(url: string): Promise<PageSpeedData
     if (desktopSettled.status === 'rejected') {
       console.warn(`[PageSpeed] ❌ Desktop strategy failed:`, desktopSettled.reason)
     }
-    console.warn(`[PageSpeed] ⚠️ Both strategies failed for ${url}`)
+    if (!mobileResult && !desktopResult) {
+      console.warn(`[PageSpeed] ⚠️ Both strategies failed for ${url}`)
+    }
     return null
   } catch (error) {
     // This catch block should rarely be hit since individual errors are handled in fetchPageSpeedForStrategy
-    console.warn('PageSpeed Insights API error:', error instanceof Error ? error.message : error)
+    console.warn('[PageSpeed] ❌ Unexpected error:', error instanceof Error ? error.message : error)
+    
+    // Retry on unexpected errors if we have retries left
+    if (retries > 0) {
+      console.warn(`[PageSpeed] ⚠️ Retrying after error (${retries} attempts left)...`)
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      return fetchPageSpeedInsights(url, retries - 1)
+    }
+    
     return null
   }
 }
@@ -108,8 +130,10 @@ async function fetchPageSpeedForStrategy(
   const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&strategy=${strategy}&category=PERFORMANCE&category=ACCESSIBILITY&category=BEST_PRACTICES&category=SEO`
 
   try {
+    // CRITICAL FIX: Increase timeout to 90 seconds for complex sites like Linear.app
+    // Some sites take longer to analyze, especially with heavy JavaScript
     const response = await fetch(apiUrl, {
-      signal: AbortSignal.timeout(60000) // 60 second timeout for long audits
+      signal: AbortSignal.timeout(90000) // 90 second timeout for complex sites
     })
 
     if (!response.ok) {
@@ -282,7 +306,7 @@ async function fetchPageSpeedForStrategy(
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error(`[PageSpeed] ❌ TIMEOUT (${strategy}): ${url} exceeded 60s limit. This is normal for slow websites.`)
+      console.error(`[PageSpeed] ❌ TIMEOUT (${strategy}): ${url} exceeded 90s limit. This is normal for slow websites.`)
     } else if (error instanceof Error && error.message.includes('fetch')) {
       console.error(`[PageSpeed] ❌ NETWORK ERROR (${strategy}): ${url}`)
       console.error(`[PageSpeed] Error: ${error.message}`)

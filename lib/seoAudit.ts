@@ -1477,6 +1477,9 @@ async function crawlPages(
 
       // Check if this is the main/start page
       const isMainPage = url === startUrl && depth === 0
+      if (isMainPage) {
+        console.log(`[Audit Progress] Main page identified: ${url}`)
+      }
       const pageStartTime = Date.now()
       const pageData = await analyzePage(url, options.userAgent, needsImageDetails, isMainPage)
       const pageTime = Math.round((Date.now() - pageStartTime) / 1000)
@@ -1780,10 +1783,12 @@ async function analyzePage(url: string, userAgent: string, needsImageDetails = f
       // CRITICAL FIX: Save full PageSpeedData structure, not just simplified metrics
       // This ensures we can access both mobile and desktop data later
       pageData.pageSpeedData = pageSpeedData as any
-      console.log(`[PageSpeed] ✅ Saved PageSpeed data: LCP=${validated.lcp}ms, FCP=${validated.fcp}ms, CLS=${validated.cls}, TTFB=${validated.ttfb}ms`)
+      console.log(`[PageSpeed] ✅ Saved PageSpeed data to pageData: LCP=${validated.lcp}ms, FCP=${validated.fcp}ms, CLS=${validated.cls}, TTFB=${validated.ttfb}ms`)
+      console.log(`[PageSpeed] ✅ PageSpeed data structure: ${JSON.stringify(Object.keys(pageData.pageSpeedData || {})).substring(0, 100)}`)
     } else {
       if (isMainPage) {
         console.warn(`[PageSpeed] ⚠️ No PageSpeed data available for ${url}. Check API key, quota, or network connection.`)
+        console.warn(`[PageSpeed] 💡 This may be due to: API timeout, quota exceeded, or network issues`)
       }
     }
 
