@@ -42,11 +42,6 @@ async function main() {
             <p style="color: #4b5563; line-height: 1.6;">
               If you received this email, your SMTP settings are configured properly!
             </p>
-            <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 4px;">
-              <p style="margin: 0; color: #1e40af; font-size: 14px;">
-                <strong>💡 Tip:</strong> If you don't see this email in your inbox, please check your spam/junk folder.
-              </p>
-            </div>
           </div>
         </div>
       `

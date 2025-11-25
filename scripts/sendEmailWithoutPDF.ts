@@ -71,11 +71,6 @@ async function main() {
             </p>
           </div>
 
-          <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <p style="margin: 0; color: #92400e; font-size: 14px;">
-              <strong>💡 Tip:</strong> If you don't see this email in your inbox, please check your spam/junk folder.
-            </p>
-          </div>
 
           <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
             Questions? Reply to this email and we'll be happy to help!

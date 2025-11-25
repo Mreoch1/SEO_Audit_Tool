@@ -82,35 +82,56 @@ async function sendEmailViaResend(options: EmailOptions, settings: any): Promise
     content: att.content
   })) || []
 
-  let result = await resend.emails.send({
-    from: fromFormatted,
-    to: options.to,
-    replyTo: from,
-    subject: options.subject,
-    html: options.html,
-    text: options.text,
-    attachments: attachments.length > 0 ? attachments : undefined
-  })
+  try {
+    let result = await Promise.race([
+      resend.emails.send({
+        from: fromFormatted,
+        to: options.to,
+        replyTo: from,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        attachments: attachments.length > 0 ? attachments : undefined
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Resend API timeout after 30 seconds')), 30000)
+      )
+    ]) as any
 
-  // If custom domain fails verification, retry with Resend default domain
-  if (result.error && isCustomDomain && result.error.message?.includes('not verified')) {
-    console.log(`[Resend] Custom domain not verified, using Resend default domain`)
-    from = 'onboarding@resend.dev'
-    fromFormatted = `${fromName} <${from}>`
+    // If custom domain fails verification, retry with Resend default domain
+    if (result.error && isCustomDomain && result.error.message?.includes('not verified')) {
+      console.log(`[Resend] Custom domain not verified, using Resend default domain`)
+      from = 'onboarding@resend.dev'
+      fromFormatted = `${fromName} <${from}>`
+      
+      result = await Promise.race([
+        resend.emails.send({
+          from: fromFormatted,
+          to: options.to,
+          replyTo: from,
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+          attachments: attachments.length > 0 ? attachments : undefined
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Resend API timeout after 30 seconds')), 30000)
+        )
+      ]) as any
+    }
+
+    if (result.error) {
+      throw new Error(`Resend API error: ${result.error.message}`)
+    }
     
-    result = await resend.emails.send({
-      from: fromFormatted,
-      to: options.to,
-      replyTo: from,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-      attachments: attachments.length > 0 ? attachments : undefined
-    })
-  }
-
-  if (result.error) {
-    throw new Error(`Resend API error: ${result.error.message}`)
+    console.log(`[Resend] ✅ Email sent successfully via Resend. Message ID: ${result.data?.id || 'N/A'}`)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    // If it's a network error or timeout, throw to trigger SMTP fallback
+    if (errorMessage.includes('timeout') || errorMessage.includes('fetch') || errorMessage.includes('network')) {
+      throw new Error(`Resend API network error: ${errorMessage}`)
+    }
+    throw error
   }
 }
 
@@ -129,32 +150,38 @@ async function sendEmailViaSMTP(options: EmailOptions, settings: any): Promise<v
   // Generate unique Message-ID for better deliverability
   const messageId = `<${Date.now()}-${Math.random().toString(36).substr(2, 9)}@${from.split('@')[1] || 'seoauditpro.net'}>`
 
-  await transporter.sendMail({
-    from: fromFormatted,
-    to: options.to,
-    replyTo: from, // Add reply-to for better deliverability
-    subject: options.subject,
-    text: options.text,
-    html: options.html,
-    attachments: options.attachments,
-    // Add headers to improve deliverability (Zoho-optimized)
-    headers: {
-      'Message-ID': messageId,
-      'X-Mailer': 'SEO Audit Pro',
-      'X-Priority': '3', // Normal priority (1=high, 3=normal, 5=low)
-      'Importance': 'normal',
-      'Precedence': 'normal', // Changed from 'bulk' - transactional emails should be 'normal'
-      'Auto-Submitted': 'auto-generated', // Mark as automated
-      'Content-Type': 'text/html; charset=UTF-8',
-      'MIME-Version': '1.0',
-      // Remove spam trigger words from headers
-      'X-Entity-Ref-ID': messageId // Unique reference for tracking
-    },
-    // Add priority for better inbox placement
-    priority: 'normal',
-    // Zoho-specific: Ensure proper encoding
-    encoding: 'UTF-8'
-  })
+  try {
+    const info = await transporter.sendMail({
+      from: fromFormatted,
+      to: options.to,
+      replyTo: from, // Add reply-to for better deliverability
+      subject: options.subject,
+      text: options.text,
+      html: options.html,
+      attachments: options.attachments,
+      // Add headers to improve deliverability (Zoho-optimized)
+      headers: {
+        'Message-ID': messageId,
+        'X-Mailer': 'SEO Audit Pro',
+        'X-Priority': '3', // Normal priority (1=high, 3=normal, 5=low)
+        'Importance': 'normal',
+        'Precedence': 'normal', // Changed from 'bulk' - transactional emails should be 'normal'
+        'Auto-Submitted': 'auto-generated', // Mark as automated
+        'Content-Type': 'text/html; charset=UTF-8',
+        'MIME-Version': '1.0',
+        // Remove spam trigger words from headers
+        'X-Entity-Ref-ID': messageId // Unique reference for tracking
+      },
+      // Add priority for better inbox placement
+      priority: 'normal',
+      // Zoho-specific: Ensure proper encoding
+      encoding: 'UTF-8'
+    })
+    console.log(`[SMTP] ✅ Email sent successfully via SMTP. Message ID: ${info.messageId || messageId}`)
+  } catch (error) {
+    console.error(`[SMTP] ❌ Failed to send email via SMTP:`, error)
+    throw new Error(`SMTP send failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 /**
@@ -169,8 +196,9 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
     throw new Error('App settings not found')
   }
 
-  // Use Resend if API key is configured, otherwise fallback to SMTP
-  const useResend = settings.resendApiKey && (settings.emailProvider === 'resend' || !settings.emailProvider)
+  // Use SMTP by default (Zoho), only use Resend if explicitly set and working
+  // Note: Resend free tier has domain limitations, so SMTP is preferred
+  const useResend = settings.resendApiKey && settings.emailProvider === 'resend'
   
   if (useResend) {
     try {
@@ -182,7 +210,7 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
     }
   }
 
-  // Fallback to SMTP
+  // Use SMTP (Zoho) - primary email sending method
   await sendEmailViaSMTP(options, settings)
 }
 

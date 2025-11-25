@@ -1,0 +1,13 @@
+📧 Resending email for audit: cmidyajta0000ce1sxsa5utap
+   To: mreoch82@hotmail.com
+
+📄 Generating PDF...
+📧 Sending email...
+Resend API failed, falling back to SMTP: Error: Resend API error: Unable to fetch data. The request could not be resolved.
+    at sendEmailViaResend (/Users/michaelreoch/seo-audit-app/lib/email.ts:113:11)
+    at async sendEmail (/Users/michaelreoch/seo-audit-app/lib/email.ts:177:7)
+    at async main (/Users/michaelreoch/seo-audit-app/scripts/resendEmail.ts:61:3)
+✅ Email sent successfully!
+
+✨ Check your inbox at mreoch82@hotmail.com
+

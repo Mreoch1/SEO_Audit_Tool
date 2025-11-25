@@ -131,9 +131,11 @@ async function main() {
   console.log('─'.repeat(50))
 
   // Duplicate title counts
-  const duplicateTitleIssues = result.onPageIssues?.filter((i: any) => 
-    i.message?.includes('duplicate title') || i.message?.includes('Duplicate title') || i.message?.includes('Template-based duplicate title')
-  ) || []
+  // CRITICAL FIX: Match "Duplicate page title" and "Template-based duplicate title" (case-insensitive)
+  const duplicateTitleIssues = result.onPageIssues?.filter((i: any) => {
+    const msg = (i.message || '').toLowerCase()
+    return msg.includes('duplicate') && msg.includes('title')
+  }) || []
   const duplicateTitlePages = duplicateTitleIssues.reduce((sum: number, issue: any) => 
     sum + (issue.affectedPages?.length || 0), 0
   )

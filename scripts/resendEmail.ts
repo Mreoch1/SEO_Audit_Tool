@@ -82,11 +82,6 @@ async function main() {
             <li>Content quality insights</li>
             <li>Accessibility improvements</li>
           </ul>
-          <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <p style="margin: 0; color: #1e40af; font-size: 14px;">
-              <strong>💡 Tip:</strong> If you don't see this email in your inbox, please check your spam/junk folder.
-            </p>
-          </div>
           <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
             Questions? Reply to this email and we'll be happy to help!
           </p>

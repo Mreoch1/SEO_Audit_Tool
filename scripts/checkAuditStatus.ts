@@ -3,45 +3,44 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
-  const auditId = process.argv[2] || 'cmidaxcvh00003ulu5sh'
+  const auditId = process.argv[2] || 'cmidwxdw80000grkccyxv2ry1'
   
   const audit = await prisma.audit.findUnique({
     where: { id: auditId },
-    select: {
-      id: true,
-      status: true,
-      createdAt: true,
-      shortSummary: true,
-      url: true
+    select: { 
+      status: true, 
+      rawJson: true, 
+      updatedAt: true,
+      overallScore: true
     }
   })
 
   if (!audit) {
-    console.log('❌ Audit not found')
-    return
+    console.error('❌ Audit not found')
+    process.exit(1)
   }
 
-  const elapsed = Math.floor((Date.now() - audit.createdAt.getTime()) / 1000 / 60)
-  const elapsedSeconds = Math.floor((Date.now() - audit.createdAt.getTime()) / 1000)
+  const elapsed = Math.floor((Date.now() - audit.updatedAt.getTime()) / 1000 / 60)
+  
+  console.log(`\n📊 Audit Status`)
+  console.log(`Status: ${audit.status}`)
+  console.log(`Last update: ${elapsed} minutes ago`)
+  console.log(`Score: ${audit.overallScore || 'N/A'}`)
 
-  console.log('\n📊 Audit Status Update\n')
-  console.log(`   URL: ${audit.url}`)
-  console.log(`   ID: ${audit.id}`)
-  console.log(`   Status: ${audit.status}`)
-  console.log(`   Running for: ${elapsed} minutes (${elapsedSeconds} seconds)`)
-  console.log(`   Summary: ${audit.shortSummary || 'No summary yet'}\n`)
-
-  if (audit.status === 'running') {
-    console.log('⏳ Audit is still in progress...')
-    console.log('   Expected completion: ~7-8 minutes for Standard tier')
-  } else if (audit.status === 'completed') {
-    console.log('✅ Audit completed!')
-  } else if (audit.status === 'failed') {
-    console.log('❌ Audit failed')
+  if (audit.rawJson) {
+    const data = JSON.parse(audit.rawJson)
+    console.log(`\nPages: ${data.pages?.length || 0}/20`)
+    
+    if (data.pages && data.pages.length >= 20) {
+      console.log('✅ All pages crawled!')
+    }
+    
+    if (audit.status === 'running' && data.pages && data.pages.length >= 20) {
+      console.log('⚠️  Status is "running" but all pages are crawled - may be in final processing')
+    }
   }
 }
 
 main()
   .catch(console.error)
   .finally(() => prisma.$disconnect())
-
